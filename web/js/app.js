@@ -205,6 +205,29 @@ async function render() {
 }
 
 activarFechaHora24(document.body);
+
+// Aviso de nueva versión publicada (evita trabajar con una copia antigua guardada en el navegador)
+const VERSION_APP = '__V__';
+async function revisarVersion() {
+  if (VERSION_APP.includes('_V_')) return; // desarrollo local
+  try {
+    const r = await fetch(`version.json?t=${Date.now()}`, { cache: 'no-store' });
+    if (!r.ok) return;
+    const { version } = await r.json();
+    if (version && version !== VERSION_APP && !document.getElementById('aviso-version')) {
+      const d = document.createElement('div');
+      d.id = 'aviso-version';
+      d.setAttribute('role', 'status');
+      d.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);top:12px;z-index:200;background:var(--primary);color:var(--primary-ink);padding:10px 14px;border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.25);display:flex;gap:12px;align-items:center;font-weight:600';
+      d.innerHTML = 'Hay una nueva versión de la aplicación. <button class="btn sm" id="b-act-version">Actualizar</button>';
+      document.body.appendChild(d);
+      d.querySelector('button').onclick = () => location.reload();
+    }
+  } catch { /* sin conexión */ }
+}
+revisarVersion();
+setInterval(revisarVersion, 5 * 60 * 1000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) revisarVersion(); });
 window.addEventListener('hashchange', render);
 window.addEventListener('app:ops', (e) => {
   const { id, render: rerender = true, luego } = e.detail || {};

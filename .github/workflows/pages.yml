@@ -25,7 +25,9 @@ jobs:
       - name: Pruebas de cálculo
         run: npm test
       - name: Versionar archivos (evita caché del navegador)
-        run: grep -rl "__V__" web | xargs sed -i "s/__V__/${GITHUB_SHA::7}/g"
+        run: |
+          grep -rl "__V__" web | xargs sed -i "s/__V__/${GITHUB_SHA::7}/g"
+          echo "{\"version\":\"${GITHUB_SHA::7}\"}" > web/version.json
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
