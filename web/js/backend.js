@@ -6,6 +6,7 @@ import * as C from './calc.js?v=__V__';
 import * as G from './graph.js?v=__V__';
 import * as X from './excel.js?v=__V__';
 import * as P from './pdf.js?v=__V__';
+import { TRANSPORTISTAS_HABITUALES } from './catalogo.js?v=__V__';
 
 const INDICE = 'indice.json';
 /**
@@ -392,6 +393,68 @@ ruta('POST', '/transportistas', async (p, b) => {
     const t = { id: I.seq_t, ...o }; I.transportistas.push(t); return t;
   });
 });
+/**
+ * Registra (o completa) una empresa de transporte en el maestro sin duplicar: busca por RUC y, si no,
+ * por razón social (p. ej. la que se creó sola desde el REPORTE HUACHO). Devuelve { t, creada }.
+ */
+function upsertTransportista(I, o) {
+  const ruc = S(o.ruc);
+  if (ruc && !/^\d{11}$/.test(ruc)) throw err(400, `El RUC ${ruc} debe tener 11 dígitos`);
+  const rs = S(o.razon_social)?.toUpperCase().replace(/\s+/g, ' ');
+  let t = (ruc && I.transportistas.find((x) => x.ruc === ruc)) || (rs && I.transportistas.find((x) => X.mismoNombre(x.razon_social, rs)));
+  const creada = !t;
+  if (!t) {
+    if (!rs) throw err(400, 'Ingrese la razón social');
+    I.seq_t = Math.max(I.seq_t || 0, ...I.transportistas.map((x) => x.id)) + 1;
+    t = { id: I.seq_t, ruc: null, razon_social: rs, nombre_comercial: null, contacto: null, telefono: null, emails: null };
+    I.transportistas.push(t);
+  }
+  const nc = S(o.nombre_comercial)?.toUpperCase().replace(/\s+/g, '_').replace(/&/g, 'Y');
+  if (nc && I.transportistas.some((x) => x !== t && x.nombre_comercial === nc)) throw err(409, `El nombre comercial ${nc} ya lo usa otra empresa`);
+  if (ruc && I.transportistas.some((x) => x !== t && x.ruc === ruc)) throw err(409, `El RUC ${ruc} ya está registrado en otra empresa`);
+  Object.assign(t, {
+    ruc: ruc || t.ruc, razon_social: rs || t.razon_social,
+    nombre_comercial: nc || t.nombre_comercial || X.nombreComercialDe(rs || t.razon_social, I.transportistas.filter((x) => x !== t).map((x) => x.nombre_comercial)),
+    contacto: S(o.contacto) ?? t.contacto, telefono: S(o.telefono) ?? t.telefono, emails: S(o.emails) ?? t.emails,
+  });
+  return { t, creada };
+}
+
+/** Registro completo de un transportista: empresa en el maestro + (opcional) usuario con acceso al portal. */
+ruta('POST', '/transportistas/registrar', async (p, b) => {
+  ESCRIBE();
+  const acceso = S(b.acceso_email)?.toLowerCase();
+  if (acceso) { ADMIN(); if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(acceso)) throw err(400, 'Correo de acceso no válido'); }
+  let info;
+  await mutar(INDICE, (I) => {
+    info = upsertTransportista(I, b);
+    if (acceso) {
+      I.usuarios = I.usuarios || [];
+      if (!I.usuarios.length && acceso !== yo.email) I.usuarios.push({ email: yo.email, nombre: yo.nombre, rol: 'admin', activo: true });
+      const u = I.usuarios.find((x) => x.email === acceso);
+      if (u && u.rol !== 'transportista') throw err(409, `${acceso} ya es un usuario interno (${u.rol})`);
+      if (u) Object.assign(u, { transportista_id: info.t.id, activo: true, nombre: S(b.acceso_nombre) || u.nombre });
+      else I.usuarios.push({ email: acceso, nombre: S(b.acceso_nombre) || info.t.contacto || acceso, rol: 'transportista', transportista_id: info.t.id, activo: true });
+    }
+  });
+  // Los viajes que quedaron sin empresa se completan con la LISTA de cada operación
+  const portal = acceso ? await activarPortal(acceso) : null;
+  return { transportista: info.t, creada: info.creada, acceso, aviso: portal?.aviso || null };
+});
+
+/** Registra de una vez los transportistas habituales (RUC, razón social y nombre comercial). */
+ruta('POST', '/transportistas/habituales', async () => {
+  ESCRIBE();
+  const res = { creadas: [], actualizadas: [] };
+  await mutar(INDICE, (I) => {
+    for (const h of TRANSPORTISTAS_HABITUALES) {
+      const { t, creada } = upsertTransportista(I, h);
+      (creada ? res.creadas : res.actualizadas).push(t.nombre_comercial);
+    }
+  });
+  return res;
+});
+
 ruta('PUT', '/transportistas/:tid', async ({ tid }, b) => {
   ESCRIBE();
   return mutar(INDICE, (I) => {

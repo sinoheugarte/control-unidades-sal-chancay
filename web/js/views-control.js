@@ -3,7 +3,7 @@ import {
   tabla, sinOperacion, puedeEscribir, esAdmin, chart, colores, descargar, descargarBlob,
 } from './core.js?v=__V__';
 import { NOMBRES_VUELTA } from './calc.js?v=__V__';
-import { formularioLista, enviarLista } from './views-admin.js?v=__V__';
+import { formularioLista, enviarLista, registrarTransportistaModal, registrarHabituales } from './views-admin.js?v=__V__';
 
 /* =================== REPORTES POR TURNO =================== */
 let tabRep = 'despacho';
@@ -264,14 +264,15 @@ export async function vTransportistas(view, ctx) {
       empty: 'Ningún transportista asignado a la operación',
       foot: ['Total', ...NOMBRES_VUELTA.map((_, i) => num(res.reduce((s, x) => s + (x.vueltas[i].tn || 0), 0), 0)), num(tot('tn_aprox'), 0)],
     })}</div>` : sinOperacion()}
-  <div class="card"><div class="card-h"><h2>Maestro de transportistas</h2>${edit ? '<button class="btn primary" id="b-new">+ Nuevo transportista</button>' : ''}</div>
+  <div class="card"><div class="card-h"><h2>Maestro de transportistas</h2>${edit ? '<div class="btns"><button class="btn" id="b-hab">Registrar transportistas habituales</button><button class="btn primary" id="b-new">+ Registrar transportista</button></div>' : ''}</div>
     ${tabla([
       { t: 'Nombre comercial', k: 'nombre_comercial' }, { t: 'Razón social', k: 'razon_social' }, { t: 'RUC', k: 'ruc' },
       { t: 'Contacto', k: 'contacto' }, { t: 'Teléfono', k: 'telefono' }, { t: 'Correos', f: (x) => esc(x.emails || '—') },
       { t: '', f: (x) => (edit ? `<button class="btn sm" data-t="${x.id}">Editar</button>` : '') },
     ], todos, { empty: 'No hay transportistas registrados' })}</div>`;
 
-  $('#b-new')?.addEventListener('click', () => transpModal(null, ctx.rerender));
+  $('#b-new')?.addEventListener('click', () => registrarTransportistaModal(ctx.rerender));
+  $('#b-hab')?.addEventListener('click', () => registrarHabituales(ctx.rerender));
   $('#b-part')?.addEventListener('click', () => partModal(null, todos.filter((t) => !res.some((r) => r.transportista_id === t.id)), ctx.rerender));
   view.addEventListener('click', (e) => {
     const t = e.target.closest('[data-t]')?.dataset.t;

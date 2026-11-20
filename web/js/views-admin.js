@@ -1,3 +1,4 @@
+import { TRANSPORTISTAS_HABITUALES } from './catalogo.js?v=__V__';
 import { state, api, esc, num, fecha, fechaHora, fechaHoraOpc, toInputDT, toast, $, modal, confirmar, tabla, puedeEscribir, esAdmin, sinOperacion, opActual } from './core.js?v=__V__';
 
 const refrescar = (id, render = true, luego) => window.dispatchEvent(new CustomEvent('app:ops', { detail: { id, render, luego } }));
@@ -218,6 +219,76 @@ export async function enviarLista(e, despues) {
   } catch (err) { out.innerHTML = `<div class="alert bad">${esc(err.message)}</div>`; } finally { btn.disabled = false; }
 }
 
+/* =================== REGISTRO DE TRANSPORTISTA (empresa + acceso) =================== */
+/**
+ * Un solo formulario para registrar la empresa de transporte con todos sus datos y, en el mismo paso,
+ * su usuario de acceso al portal. Si el RUC o la razón social ya existen, se completa ese registro.
+ */
+export async function registrarTransportistaModal(done, { acceso = true } = {}) {
+  const maestro = await api('/transportistas');
+  const conAcceso = acceso && esAdmin();
+  const dlg = modal({
+    title: 'Registrar transportista',
+    wide: true,
+    submitText: 'Registrar',
+    body: `<p class="muted" style="margin-top:0">Se registra la empresa en el maestro de transportistas (queda disponible en todas las operaciones, la LISTA,
+      los reportes de Huacho y CSPCP y los reportes por transportista)${conAcceso ? ' y, si lo indica, su usuario de acceso al portal' : ''}.
+      Si el RUC o la razón social ya existen, se completa ese registro sin duplicarlo.</p>
+      <datalist id="dl-ruc">${[...maestro, ...TRANSPORTISTAS_HABITUALES].filter((t) => t.ruc).map((t) => `<option value="${esc(t.ruc)}">${esc(t.razon_social)}</option>`).join('')}</datalist>
+      <h3 style="margin:6px 0 8px">Empresa</h3>
+      <div class="form">
+        <label>RUC<input name="ruc" list="dl-ruc" maxlength="11" inputmode="numeric" pattern="\\d{11}" placeholder="11 dígitos" autocomplete="off"></label>
+        <label class="full">Razón social *<input name="razon_social" required></label>
+        <label>Nombre comercial<input name="nombre_comercial" placeholder="Se genera si lo deja vacío"></label>
+        <label>Contacto<input name="contacto"></label>
+        <label>Teléfono<input name="telefono" inputmode="tel"></label>
+        <label class="full">Correos de la empresa (separados por coma)<input name="emails"></label>
+      </div>
+      ${conAcceso ? `<h3 style="margin:16px 0 8px">Acceso al portal de transportistas</h3>
+      <div class="form">
+        <label class="check full"><input type="checkbox" name="con_acceso" checked> Crear usuario con acceso (sólo verá y descargará los viajes y unidades de esta empresa)</label>
+        <label>Correo de acceso<input name="acceso_email" type="email" list="dl-correos" placeholder="usuario@empresa.com" autocomplete="off"><datalist id="dl-correos"></datalist></label>
+        <label>Nombre del usuario<input name="acceso_nombre"></label>
+        <p class="full muted small" style="margin:0">Se le enviará la invitación de SharePoint a ese correo. Debe poder iniciar sesión en el Microsoft 365 de la empresa (usuario invitado).</p>
+      </div>` : ''}`,
+    onSubmit: async (d) => {
+      if (d.ruc && !/^\d{11}$/.test(d.ruc)) throw new Error('El RUC debe tener 11 dígitos');
+      const body = { ...d };
+      if (!conAcceso || !d.con_acceso) { delete body.acceso_email; delete body.acceso_nombre; } else if (!d.acceso_email) throw new Error('Ingrese el correo de acceso o desmarque "Crear usuario con acceso"');
+      const r = await api('/transportistas/registrar', { method: 'POST', body });
+      toast(`${r.transportista.razon_social} ${r.creada ? 'registrado' : 'actualizado'} (${r.transportista.nombre_comercial})${r.acceso ? ` · acceso para ${r.acceso}` : ''}`);
+      if (r.aviso) toast(r.aviso, true);
+      done?.();
+    },
+  });
+  const f = dlg.querySelector('form');
+  // Autocompletar con lo que ya se conoce de ese RUC (maestro o transportistas habituales)
+  f.ruc.addEventListener('change', () => {
+    const t = maestro.find((x) => x.ruc === f.ruc.value) || TRANSPORTISTAS_HABITUALES.find((x) => x.ruc === f.ruc.value);
+    if (!t) return;
+    for (const k of ['razon_social', 'nombre_comercial', 'contacto', 'telefono', 'emails']) if (t[k] && !f[k].value) f[k].value = t[k];
+    f.emails.dispatchEvent(new Event('input'));
+  });
+  f.emails.addEventListener('input', () => {
+    const dl = dlg.querySelector('#dl-correos');
+    if (dl) dl.innerHTML = f.emails.value.split(/[,;\s]+/).filter((x) => x.includes('@')).map((x) => `<option value="${esc(x.trim())}">`).join('');
+  });
+  if (f.con_acceso) {
+    const ver = () => { f.acceso_email.disabled = f.acceso_nombre.disabled = !f.con_acceso.checked; };
+    f.con_acceso.addEventListener('change', ver);
+    f.contacto.addEventListener('change', () => { if (!f.acceso_nombre.value) f.acceso_nombre.value = f.contacto.value; });
+  }
+  return dlg;
+}
+
+/** Registra de una vez los transportistas habituales (RUC, razón social y nombre comercial). */
+export async function registrarHabituales(done) {
+  if (!(await confirmar(`Se registrarán (o completarán) ${TRANSPORTISTAS_HABITUALES.length} transportistas habituales: ${TRANSPORTISTAS_HABITUALES.map((t) => t.nombre_comercial).join(', ')}. ¿Continuar?`))) return;
+  const r = await api('/transportistas/habituales', { method: 'POST' });
+  toast(`Transportistas: ${r.creadas.length} nuevos, ${r.actualizadas.length} completados.`);
+  done?.();
+}
+
 /* =================== USUARIOS =================== */
 const ROLES = [['operador', 'Operador'], ['lector', 'Lector'], ['admin', 'Administrador'], ['transportista', 'Transportista (portal)']];
 export async function vUsuarios(view, ctx) {
@@ -246,7 +317,7 @@ export async function vUsuarios(view, ctx) {
     <div class="card"><div class="card-h"><div><h2>Usuarios transportistas (portal)</h2>
       <p class="muted small" style="margin:4px 0 0">Sólo ven y descargan los viajes y unidades de <strong>su</strong> empresa. La app les publica sus datos en una carpeta propia de SharePoint
       con permiso de sólo lectura (no tienen acceso a la información de otros transportistas). Se actualiza sola cada vez que se registran o importan viajes.</p></div>
-      <div class="btns"><button class="btn" id="b-repub">Republicar portal</button><button class="btn primary" id="b-new-t">+ Agregar usuario transportista</button></div></div>
+      <div class="btns"><button class="btn" id="b-repub">Republicar portal</button><button class="btn" id="b-hab">Registrar transportistas habituales</button><button class="btn primary" id="b-new-t">+ Registrar transportista</button></div></div>
     ${tabla(cols(true), portal, { empty: 'Sin usuarios transportistas' })}
     <p class="muted small" style="margin-top:12px">Requisito: el correo del transportista debe poder iniciar sesión en el Microsoft 365 de la empresa (usuario invitado/guest).
     Si TI aún no lo ha invitado, la app igual publica sus datos y le envía la invitación de SharePoint; avísele a TI para habilitar su ingreso.</p></div>
@@ -275,8 +346,8 @@ export async function vUsuarios(view, ctx) {
   });
   $('#b-new').onclick = () => modal({ title: 'Agregar usuario', body: formUsuario({}, false), onOpen: alAbrir,
     onSubmit: async (d) => { resultado(await api('/usuarios', { method: 'POST', body: d })); ctx.rerender(); } });
-  $('#b-new-t').onclick = () => modal({ title: 'Agregar usuario transportista', body: formUsuario({}, true), submitText: 'Crear y dar acceso', onOpen: alAbrir,
-    onSubmit: async (d) => { toast('Publicando sus datos en SharePoint…'); resultado(await api('/usuarios', { method: 'POST', body: d })); ctx.rerender(); } });
+  $('#b-new-t').onclick = () => registrarTransportistaModal(ctx.rerender);
+  $('#b-hab')?.addEventListener('click', () => registrarHabituales(ctx.rerender));
   $('#b-repub').onclick = async (e) => {
     e.target.disabled = true;
     try {
