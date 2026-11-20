@@ -44,7 +44,8 @@ Funciona igual que **Pacifico TP Reporte**:
   - Tabla RESUMEN igual a la del libro (N°, NAVE, FECHA INICIO ACOPIO, FECHA FINAL ACOPIO, TN SAL ACOPIADA, TOTAL), descargable sola en Excel y PDF.
   - Pestañas por año, filtros, indicadores y gráficos interactivos.
   - Cuadro de naves que se despliega con el cuadro de cada transportista.
-  - Exporta a Excel (una hoja por nave) y PDF, e importa el libro de resumen histórico.
+  - Se arma solo con los datos de cada operación: el cuadro de la hoja TRANSPORTISTAS, calculado con REPORTE HUACHO y REPORTE CSPCP.
+  - Exporta a Excel (hoja RESUMEN + una hoja por nave, igual al libro modelo) y PDF.
 - **Finalizar operación**:
   - Genera la presentación de cierre en **PowerPoint**, **HTML** y **video (MP4)** y la guarda en SharePoint (`Control Unidades Sal/Presentaciones/<reporte>/`).
   - Marca la operación como FINALIZADA.

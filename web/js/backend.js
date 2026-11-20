@@ -149,7 +149,7 @@ const unidadesDe = (D, I) => D.unidades.map((u) => ({ ...u, transportista_nombre
 /** Mantiene el resumen de la operación en el índice. */
 /** Resumen para el RESUMEN ANUAL: calculado de los viajes, o el importado de un libro de resumen histórico. */
 function calcularResumen(D, I) {
-  const fechas = (r) => ({ ...r, inicio_acopio: D.operacion.inicio_acopio || r.inicio_acopio, fin_acopio: D.operacion.fin_acopio || r.fin_acopio });
+  const fechas = (r) => r;
   if (!D.viajes.length && D.resumen_manual) return fechas(D.resumen_manual);
   const raw = D.viajes.map((v) => ({ ...v, transportista_nombre: nombreT(I.transportistas, v.transportista_id) }));
   const vs = C.enriquecerViajes(raw, D.operacion, D.reportes);
@@ -606,35 +606,6 @@ ruta('GET', '/resumen-anual', async () => {
   I = await leer(INDICE);
   return I.operaciones.map((o) => ({ ...o, anio_calc: C.anioOperacion(o) }));
 });
-ruta('POST', '/importar/resumen', async (p, b, form) => {
-  ESCRIBE();
-  const wb = await X.cargarLibro(archivo(form));
-  const anio = N(form.get('anio'));
-  if (!anio) throw err(400, 'Indique el año de las operaciones del resumen');
-  const hojas = X.leerResumenHistorico(wb);
-  const tabla = X.leerTablaResumen(wb);
-  if (!hojas.length && !tabla.length) throw err(400, 'No se encontró la tabla RESUMEN ni hojas con el cuadro de transportistas (RAZON SOCIAL, RUC, VIAJES REALIZADOS, TOTAL FINAL TN HUACHO/CSPCP).');
-  // Naves que sólo están en la tabla RESUMEN (sin hoja propia): se crean con sus fechas y TN
-  for (const t of tabla) {
-    const h = hojas.find((x) => x.nave === t.nave);
-    if (h) { h.resumen.inicio_acopio = t.inicio; h.resumen.fin_acopio = t.fin; continue; }
-    hojas.push({ nave: t.nave, anio: Number(String(t.inicio || '').slice(0, 4)) || null,
-      resumen: { viajes: null, unidades: null, tn_despacho: null, tn_acopio: t.tn, tn_aprox_total: 0, inicio_acopio: t.inicio, fin_acopio: t.fin, transportistas: [], importado: true } });
-  }
-  const I = await leer(INDICE, true);
-  const res = { creadas: [], omitidas: [] };
-  for (const h of hojas) {
-    const yaExiste = I.operaciones.find((o) => String(o.nave).toUpperCase().replace(/\s+/g, ' ') === h.nave);
-    if (yaExiste) { res.omitidas.push(`${h.nave}: ya existe en la app (${yaExiste.nombre || yaExiste.orden}); se mantiene el detalle de la app`); continue; }
-    const D = opVacia();
-    D.resumen_manual = h.resumen;
-    const a = h.anio || Number(String(h.resumen.inicio_acopio || '').slice(0, 4)) || anio;
-    await crearOperacion({ nave: h.nave, orden: h.orden || `RESUMEN ${a}`, anio: a, estado: 'FINALIZADA', origen: 'resumen', tn_programadas: h.resumen.tn_aprox_total || 0, params: '{}' }, D);
-    res.creadas.push(h.nave);
-  }
-  return res;
-});
-
 /* estado del cruce HUACHO ↔ CSPCP */
 ruta('GET', '/operaciones/:id/cruce', async ({ id }) => {
   const { D, viajes } = await cargar(id);

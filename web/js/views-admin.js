@@ -66,7 +66,6 @@ function opModal(o, despues) {
       ${f('eta', 'ETA', 'datetime-local')}${f('fecha_inicio', 'Fecha inicio', 'date')}${f('cliente', 'Cliente')}${f('producto', 'Producto')}
       ${f('referencia', 'Referencia')}${f('punto_salida', 'Punto de salida')}${f('punto_llegada', 'Punto de llegada')}${f('empresa', 'Empresa')}
       ${f('coordinador', 'Coordinador de transporte')}
-      ${f('inicio_acopio', 'Fecha inicio acopio (opcional)', 'date')}${f('fin_acopio', 'Fecha final acopio (opcional)', 'date')}
       ${f('tn_programadas', 'TN programadas *', 'number', 'step="0.01" min="0" required')}
       ${f('tn_embarque_programadas', 'TN programadas embarque', 'number', 'step="0.01" min="0"')}
       ${f('tn_draft_sgs', 'TN embarcadas draft SGS', 'number', 'step="0.01" min="0"')}

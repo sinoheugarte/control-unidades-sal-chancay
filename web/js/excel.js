@@ -621,53 +621,6 @@ export async function exportarUnidades(op, t, unidades) {
  * Libro "RESUMEN DE OPERACIONES ACOPIO DE SAL …": una hoja visible por nave con el cuadro de
  * transportistas. Las hojas ocultas (p. ej. RESUMEN) no se importan.
  */
-/** Hoja RESUMEN (N°, NAVE, FECHA INICIO ACOPIO, FECHA FINAL ACOPIO, TN SAL ACOPIADA). */
-export function leerTablaResumen(wb) {
-  const f = findSheet(wb, [['NAVE'], ['FECHA INICIO ACOPIO'], ['TN SAL ACOPIADA']], ['RESUMEN']);
-  if (!f) return [];
-  const out = [];
-  for (const r of f.rows) {
-    const nave = str(r.get('NAVE'));
-    if (!nave || /^TOTAL/i.test(nave)) { if (nave) break; continue; }
-    out.push({ nave: nave.toUpperCase().replace(/\s+/g, ' ').trim(), inicio: C.normDate(r.get('FECHA INICIO ACOPIO')),
-      fin: C.normDate(r.get('FECHA FINAL ACOPIO')), tn: toNum(r.get('TN SAL ACOPIADA')) || 0 });
-  }
-  return out;
-}
-
-export function leerResumenHistorico(wb) {
-  const out = [];
-  for (const ws of wb.worksheets) {
-    if (ws.state && ws.state !== 'visible') continue;
-    const rows = rowsByHeader(ws, [['RAZON SOCIAL'], ['VIAJES REALIZADOS'], ['TOTAL FINAL TN HUACHO', 'TOTAL FINAL TN']]);
-    if (!rows) continue;
-    const transportistas = [];
-    for (const r of rows) {
-      const rs = str(r.get('RAZON SOCIAL'));
-      if (!rs || /^TOTAL/i.test(rs)) { if (rs) break; continue; }
-      const n = (k) => toNum(r.get(k)) ?? 0;
-      transportistas.push({
-        razon_social: rs.replace(/\s+/g, ' '), ruc: str(r.get('RUC')), nombre_comercial: null,
-        unidades_solicitadas: n('UNIDADES SOLICITADAS'), unidades_en_lista: toNum(r.get('UNIDADES EN LISTA')), tn_prom_unidad: n('TN PROM. X UNIDAD'),
-        viajes_aprox: n('VIAJES APROX.'), tn_aprox: n('TOTAL APROX. TN'), unidades_activas: toNum(r.get('UNIDADES ACTIVAS')),
-        viajes_realizados: n('VIAJES REALIZADOS'), tn_huacho: n('TOTAL FINAL TN HUACHO'), tn_cspcp: n('TOTAL FINAL TN CSPCP') || n('TOTAL FINAL TN'),
-        observacion: str(r.get('OBSERVACION')) || '',
-      });
-    }
-    if (!transportistas.length) continue;
-    const sum = (k) => C.r3(transportistas.reduce((s, t) => s + (Number(t[k]) || 0), 0));
-    out.push({
-      nave: ws.name.toUpperCase().replace(/\s+/g, ' ').trim(),
-      resumen: {
-        viajes: sum('viajes_realizados'), unidades: transportistas.reduce((s, t) => s + (t.unidades_activas || 0), 0) || null,
-        tn_despacho: sum('tn_huacho'), tn_acopio: sum('tn_cspcp'), tn_aprox_total: sum('tn_aprox'),
-        inicio_acopio: null, fin_acopio: null, transportistas, importado: true,
-      },
-    });
-  }
-  return out;
-}
-
 /* ---------------- RESUMEN ANUAL ---------------- */
 export const COLS_RESUMEN_T = [
   ['RAZON SOCIAL', 'razon_social', 36], ['RUC', 'ruc', 13], ['UNIDADES SOLICITADAS', 'unidades_solicitadas', 12, 'i'], ['TN PROM. X UNIDAD', 'tn_prom_unidad', 10, 'i'],

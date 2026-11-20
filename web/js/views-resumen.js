@@ -1,5 +1,5 @@
 // RESUMEN ANUAL de operaciones (como el libro "RESUMEN DE OPERACIONES ACOPIO DE SAL … <AÑO>").
-import { state, api, esc, num, fecha, toast, $, $$, modal, tabla, puedeEscribir, chart, colores, descargarBlob } from './core.js?v=__V__';
+import { state, api, esc, num, fecha, toast, $, $$, tabla, chart, colores, descargarBlob } from './core.js?v=__V__';
 import { exportarResumenAnual } from './excel.js?v=__V__';
 import { pdfResumenAnual } from './pdf.js?v=__V__';
 
@@ -20,9 +20,8 @@ export async function vResumenAnual(view, ctx) {
   const todas = await api('/resumen-anual');
   const anios = [...new Set(todas.map((o) => o.anio_calc).filter(Boolean))].sort((a, b) => b - a);
   if (!anios.length) {
-    view.innerHTML = `<div class="card empty"><h2>Aún no hay operaciones</h2><p>Cree operaciones o importe un libro de resumen anual.</p>
-      ${puedeEscribir() ? '<button class="btn primary" id="b-imp">Importar resumen anual (Excel)</button>' : ''}</div>`;
-    $('#b-imp')?.addEventListener('click', () => importarModal(ctx));
+    view.innerHTML = `<div class="card empty"><h2>Aún no hay operaciones</h2><p>El resumen se arma solo con las operaciones de la app (cuadro de transportistas calculado con REPORTE HUACHO y REPORTE CSPCP).</p>
+      <a class="btn primary" href="#/operaciones">Ir a Operaciones</a></div>`;
     return;
   }
   if (!anios.includes(f.anio)) f.anio = anios[0];
@@ -35,7 +34,6 @@ export async function vResumenAnual(view, ctx) {
     <div class="card"><div class="card-h">
       <div><h2>Resumen de operaciones acopio de sal · Chancay</h2><div class="muted small">Todas las naves del año. Haga clic en una nave o en los gráficos para ver el detalle.</div></div>
       <div class="btns">
-        ${puedeEscribir() ? '<button class="btn" id="b-imp">Importar resumen (Excel)</button>' : ''}
         <span class="muted small">Completo (resumen + cuadro por nave):</span>
         <button class="btn" id="b-xls">Excel</button><button class="btn" id="b-pdf">PDF</button>
       </div></div>
@@ -108,7 +106,7 @@ export async function vResumenAnual(view, ctx) {
         <td class="num"><strong>${num(t.tn_acopio)}</strong></td>
         <td class="no-print">${o.origen === 'resumen' ? '' : `<button class="btn sm" data-abrir="${o.id}">Abrir</button>`}</td></tr>
       ${ab ? `<tr><td></td><td colspan="6" style="white-space:normal;background:var(--surface-2)">
-        <div class="muted small" style="margin-bottom:6px">Orden ${esc(o.orden)} · ${esc(estadoDe(o))} · ${num(t.viajes, 0)} viajes${o.origen === 'resumen' ? ' · importada de libro de resumen (sin detalle de viajes)' : ''}</div>
+        <div class="muted small" style="margin-bottom:6px">Orden ${esc(o.orden)} · ${esc(estadoDe(o))} · ${num(t.viajes, 0)} viajes</div>
         ${tabla(colsT, ts, { empty: 'Sin cuadro de transportistas', foot: ['TOTAL', String(ts.filter((x) => x.ruc).length), num(s('unidades_solicitadas'), 0), '-', num(s('viajes_aprox'), 0), num(s('tn_aprox'), 0), num(s('viajes_realizados'), 0), num(s('tn_huacho')), num(s('tn_cspcp')), ''] })}
       </td></tr>` : ''}`;
   }
@@ -177,25 +175,5 @@ export async function vResumenAnual(view, ctx) {
     if (e.target.id === 't-xls') { toast('Generando Excel…'); descargarBlob(await exportarResumenAnual(f.anio, datosExport(), { soloTabla: true }), nombreArch(' - TABLA RESUMEN', 'xlsx')); }
     if (e.target.id === 't-pdf') { toast('Generando PDF…'); descargarBlob(await pdfResumenAnual(f.anio, datosExport(), empresa(), { soloTabla: true }), nombreArch(' - TABLA RESUMEN', 'pdf')); }
   });
-  $('#b-imp')?.addEventListener('click', () => importarModal(ctx));
 }
 const filasTodas = (o) => o.resumen?.transportistas || [];
-
-function importarModal(ctx) {
-  modal({
-    title: 'Importar resumen anual (Excel)',
-    body: `<p class="muted">Libro <em>RESUMEN DE OPERACIONES ACOPIO DE SAL …</em> con una hoja por nave (cuadro de transportistas). Cada nave que aún no exista en la app se agrega como
-      operación <strong>finalizada</strong> con sus totales (sin detalle de viajes). Las naves que ya existen en la app no se modifican. Las hojas ocultas no se importan.</p>
-      <div class="form"><label class="full">Archivo *<input type="file" name="archivo" accept=".xlsx,.xlsm" required></label>
-      <label>Año de las operaciones *<input type="number" name="anio" min="2000" max="2100" value="${new Date().getFullYear()}" required></label></div>`,
-    submitText: 'Importar',
-    onSubmit: async (d, form) => {
-      const fd = new FormData(form);
-      const r = await api('/importar/resumen', { method: 'POST', form: fd });
-      toast(`Importadas ${r.creadas.length} naves${r.omitidas.length ? `; ${r.omitidas.length} ya existían` : ''}.`);
-      r.omitidas.forEach((x) => toast(x));
-      f.anio = Number(d.anio);
-      window.dispatchEvent(new CustomEvent('app:ops', { detail: { render: false, luego: () => ctx.rerender() } }));
-    },
-  });
-}
