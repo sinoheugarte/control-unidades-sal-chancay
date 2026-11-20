@@ -647,7 +647,7 @@ async function hojaTransportista(wb, op, t, viajes) {
   for (const [r, l1, v1, l2, v2] of info) {
     Object.assign(ws.getCell(`B${r}`), { value: l1 }); ws.getCell(`B${r}`).font = { bold: true, size: 9 };
     ws.getCell(`D${r}`).value = v1 ?? ''; ws.getCell(`D${r}`).font = { size: 9 };
-    if (v1 instanceof Date) ws.getCell(`D${r}`).numFmt = FMT.f;
+    if (v1 instanceof Date) ws.getCell(`D${r}`).numFmt = /[ T]\d{2}:\d{2}/.test(String(op.fecha_inicio)) && !/[ T]00:00/.test(String(op.fecha_inicio)) ? 'dd/mm/yyyy hh:mm' : FMT.f;
     ws.getCell(`G${r}`).value = l2; ws.getCell(`G${r}`).font = { bold: true, size: 9 };
     ws.getCell(`H${r}`).value = v2 ?? ''; ws.getCell(`H${r}`).font = { size: 9 };
     if (typeof v2 === 'number' && r === 9) ws.getCell(`H${r}`).numFmt = FMT.n;

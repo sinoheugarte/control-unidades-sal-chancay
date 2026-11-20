@@ -87,7 +87,7 @@ async function paginaTransportista(doc, op, t, viajes) {
   const info = [
     ['VAPOR:', op.nave, 'CLIENTE:', op.cliente],
     ['PRODUCTO:', op.producto, 'DAM:', op.dam],
-    ['FECHA INICIO:', fecha(op.fecha_inicio), 'REFERENCIA:', op.referencia],
+    ['FECHA INICIO:', /[ T]\d{2}:\d{2}/.test(String(op.fecha_inicio || '')) && !/[ T]00:00/.test(String(op.fecha_inicio)) ? fh(op.fecha_inicio).slice(0, 16) : fecha(op.fecha_inicio), 'REFERENCIA:', op.referencia],
     ['PUNTO SALIDA:', op.punto_salida, 'TOTAL VIAJES:', String(orden.length)],
     ['PUNTO LLEGADA:', op.punto_llegada, 'TOTAL PESO TM HUACHO:', n2(suma(orden, 'peso_origen'))],
     ['EMPRESA DE TRANSPORTE:', t.razon_social, 'RUC:', t.ruc],

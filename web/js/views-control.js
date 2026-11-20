@@ -1,5 +1,5 @@
 import {
-  state, api, esc, num, fecha, fechaHora, horas, toInputDT, normPlaca, toast, $, modal, confirmar,
+  state, api, esc, num, fecha, fechaHora, fechaHoraOpc, horas, toInputDT, normPlaca, toast, $, modal, confirmar,
   tabla, sinOperacion, puedeEscribir, esAdmin, chart, colores, descargar, descargarBlob,
 } from './core.js?v=__V__';
 import { NOMBRES_VUELTA } from './calc.js?v=__V__';
@@ -550,7 +550,7 @@ export async function vReporteTransportista(view) {
       <div class="table-wrap" style="max-height:none"><table class="info"><tbody>
         ${fila('Vapor', esc(op.nave), 'Cliente', esc(op.cliente))}
         ${fila('Producto', esc(op.producto), 'DAM', esc(op.dam))}
-        ${fila('Fecha inicio', fecha(op.fecha_inicio), 'Referencia', esc(op.referencia))}
+        ${fila('Fecha inicio', fechaHoraOpc(op.fecha_inicio), 'Referencia', esc(op.referencia))}
         ${fila('Punto salida', esc(op.punto_salida), 'Total viajes', num(vs.length, 0))}
         ${fila('Punto llegada', esc(op.punto_llegada), 'Total peso TM Huacho', num(sum('peso_origen')))}
         ${fila('Empresa de transporte', esc(t.razon_social), 'RUC', esc(t.ruc))}

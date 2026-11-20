@@ -188,7 +188,8 @@ function opDesdeBody(b) {
     if (k.startsWith('tn_') || k === 'anio') o[k] = N(b[k]);
     else if (k === 'params') o[k] = typeof b[k] === 'string' ? b[k] : JSON.stringify(b[k] || {});
     else if (k === 'eta') o[k] = C.normDT(b[k], false);
-    else if (['fecha_inicio', 'inicio_acopio', 'fin_acopio'].includes(k)) o[k] = C.normDate(b[k]);
+    else if (k === 'fecha_inicio') o[k] = C.normDT(b[k], false);
+    else if (['inicio_acopio', 'fin_acopio'].includes(k)) o[k] = C.normDate(b[k]);
     else o[k] = S(b[k]);
   }
   if (o.nave) o.nave = o.nave.toUpperCase().replace(/\s+/g, ' ');

@@ -25,6 +25,8 @@ export const horas = (h) => {
   const neg = h < 0; const t = Math.round(Math.abs(h) * 60);
   return `${neg ? '-' : ''}${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
 };
+/** Fecha y, si la tiene (distinta de 00:00), su hora. */
+export const fechaHoraOpc = (s) => (!s ? '—' : /[ T]\d{2}:\d{2}/.test(String(s)) && !/[ T]00:00/.test(String(s)) ? fechaHora(s) : fecha(s));
 export const minutos = (m) => (m === null || m === undefined ? '—' : `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`);
 /** "YYYY-MM-DD HH:MM" -> valor de <input type="datetime-local"> */
 export const toInputDT = (s) => (s ? String(s).slice(0, 16).replace(' ', 'T') : '');
@@ -200,7 +202,7 @@ function convertirFechaHora(el) {
   reloj.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
   caja.append(d, h, reloj, el);
   reloj.addEventListener('click', () => abrirReloj(reloj, h, d));
-  const pintar = (v) => { const m = String(v || '').match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/); d.value = m ? m[1] : ''; h.value = m ? m[2] : ''; };
+  const pintar = (v) => { const m = String(v || '').match(/^(\d{4}-\d{2}-\d{2})(?:[T ](\d{2}:\d{2}))?/); d.value = m ? m[1] : ''; h.value = m?.[2] || ''; };
   const leer = () => {
     if (d.value && HORA_24.test(h.value)) return `${d.value}T${h.value}`;
     if (d.value && !h.value && !requerido) return `${d.value}T00:00`;

@@ -1,4 +1,4 @@
-import { state, api, esc, num, fecha, fechaHora, toInputDT, toast, $, modal, confirmar, tabla, puedeEscribir, esAdmin, sinOperacion, opActual } from './core.js?v=__V__';
+import { state, api, esc, num, fecha, fechaHora, fechaHoraOpc, toInputDT, toast, $, modal, confirmar, tabla, puedeEscribir, esAdmin, sinOperacion, opActual } from './core.js?v=__V__';
 
 const refrescar = (id, render = true, luego) => window.dispatchEvent(new CustomEvent('app:ops', { detail: { id, render, luego } }));
 
@@ -32,7 +32,7 @@ export async function vOperaciones(view, ctx) {
       { t: '', f: (o) => `<div class="btns" style="flex-wrap:nowrap"><button class="btn sm primary" data-abrir="${o.id}">Abrir</button>
         ${edit ? `<button class="btn sm" data-op="${o.id}">Editar</button>` : ''}</div>` },
       { t: 'Cliente', k: 'cliente' }, { t: 'DAM', k: 'dam' },
-      { t: 'ETA', f: (o) => fechaHora(o.eta) }, { t: 'Inicio', f: (o) => fecha(o.fecha_inicio || o.primer_viaje) }, { t: 'Último viaje', f: (o) => fecha(o.ultimo_viaje) },
+      { t: 'ETA', f: (o) => fechaHora(o.eta) }, { t: 'Inicio', f: (o) => (o.fecha_inicio ? fechaHoraOpc(o.fecha_inicio) : fecha(o.primer_viaje)) }, { t: 'Último viaje', f: (o) => fecha(o.ultimo_viaje) },
       { t: 'TN prog.', k: 'tn_programadas', n: 1, d: 0 }, { t: 'Viajes', k: 'n_viajes', n: 1, d: 0 },
       { t: 'Estado', f: (o) => `<span class="pill ${['CERRADA', 'FINALIZADA'].includes(o.estado) ? 'ok' : 'info'}">${esc(o.estado === 'CERRADA' ? 'FINALIZADA' : o.estado || 'EN CURSO')}</span>` },
       { t: 'Modificado', f: (o) => (o.actualizado_en ? `${fechaHora(o.actualizado_en)}<div class="muted small">${esc(o.actualizado_por || '')}</div>` : '—') },
@@ -63,7 +63,7 @@ function opModal(o, despues) {
     wide: true,
     body: `<div class="form">
       ${f('nave', 'Nave *', 'text', 'required')}${f('orden', 'Orden *', 'text', 'required')}${f('manifiesto', 'Manifiesto')}${f('dam', 'DAM')}
-      ${f('eta', 'ETA', 'datetime-local')}${f('fecha_inicio', 'Fecha inicio', 'date')}${f('cliente', 'Cliente')}${f('producto', 'Producto')}
+      ${f('eta', 'ETA', 'datetime-local')}${f('fecha_inicio', 'Fecha y hora de inicio (tentativa)', 'datetime-local')}${f('cliente', 'Cliente')}${f('producto', 'Producto')}
       ${f('referencia', 'Referencia')}${f('punto_salida', 'Punto de salida')}${f('punto_llegada', 'Punto de llegada')}${f('empresa', 'Empresa')}
       ${f('coordinador', 'Coordinador de transporte')}
       ${f('tn_programadas', 'TN programadas *', 'number', 'step="0.01" min="0" required')}
