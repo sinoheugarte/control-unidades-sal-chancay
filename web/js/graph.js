@@ -180,6 +180,16 @@ export async function guardarJSON(nombre, data, etag) {
   return (await r.json()).eTag;
 }
 
+/** Renombra un archivo de la carpeta. Falla con status 409 si ya existe uno con el nombre nuevo. */
+export async function renombrarArchivo(nombre, nuevo) {
+  const r = await g(await rutaItem(nombre), {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: nuevo, '@microsoft.graph.conflictBehavior': 'fail' }), raw: true,
+  });
+  if (r.status === 409) throw Object.assign(new Error(`Ya existe un archivo llamado "${nuevo}" en SharePoint`), { status: 409 });
+  if (!r.ok) throw Object.assign(new Error(`No se pudo renombrar ${nombre} (${r.status})`), { status: r.status });
+}
+
 export async function eliminarArchivo(nombre) {
   const r = await g(await rutaItem(nombre), { method: 'DELETE', raw: true });
   if (!r.ok && r.status !== 404) throw new Error(`No se pudo eliminar ${nombre} (${r.status})`);

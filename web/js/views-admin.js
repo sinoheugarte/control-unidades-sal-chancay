@@ -6,13 +6,15 @@ const refrescar = (id, render = true) => window.dispatchEvent(new CustomEvent('a
 export async function vOperaciones(view) {
   const ops = await api('/operaciones');
   const edit = puedeEscribir();
-  view.innerHTML = `<div class="card"><div class="card-h"><h2>Operaciones (nave / orden)</h2>
+  view.innerHTML = `<div class="card"><div class="card-h"><div><h2>Operaciones (nave / orden)</h2>
+      <p class="muted small" style="margin:4px 0 0">Cada operación es un reporte independiente, como cada libro Excel. Se guarda en SharePoint con el nombre del reporte. Para una nave nueva use <strong>+ Nueva operación</strong> (o importe su libro Excel).</p></div>
       ${edit ? '<div class="btns"><a class="btn" href="#/importar">Importar libro Excel</a><button class="btn primary" id="b-new">+ Nueva operación</button></div>' : ''}</div>
     ${tabla([
-      { t: 'Nave', f: (o) => `<strong>${esc(o.nave)}</strong>` }, { t: 'Orden', k: 'orden' }, { t: 'Cliente', k: 'cliente' }, { t: 'Producto', k: 'producto' },
+      { t: 'Reporte', f: (o) => `<strong>${esc(o.nombre || `${o.nave} - ORDEN ${o.orden}`)}</strong>` },
+      { t: 'Nave', k: 'nave' }, { t: 'Orden', k: 'orden' }, { t: 'Cliente', k: 'cliente' },
       { t: 'ETA', f: (o) => fechaHora(o.eta) }, { t: 'Inicio', f: (o) => fecha(o.fecha_inicio) }, { t: 'TN prog.', k: 'tn_programadas', n: 1, d: 0 },
       { t: 'Viajes', k: 'n_viajes', n: 1, d: 0 }, { t: 'Estado', f: (o) => `<span class="pill ${o.estado === 'CERRADA' ? 'ok' : 'info'}">${esc(o.estado)}</span>` },
-      { t: '', f: (o) => `<div class="btns"><button class="btn sm" data-sel="${o.id}">${o.id === state.opId ? 'Activa ✓' : 'Seleccionar'}</button>
+      { t: '', f: (o) => `<div class="btns" style="flex-wrap:nowrap"><button class="btn sm" data-sel="${o.id}">${o.id === state.opId ? 'Activa ✓' : 'Seleccionar'}</button>
         ${edit ? `<button class="btn sm" data-op="${o.id}">Editar</button>` : ''}</div>` },
     ], ops, { empty: 'No hay operaciones. Cree una nueva o importe el libro Excel del reporte.' })}</div>`;
   $('#b-new')?.addEventListener('click', () => opModal(null));

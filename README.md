@@ -15,7 +15,12 @@ Funciona igual que **Pacifico TP Reporte**:
 
 ## Funcionalidades
 
-- **Operaciones** por nave / orden (manifiesto, DAM, ETA, cliente, TN programadas, draft SGS).
+- **Operaciones** por nave / orden (manifiesto, DAM, ETA, cliente, TN programadas, draft SGS):
+  - Cada una es un reporte independiente, como cada libro Excel.
+  - Se guarda en SharePoint con el nombre del libro: `REPORTE DE CONTROL UNIDADES SAL - <NAVE> - ORDEN <N°>.json`.
+  - No se permiten operaciones duplicadas (misma nave + orden).
+  - Si se corrige la nave o la orden, el archivo se renombra.
+  - Las exportaciones llevan el mismo nombre.
 - **Registro rápido** desde el celular:
   1. Salida de planta: placa, guía, peso y hora.
   2. Recepción en puerto: placa, ticket y peso. Se asigna sola al viaje pendiente de esa placa.
@@ -93,5 +98,5 @@ docs/                  Análisis del libro Excel original
 ```
 Control Unidades Sal/
   indice.json      operaciones, transportistas y roles de usuario
-  op-1.json        datos de la operación 1 (viajes, unidades, reportes, embarque, historial)
+  REPORTE DE CONTROL UNIDADES SAL - MV TURBO S - ORDEN 2052.json   datos de cada operación (viajes, tickets, unidades, reportes, embarque, historial)
 ```

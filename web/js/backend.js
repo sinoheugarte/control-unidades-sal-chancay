@@ -8,7 +8,44 @@ import * as X from './excel.js?v=__V__';
 import * as P from './pdf.js?v=__V__';
 
 const INDICE = 'indice.json';
-const opFile = (id) => `op-${id}.json`;
+/**
+ * Nombre de la operación, igual que el nombre del libro Excel:
+ *   "REPORTE DE CONTROL UNIDADES SAL - MV TURBO S - ORDEN 2052"
+ * Cada operación se guarda en SharePoint como "<ese nombre>.json".
+ */
+export function nombreReporte(o) {
+  const limpio = (v) => String(v ?? '').toUpperCase().replace(/["*:<>?/\\|#%~&{}]/g, ' ').replace(/\s+/g, ' ').trim();
+  return `REPORTE DE CONTROL UNIDADES SAL - ${limpio(o.nave)} - ORDEN ${limpio(o.orden)}`;
+}
+const claveOp = (o) => `${String(o.nave ?? '').toUpperCase().replace(/\s+/g, ' ').trim()}|${String(o.orden ?? '').toUpperCase().trim()}`;
+async function opFile(id) {
+  const e = (await leer(INDICE)).operaciones.find((x) => x.id === Number(id));
+  return e?.archivo || `op-${id}.json`;
+}
+function verificarDuplicado(I, o, idActual = null) {
+  const d = I.operaciones.find((x) => x.id !== Number(idActual) && claveOp(x) === claveOp(o));
+  if (d) throw err(409, `Ya existe la operación ${String(o.nave).toUpperCase()} - ORDEN ${String(o.orden).toUpperCase()}. Selecciónela en el listado; para agregarle datos use Importar datos (REPORTE HUACHO / REPORTE CSPCP).`);
+}
+/** Renombra el archivo de la operación en SharePoint si su nave/orden cambió (o si tiene un nombre antiguo). */
+async function asegurarNombreArchivo(id) {
+  const I = await leer(INDICE, true);
+  const e = I.operaciones.find((x) => x.id === Number(id));
+  if (!e) return;
+  const viejo = e.archivo || `op-${id}.json`;
+  const nuevo = `${nombreReporte(e)}.json`;
+  if (viejo === nuevo) return;
+  await G.renombrarArchivo(viejo, nuevo);
+  if (cache.has(viejo)) { cache.set(nuevo, cache.get(viejo)); cache.delete(viejo); }
+  await mutar(INDICE, (I2) => { const x = I2.operaciones.find((y) => y.id === Number(id)); if (x) { x.archivo = nuevo; x.nombre = nombreReporte(x); } });
+}
+/** Migra operaciones creadas con el nombre interno antiguo (op-N.json) al nombre del reporte. */
+async function migrarNombres() {
+  const I = await leer(INDICE);
+  for (const o of I.operaciones) {
+    if (o.archivo === `${nombreReporte(o)}.json`) continue;
+    try { await asegurarNombreArchivo(o.id); } catch (e) { console.warn('No se pudo renombrar', o, e.message); }
+  }
+}
 const cache = new Map(); // nombre -> { data, etag, at }
 const FRESCO_MS = 10000;
 let yo = null; // { nombre, email, rol }
@@ -66,6 +103,7 @@ export async function iniciarSesion() {
   const rol = !I.usuarios?.length ? 'admin' : reg ? (reg.activo === false ? null : reg.rol) : (I.rol_por_defecto || 'lector');
   if (!rol) throw err(403, 'Su usuario está desactivado en Control de Unidades. Contacte al administrador.');
   yo = { id: u.email, usuario: u.email, nombre: reg?.nombre || u.nombre, email: u.email, rol };
+  if (rol !== 'lector') await migrarNombres();
   return yo;
 }
 export const usuarioActual = () => yo;
@@ -76,7 +114,7 @@ const ADMIN = () => exige('admin');
 
 /* ---------------- carga calculada ---------------- */
 async function datosOp(id) {
-  const D = await leer(opFile(id));
+  const D = await leer(await opFile(id));
   if (!D?.operacion) throw err(404, 'Operación no encontrada');
   return D;
 }
@@ -99,15 +137,15 @@ const unidadesDe = (D, I) => D.unidades.map((u) => ({ ...u, transportista_nombre
 /** Mantiene el resumen de la operación en el índice. */
 async function syncIndice(D) {
   const o = D.operacion;
-  const res = { id: o.id, nave: o.nave, orden: o.orden, cliente: o.cliente, producto: o.producto, eta: o.eta, fecha_inicio: o.fecha_inicio,
-    tn_programadas: o.tn_programadas, estado: o.estado, n_viajes: D.viajes.length };
   const actual = (await leer(INDICE)).operaciones.find((x) => x.id === o.id);
+  const res = { id: o.id, nombre: nombreReporte(o), archivo: actual?.archivo || `op-${o.id}.json`, nave: o.nave, orden: o.orden, cliente: o.cliente,
+    producto: o.producto, eta: o.eta, fecha_inicio: o.fecha_inicio, tn_programadas: o.tn_programadas, estado: o.estado, n_viajes: D.viajes.length };
   if (actual && JSON.stringify(actual) === JSON.stringify(res)) return;
   await mutar(INDICE, (I) => { I.operaciones = I.operaciones.filter((x) => x.id !== o.id); I.operaciones.push(res); });
 }
 async function mutarOp(id, fn) {
   let D2;
-  const r = await mutar(opFile(id), async (D) => { const x = await fn(D); D2 = D; return x; });
+  const r = await mutar(await opFile(id), async (D) => { const x = await fn(D); D2 = D; return x; });
   await syncIndice(D2);
   return r;
 }
@@ -125,14 +163,28 @@ function opDesdeBody(b) {
     else if (k === 'fecha_inicio') o[k] = C.normDate(b[k]);
     else o[k] = S(b[k]);
   }
+  if (o.nave) o.nave = o.nave.toUpperCase().replace(/\s+/g, ' ');
+  if (o.orden) o.orden = o.orden.toUpperCase();
   return o;
 }
 async function crearOperacion(o, D = opVacia()) {
-  const id = await mutar(INDICE, (I) => { I.seq_op = Math.max(I.seq_op || 0, ...I.operaciones.map((x) => x.id)) + 1; return I.seq_op; });
+  const archivo = `${nombreReporte(o)}.json`;
+  // Reserva el id y registra la operación en el índice (falla si la nave + orden ya existe)
+  const id = await mutar(INDICE, (I) => {
+    verificarDuplicado(I, o);
+    I.seq_op = Math.max(I.seq_op || 0, ...I.operaciones.map((x) => x.id)) + 1;
+    I.operaciones.push({ id: I.seq_op, nombre: nombreReporte(o), archivo, nave: o.nave, orden: o.orden, estado: 'EN CURSO', n_viajes: 0 });
+    return I.seq_op;
+  });
   D.operacion = { id, empresa: 'PACIFICO DESPACHOS S.A.C.', estado: 'EN CURSO', params: '{}', creado_en: ahora(), ...o, id };
   historial(D, 'crear_operacion', `${o.nave} / ${o.orden}`);
-  const etag = await G.guardarJSON(opFile(id), D, null);
-  cache.set(opFile(id), { data: D, etag, at: Date.now() });
+  try {
+    const etag = await G.guardarJSON(archivo, D, null);
+    cache.set(archivo, { data: D, etag, at: Date.now() });
+  } catch (e) {
+    await mutar(INDICE, (I) => { I.operaciones = I.operaciones.filter((x) => x.id !== id); });
+    throw e;
+  }
   await syncIndice(D);
   return D.operacion;
 }
@@ -183,12 +235,20 @@ ruta('POST', '/operaciones', async (p, b) => {
 });
 ruta('PUT', '/operaciones/:id', async ({ id }, b) => {
   ESCRIBE();
-  return mutarOp(id, (D) => { Object.assign(D.operacion, opDesdeBody(b)); historial(D, 'editar_operacion', null); return D.operacion; });
+  const cambios = opDesdeBody(b);
+  if (('nave' in cambios && !cambios.nave) || ('orden' in cambios && !cambios.orden)) throw err(400, 'Nave y orden son obligatorios');
+  const I = await leer(INDICE, true);
+  const actual = I.operaciones.find((x) => x.id === Number(id)) || {};
+  verificarDuplicado(I, { nave: cambios.nave ?? actual.nave, orden: cambios.orden ?? actual.orden }, id);
+  const op = await mutarOp(id, (D) => { Object.assign(D.operacion, cambios); historial(D, 'editar_operacion', null); return D.operacion; });
+  await asegurarNombreArchivo(id);
+  return op;
 });
 ruta('DELETE', '/operaciones/:id', async ({ id }) => {
   ADMIN();
-  await G.eliminarArchivo(opFile(id));
-  cache.delete(opFile(id));
+  const archivo = await opFile(id);
+  await G.eliminarArchivo(archivo);
+  cache.delete(archivo);
   await mutar(INDICE, (I) => { I.operaciones = I.operaciones.filter((x) => x.id !== Number(id)); });
   return { ok: true };
 });
@@ -284,7 +344,7 @@ ruta('DELETE', '/transportistas/:tid', async ({ tid }) => {
   ADMIN();
   const I = await leer(INDICE, true);
   for (const o of I.operaciones) {
-    const D = await leer(opFile(o.id));
+    const D = await leer(await opFile(o.id));
     const n = D?.viajes.filter((v) => v.transportista_id === Number(tid)).length || 0;
     if (n) throw err(409, `No se puede eliminar: tiene ${n} viajes en ${o.nave} / ${o.orden}`);
   }
@@ -420,15 +480,14 @@ ruta('POST', '/operaciones/:id/importar/:tipo', async ({ id, tipo }, b, form) =>
 });
 
 /* exportación (devuelve { blob, nombre }) */
-const slug = (s) => String(s || '').replace(/[^A-Za-z0-9]+/g, '_').replace(/^_|_$/g, '');
 ruta('GET', '/operaciones/:id/exportar/detalle', async ({ id }) => {
   const { op, viajes, embarque } = await cargar(id);
-  return { blob: await X.exportarDetalle(op, viajes, C.totales(viajes, op, embarque)), nombre: `DETALLE_${slug(op.nave)}_ORDEN_${slug(op.orden)}.xlsx` };
+  return { blob: await X.exportarDetalle(op, viajes, C.totales(viajes, op, embarque)), nombre: `${nombreReporte(op)} - DETALLE TRANSPORTE.xlsx` };
 });
 ruta('GET', '/operaciones/:id/exportar/transportista/:tid', async ({ id, tid }) => {
   const { op, viajes, I } = await cargar(id);
   const t = I.transportistas.find((x) => x.id === Number(tid)); if (!t) throw err(404, 'Transportista no encontrado');
-  return { blob: await X.exportarTransportista(op, t, viajes.filter((v) => v.transportista_id === t.id)), nombre: `REPORTE_${slug(t.nombre_comercial)}_${slug(op.nave)}_${slug(op.orden)}.xlsx` };
+  return { blob: await X.exportarTransportista(op, t, viajes.filter((v) => v.transportista_id === t.id)), nombre: `${nombreReporte(op)} - ${t.nombre_comercial}.xlsx` };
 });
 
 /* estado del cruce HUACHO ↔ CSPCP */
@@ -463,21 +522,21 @@ async function todosTransportistas(id) {
 ruta('GET', '/operaciones/:id/transportistas/:tid/reporte', async ({ id, tid }) => grupoTransportista(id, tid));
 ruta('GET', '/operaciones/:id/exportar/detalle-pdf', async ({ id }) => {
   const { op, viajes, embarque } = await cargar(id);
-  return { blob: await P.pdfDetalle(op, viajes, C.totales(viajes, op, embarque)), nombre: `DETALLE_${slug(op.nave)}_ORDEN_${slug(op.orden)}.pdf` };
+  return { blob: await P.pdfDetalle(op, viajes, C.totales(viajes, op, embarque)), nombre: `${nombreReporte(op)} - DETALLE TRANSPORTE.pdf` };
 });
 ruta('GET', '/operaciones/:id/exportar/transportista-pdf/:tid', async ({ id, tid }) => {
   const { op, t, viajes } = await grupoTransportista(id, tid);
-  return { blob: await P.pdfTransportista(op, t, viajes), nombre: `REPORTE_${slug(t.nombre_comercial)}_${slug(op.nave)}_${slug(op.orden)}.pdf` };
+  return { blob: await P.pdfTransportista(op, t, viajes), nombre: `${nombreReporte(op)} - ${t.nombre_comercial}.pdf` };
 });
 ruta('GET', '/operaciones/:id/exportar/transportistas', async ({ id }) => {
   const { op, grupos } = await todosTransportistas(id);
   if (!grupos.length) throw err(400, 'No hay transportistas con viajes');
-  return { blob: await X.exportarTransportistas(op, grupos), nombre: `REPORTES_TRANSPORTISTAS_${slug(op.nave)}_${slug(op.orden)}.xlsx` };
+  return { blob: await X.exportarTransportistas(op, grupos), nombre: `${nombreReporte(op)} - TRANSPORTISTAS.xlsx` };
 });
 ruta('GET', '/operaciones/:id/exportar/transportistas-pdf', async ({ id }) => {
   const { op, grupos } = await todosTransportistas(id);
   if (!grupos.length) throw err(400, 'No hay transportistas con viajes');
-  return { blob: await P.pdfTransportistas(op, grupos), nombre: `REPORTES_TRANSPORTISTAS_${slug(op.nave)}_${slug(op.orden)}.pdf` };
+  return { blob: await P.pdfTransportistas(op, grupos), nombre: `${nombreReporte(op)} - TRANSPORTISTAS.pdf` };
 });
 
 /* usuarios (roles dentro de la app; el acceso real lo da SharePoint) */
