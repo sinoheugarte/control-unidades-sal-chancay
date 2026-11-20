@@ -188,6 +188,8 @@ async function render() {
     if (state.user && ruta === 'login') { location.hash = '#/tablero'; return; }
     return vLogin(root, errorLogin);
   }
+  const qOp = Number(new URLSearchParams(location.hash.split('?')[1] || '').get('op'));
+  if (qOp && !esTransp() && qOp !== state.opId && state.ops.some((o) => o.id === qOp)) setOp(qOp);
   const permitida = (k) => RUTAS[k] && (esTransp() ? RUTAS[k].portal : !RUTAS[k].portal && (!RUTAS[k].admin || esAdmin()));
   const r = permitida(ruta) ? ruta : esTransp() ? 'portal' : 'tablero';
   shell(root, r);

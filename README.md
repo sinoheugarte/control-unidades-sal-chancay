@@ -40,6 +40,14 @@ Funciona igual que **Pacifico TP Reporte**:
   - Exportación a **Excel y PDF**, por transportista o de todos juntos (un Excel con una hoja por transportista, o un solo PDF).
 - **Importación del libro completo** `.xlsm` (para crear una operación) y de la lista de unidades.
 - **Roles** por correo: *admin*, *operador* y *lector*.
+- **Resumen anual** de todas las operaciones, como el libro *RESUMEN DE OPERACIONES ACOPIO DE SAL*:
+  - Pestañas por año, filtros, indicadores y gráficos interactivos.
+  - Cuadro de naves que se despliega con el cuadro de cada transportista.
+  - Exporta a Excel (una hoja por nave) y PDF, e importa el libro de resumen histórico.
+- **Finalizar operación**:
+  - Genera la presentación de cierre en **PowerPoint**, **HTML** y **video (MP4)** y la guarda en SharePoint (`Control Unidades Sal/Presentaciones/<reporte>/`).
+  - Marca la operación como FINALIZADA.
+  - Envía un correo desde la cuenta del usuario (Microsoft 365) a los destinatarios elegidos, con el enlace a la app y a los tres archivos. Requiere el permiso delegado *Mail.Send*; si no está autorizado, la app ofrece abrir el correo ya redactado en Outlook.
 - **Portal de transportistas**: usuarios de cada empresa de transporte que sólo **ven y descargan sus propios viajes y unidades**:
   - Muestra el reporte de servicio, con descarga en Excel y PDF, y la lista de unidades, también en Excel y PDF.
   - La app publica sus datos en `Control Unidades Sal/Portal/<correo>/`, una carpeta compartida sólo con ese correo y con permiso de lectura. Aunque entre directamente a SharePoint, no tiene acceso al resto.

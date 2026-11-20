@@ -289,7 +289,7 @@ ruta('GET', '/operaciones/:id/tablero', async ({ id }) => {
     transportistas: C.resumenTransportistas(viajes, participantes(D, I), unidades), jornadas: C.resumenJornadas(viajes),
     unidades: C.resumenUnidades(viajes), tiempos: C.resumenTiempos(viajes),
     reportes_despacho: C.tablaReportes(viajes, op, D.reportes, 'despacho'), reportes_acopio: C.tablaReportes(viajes, op, D.reportes, 'acopio'),
-    embarque, unidades_en_lista: unidades.length, ultimos: viajes.slice(-8).reverse(),
+    embarque, unidades_en_lista: unidades.length, ultimos: viajes.slice(-8).reverse(), resumen: calcularResumen(D, I),
   };
 });
 
@@ -516,6 +516,84 @@ ruta('GET', '/operaciones/:id/exportar/transportista/:tid', async ({ id, tid }) 
   const { op, viajes, I } = await cargar(id);
   const t = I.transportistas.find((x) => x.id === Number(tid)); if (!t) throw err(404, 'Transportista no encontrado');
   return { blob: await X.exportarTransportista(op, t, viajes.filter((v) => v.transportista_id === t.id)), nombre: `${nombreReporte(op)} - ${t.nombre_comercial}.xlsx` };
+});
+
+/* ================= FINALIZAR OPERACIÓN ================= */
+const escH = (v) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+function correoHTML(op, res, enlaces, urlApp, mensaje) {
+  const nf2 = (v) => new Intl.NumberFormat('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v || 0);
+  const f = (s) => (s ? s.slice(0, 10).split('-').reverse().join('/') : '—');
+  const boton = (href, txt, color) => `<a href="${escH(href)}" style="display:inline-block;background:${color};color:#fff;text-decoration:none;font-weight:600;padding:10px 16px;border-radius:6px;margin:4px 6px 4px 0">${txt}</a>`;
+  return `<div style="font-family:Segoe UI,Arial,sans-serif;color:#17212f;max-width:640px">
+  <div style="background:#1F4E79;color:#fff;padding:18px 22px;border-radius:8px 8px 0 0"><div style="font-size:13px;opacity:.85">${escH((op.empresa || '').trim())}</div>
+  <div style="font-size:20px;font-weight:700;margin-top:4px">Operación finalizada: ${escH(op.nave)} · Orden ${escH(op.orden)}</div></div>
+  <div style="border:1px solid #e2e7ee;border-top:0;padding:18px 22px;border-radius:0 0 8px 8px">
+  ${mensaje ? `<p>${escH(mensaje).replace(/\n/g, '<br>')}</p>` : '<p>Se informa que la siguiente operación de acopio ha sido finalizada.</p>'}
+  <table style="border-collapse:collapse;font-size:14px;margin:8px 0 14px">
+   <tr><td style="padding:4px 14px 4px 0;color:#5e6b7c">Cliente</td><td><strong>${escH(op.cliente || '—')}</strong></td></tr>
+   <tr><td style="padding:4px 14px 4px 0;color:#5e6b7c">Acopio</td><td>${f(res?.inicio_acopio)} al ${f(res?.fin_acopio)}</td></tr>
+   <tr><td style="padding:4px 14px 4px 0;color:#5e6b7c">TN despachadas (Huacho)</td><td>${nf2(res?.tn_despacho)}</td></tr>
+   <tr><td style="padding:4px 14px 4px 0;color:#5e6b7c">TN acopiadas (CSPCP)</td><td><strong>${nf2(res?.tn_acopio)}</strong></td></tr>
+   <tr><td style="padding:4px 14px 4px 0;color:#5e6b7c">Viajes</td><td>${res?.viajes ?? '—'}</td></tr></table>
+  <p style="margin:6px 0">${boton(urlApp, 'Ingresar a la aplicación', '#1F4E79')}</p>
+  <p style="margin:6px 0">${enlaces.pptx ? boton(enlaces.pptx, 'Presentación PowerPoint', '#C55A11') : ''}${enlaces.html ? boton(enlaces.html, 'Presentación HTML', '#2E75B6') : ''}${enlaces.video ? boton(enlaces.video, 'Video', '#1D7A4F') : ''}</p>
+  <p style="font-size:12px;color:#5e6b7c">Ingrese con su usuario corporativo de Microsoft 365 asignado. Los archivos están guardados en SharePoint (sitio PacificoTP).</p>
+  </div></div>`;
+}
+const carpetaPresentacion = (op) => `Presentaciones/${nombreReporte(op)}`;
+
+ruta('GET', '/finalizacion/destinatarios', async () => {
+  ESCRIBE();
+  const I = await leer(INDICE, true);
+  return { predeterminados: I.finalizacion?.destinatarios || [], usuarios: (I.usuarios || []).filter((u) => u.rol !== 'transportista' && u.activo !== false).map((u) => ({ email: u.email, nombre: u.nombre, rol: u.rol })) };
+});
+
+/**
+ * body: { destinatarios: [correos], mensaje, guardar, archivos: [{ clave: 'pptx'|'html'|'video', nombre, blob }], progreso(texto) }
+ * Sube los archivos a SharePoint, marca la operación como FINALIZADA y envía el correo con los enlaces.
+ */
+ruta('POST', '/operaciones/:id/finalizar', async ({ id }, b) => {
+  ESCRIBE();
+  const D0 = await datosOp(id);
+  const op = D0.operacion;
+  const para = [...new Set((b.destinatarios || []).map((x) => String(x).trim().toLowerCase()).filter((x) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x)))];
+  const prog = b.progreso || (() => {});
+  const enlaces = {};
+  for (const a of b.archivos || []) {
+    prog(`Subiendo ${a.nombre} a SharePoint…`);
+    const ruta2 = `${carpetaPresentacion(op)}/${a.nombre}`;
+    await G.subirArchivo(ruta2, a.blob);
+    enlaces[a.clave] = await G.crearEnlace(ruta2);
+  }
+  prog('Marcando la operación como FINALIZADA…');
+  const urlApp = `${G.appUrl()}#/tablero?op=${op.id}`;
+  await mutarOp(id, (D) => {
+    Object.assign(D.operacion, { estado: 'FINALIZADA', finalizada_en: ahora(), finalizada_por: yo.nombre || yo.email,
+      presentacion: { ...(D.operacion.presentacion || {}), ...enlaces, carpeta: carpetaPresentacion(op), generada_en: ahora() } });
+    historial(D, 'finalizar', { destinatarios: para });
+  });
+  if (b.guardar && para.length) await mutar(INDICE, (I) => { I.finalizacion = { ...(I.finalizacion || {}), destinatarios: para }; });
+  const correo = { para, ok: false, error: null };
+  if (para.length) {
+    try {
+      prog('Enviando el correo…');
+      const D = await datosOp(id);
+      await G.asegurarPermisoCorreo();
+      await G.enviarCorreo({ para, asunto: `Operación finalizada: ${op.nave} · Orden ${op.orden} — ${nombreReporte(op)}`,
+        html: correoHTML(D.operacion, calcularResumen(D, await leer(INDICE)), D.operacion.presentacion || {}, urlApp, b.mensaje) });
+      correo.ok = true;
+    } catch (e) { correo.error = e.message; }
+    await mutarOp(id, (D) => { D.operacion.ultimo_correo = { en: ahora(), por: yo.email, para, ok: correo.ok, error: correo.error }; });
+  }
+  const D = await datosOp(id);
+  return { enlaces: D.operacion.presentacion, correo, urlApp,
+    mailto: `mailto:${para.join(';')}?subject=${encodeURIComponent(`Operación finalizada: ${op.nave} · Orden ${op.orden}`)}&body=${encodeURIComponent(
+      `Se informa que la operación ${op.nave} · Orden ${op.orden} ha sido finalizada.\n\nIngresar a la aplicación: ${urlApp}\n${Object.entries(D.operacion.presentacion || {}).filter(([k]) => ['pptx', 'html', 'video'].includes(k)).map(([k, v]) => `${{ pptx: 'Presentación PowerPoint', html: 'Presentación HTML', video: 'Video' }[k]}: ${v}`).join('\n')}`)}` };
+});
+ruta('POST', '/operaciones/:id/reabrir', async ({ id }) => {
+  ADMIN();
+  await mutarOp(id, (D) => { D.operacion.estado = 'EN CURSO'; historial(D, 'reabrir', null); });
+  return { ok: true };
 });
 
 /* ================= RESUMEN ANUAL ================= */

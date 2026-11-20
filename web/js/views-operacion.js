@@ -1,6 +1,6 @@
 import {
   state, api, esc, num, pct, fecha, fechaHora, minutos, toInputDT, ahoraInput, hoyInput, normPlaca,
-  statusPill, rangoPill, toast, $, modal, confirmar, tabla, sinOperacion, puedeEscribir, chart, colores, descargar,
+  statusPill, rangoPill, toast, $, modal, confirmar, tabla, sinOperacion, puedeEscribir, esAdmin, chart, colores, descargar,
 } from './core.js?v=__V__';
 
 /* =================== TABLERO =================== */
@@ -14,9 +14,14 @@ export async function vTablero(view) {
     <div class="card"><div class="card-h"><div><h2>${esc(op.nave)} · Orden ${esc(op.orden)}</h2>
       <div class="muted small">${esc(op.cliente || '')} · ${esc(op.producto || '')} · ${esc(op.punto_salida || '')} → ${esc(op.punto_llegada || '')}
       · ETA ${fechaHora(op.eta)} · DAM ${esc(op.dam || '—')}</div></div>
-      <div class="btns no-print"><span class="pill info">${esc(op.estado)}</span>
+      <div class="btns no-print"><span class="pill ${op.estado === 'FINALIZADA' ? 'ok' : 'info'}">${esc(op.estado)}</span>
       <button class="btn sm" id="b-print">Imprimir</button>
-      <button class="btn sm" id="b-xls">Exportar detalle</button></div></div>
+      <button class="btn sm" id="b-xls">Exportar detalle</button>
+      ${puedeEscribir() ? `<button class="btn sm ${op.estado === 'FINALIZADA' ? '' : 'primary'}" id="b-fin">${op.estado === 'FINALIZADA' ? 'Regenerar presentación / reenviar' : 'Finalizar operación'}</button>` : ''}
+      ${op.estado === 'FINALIZADA' && esAdmin() ? '<button class="btn sm" id="b-reabrir">Reabrir</button>' : ''}</div></div>
+      ${op.estado === 'FINALIZADA' ? `<div class="alert ok" style="margin-top:6px">Finalizada ${op.finalizada_en ? `el ${fechaHora(op.finalizada_en)}` : ''}${op.finalizada_por ? ` por ${esc(op.finalizada_por)}` : ''}.
+        ${op.presentacion ? `Presentación: ${[['pptx', 'PowerPoint'], ['html', 'HTML'], ['video', 'Video']].filter(([k]) => op.presentacion[k]).map(([k, l]) => `<a href="${esc(op.presentacion[k])}" target="_blank" rel="noopener">${l}</a>`).join(' · ')}` : ''}
+        ${op.ultimo_correo ? `<div class="small" style="margin-top:4px">Último correo: ${fechaHora(op.ultimo_correo.en)} · ${op.ultimo_correo.ok ? `enviado a ${esc(op.ultimo_correo.para.join(', '))}` : `no enviado (${esc(op.ultimo_correo.error || '')})`}</div>` : ''}</div>` : ''}
     </div>
     <div class="kpis">
       ${kpi('TN programadas', num(t.tn_programadas, 0), `${num(d.preacopio.acopio.viajes_total, 0)} viajes estimados`)}
@@ -45,6 +50,11 @@ export async function vTablero(view) {
     </div>`;
 
   $('#b-print').onclick = () => print();
+  $('#b-fin')?.addEventListener('click', async () => { const { abrirFinalizar } = await import('./finalizar.js?v=__V__'); abrirFinalizar(op, () => { window.dispatchEvent(new CustomEvent('app:ops', { detail: { id: op.id } })); }); });
+  $('#b-reabrir')?.addEventListener('click', async () => {
+    if (!(await confirmar(`¿Reabrir la operación ${op.nave} · Orden ${op.orden}? Volverá a estado EN CURSO.`))) return;
+    await api(`/operaciones/${op.id}/reabrir`, { method: 'POST' }); window.dispatchEvent(new CustomEvent('app:ops', { detail: { id: op.id } }));
+  });
   $('#b-xls').onclick = () => descargar(`/api/operaciones/${state.opId}/exportar/detalle`);
 
   const c = colores();

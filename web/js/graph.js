@@ -30,35 +30,38 @@ export function setCfg(c) { ls.set(CFG_KEY, c); ls.del(TOKEN_KEY); driveId = nul
 
 const b64url = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
-async function canjear(params) {
+async function canjear(params, scopes = null) {
   const cfg = getCfg();
   const r = await fetch(`https://login.microsoftonline.com/${cfg.tid}/oauth2/v2.0/token`, {
     method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ client_id: cfg.cid, scope: `${SCOPES.join(' ')} offline_access`, ...params }),
+    body: new URLSearchParams({ client_id: cfg.cid, scope: `${scopes || SCOPES.join(' ')} offline_access`, ...params }),
   });
   const d = await r.json();
   if (d.error) throw new Error(d.error_description || d.error);
-  ls.set(TOKEN_KEY, { access: d.access_token, refresh: d.refresh_token || ls.get(TOKEN_KEY)?.refresh, exp: Date.now() + (d.expires_in || 3600) * 1000 });
+  ls.set(TOKEN_KEY, { access: d.access_token, refresh: d.refresh_token || ls.get(TOKEN_KEY)?.refresh, exp: Date.now() + (d.expires_in || 3600) * 1000,
+    scopes: scopes || ls.get(TOKEN_KEY)?.scopes || null });
 }
 
 /** ¿Esta ventana es el popup que vuelve del login de Microsoft? */
 export const esRetornoLogin = () => !!window.opener && /[?&](code|error)=/.test(location.search);
 
 /** Inicia sesión en una ventana emergente (igual que la app TP). */
-export async function login() {
+export async function login(extra = []) {
   const cfg = getCfg();
+  const scopes = [...SCOPES, ...extra.map((s) => `https://graph.microsoft.com/${s}`)].join(' ');
   const verifier = b64url(crypto.getRandomValues(new Uint8Array(32)));
   const challenge = b64url(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)));
   const state = b64url(crypto.getRandomValues(new Uint8Array(16)));
   const redir = appUrl();
   const u = new URL(`https://login.microsoftonline.com/${cfg.tid}/oauth2/v2.0/authorize`);
   Object.entries({
-    client_id: cfg.cid, response_type: 'code', redirect_uri: redir, scope: `${SCOPES.join(' ')} offline_access`,
+    client_id: cfg.cid, response_type: 'code', redirect_uri: redir, scope: `${scopes} offline_access`,
     code_challenge: challenge, code_challenge_method: 'S256', state, response_mode: 'query', prompt: 'select_account',
   }).forEach(([k, v]) => u.searchParams.set(k, v));
   sessionStorage.setItem(PKCE_KEY, JSON.stringify({ verifier, state }));
   const W = 500, H = 640;
   const popup = window.open(u.toString(), 'msAuth', `width=${W},height=${H},left=${(screen.width - W) / 2},top=${(screen.height - H) / 2}`);
+  if (!popup && extra.length) throw new Error('El navegador bloqueó la ventana de Microsoft. Permita ventanas emergentes para este sitio e intente de nuevo.');
   if (!popup) {
     // Sin ventanas emergentes (p. ej. algunos celulares): flujo por redirección
     ls.set(`${PKCE_KEY}_redir`, { verifier, state });
@@ -79,7 +82,7 @@ export async function login() {
   if (url.searchParams.get('error')) throw new Error(mensajeError(url.searchParams.get('error_description') || url.searchParams.get('error')));
   if (url.searchParams.get('state') !== state) throw new Error('Respuesta de inicio de sesión inválida (state)');
   sessionStorage.removeItem(PKCE_KEY);
-  try { await canjear({ grant_type: 'authorization_code', code: url.searchParams.get('code'), redirect_uri: redir, code_verifier: verifier }); } catch (e) { throw new Error(mensajeError(e.message)); }
+  try { await canjear({ grant_type: 'authorization_code', code: url.searchParams.get('code'), redirect_uri: redir, code_verifier: verifier }, scopes); } catch (e) { throw new Error(mensajeError(e.message)); }
 }
 
 /** Completa el flujo por redirección (cuando no hubo popup). Devuelve true si procesó un código. */
@@ -108,7 +111,7 @@ async function token() {
   if (!t) throw Object.assign(new Error('Sesión no iniciada'), { status: 401 });
   if (t.exp - Date.now() > 5 * 60e3) return t.access;
   if (!t.refresh) throw Object.assign(new Error('Sesión expirada'), { status: 401 });
-  try { await canjear({ grant_type: 'refresh_token', refresh_token: t.refresh }); } catch { ls.del(TOKEN_KEY); throw Object.assign(new Error('Sesión expirada, vuelva a ingresar'), { status: 401 }); }
+  try { await canjear({ grant_type: 'refresh_token', refresh_token: t.refresh }, t.scopes || null); } catch { ls.del(TOKEN_KEY); throw Object.assign(new Error('Sesión expirada, vuelva a ingresar'), { status: 401 }); }
   return ls.get(TOKEN_KEY).access;
 }
 
@@ -228,6 +231,56 @@ export async function dejarDeCompartir(ruta, email) {
     .some((e) => String(e || '').toLowerCase() === mail));
   for (const p of suyos) await g(`drives/${await drive()}/items/${id}/permissions/${p.id}`, { method: 'DELETE', raw: true });
   return suyos.length;
+}
+
+/* ---------------- archivos binarios, enlaces y correo ---------------- */
+
+/** Sube un archivo (Blob) a la carpeta de la app. Usa sesión de carga para archivos grandes. */
+export async function subirArchivo(ruta, blob, tipo) {
+  if (blob.size < 4 * 1024 * 1024) {
+    const r = await g(`${await rutaItem(ruta)}:/content?@microsoft.graph.conflictBehavior=replace`, { method: 'PUT', headers: { 'Content-Type': tipo || blob.type || 'application/octet-stream' }, body: blob, raw: true });
+    if (!r.ok) throw new Error(`No se pudo subir ${ruta} (${r.status})`);
+    return r.json();
+  }
+  const ses = await g(`${await rutaItem(ruta)}:/createUploadSession`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ item: { '@microsoft.graph.conflictBehavior': 'replace' } }) });
+  const PARTE = 320 * 1024 * 10; // múltiplo de 320 KiB
+  let res = null;
+  for (let ini = 0; ini < blob.size; ini += PARTE) {
+    const fin = Math.min(blob.size, ini + PARTE);
+    const r = await fetch(ses.uploadUrl, { method: 'PUT', headers: { 'Content-Range': `bytes ${ini}-${fin - 1}/${blob.size}` }, body: blob.slice(ini, fin) });
+    if (!r.ok && r.status !== 202) throw new Error(`Falló la carga de ${ruta} (${r.status})`);
+    if (r.status === 200 || r.status === 201) res = await r.json();
+  }
+  return res;
+}
+
+/** Enlace para ver el archivo (para personas de la organización). Si la política no lo permite, usa la URL del archivo. */
+export async function crearEnlace(ruta) {
+  const item = await g(`${await rutaItem(ruta)}?$select=id,webUrl`);
+  try {
+    const l = await g(`drives/${await drive()}/items/${item.id}/createLink`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'view', scope: 'organization' }) });
+    return l.link?.webUrl || item.webUrl;
+  } catch { return item.webUrl; }
+}
+
+const scopesDelToken = () => {
+  try { return JSON.parse(atob(ls.get(TOKEN_KEY).access.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).scp || ''; } catch { return ''; }
+};
+/** Pide (una sola vez) el permiso para enviar correos desde la cuenta del usuario. */
+export async function asegurarPermisoCorreo() {
+  if (/\bMail\.Send\b/i.test(scopesDelToken())) return;
+  await login(['Mail.Send']);
+  if (!/\bMail\.Send\b/i.test(scopesDelToken())) throw new Error('Microsoft no otorgó el permiso para enviar correos (Mail.Send).');
+}
+
+/** Envía un correo desde la cuenta del usuario conectado (Outlook / Microsoft 365). */
+export async function enviarCorreo({ para, cc = [], asunto, html }) {
+  const dir = (l) => l.map((address) => ({ emailAddress: { address } }));
+  const r = await g('me/sendMail', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, raw: true,
+    body: JSON.stringify({ message: { subject: asunto, body: { contentType: 'HTML', content: html }, toRecipients: dir(para), ccRecipients: dir(cc) }, saveToSentItems: true }),
+  });
+  if (!r.ok) { let m = `${r.status}`; try { m = (await r.json()).error?.message || m; } catch { /* */ } throw new Error(`No se pudo enviar el correo: ${m}`); }
 }
 
 export async function eliminarArchivo(nombre) {
