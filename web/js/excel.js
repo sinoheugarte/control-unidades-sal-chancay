@@ -249,26 +249,126 @@ export function importarTickets(D, wb) {
   return res;
 }
 
-export function importarLista(D, T, wb) {
-  const found = findSheet(wb, [['TRACTO', 'PLACA'], ['RUC', 'TRANSPORTISTA']]);
-  if (!found) throw new Error('No se encontró una hoja con columnas "TRACTO" y "RUC".');
-  const res = { insertados: 0, actualizados: 0, sin_transportista: 0 };
-  for (const r of found.rows) {
-    const tracto = C.normPlaca(r.get('TRACTO', 'PLACA'));
-    if (!tracto) continue;
-    const ruc = str(r.get('RUC'));
-    const tid = ruc ? T.find((t) => t.ruc === String(ruc))?.id ?? null : resolverTransportista(T, D, str(r.get('TRANSPORTISTA')), null);
-    if (!tid) res.sin_transportista++;
+/* ---------------- LISTA de transportistas, conductores y unidades ----------------
+   Acepta la hoja LISTA del libro de control y las listas que envían los transportistas, con
+   distintos nombres de columna. Se leen TODAS las hojas del archivo que tengan placa + datos
+   del conductor. Varios archivos se integran a la lista existente sin duplicar. */
+const AL = {
+  tracto: ['TRACTO', 'PLACA TRACTO', 'PLACA DEL TRACTO', 'PLACA TRACTO CAMION', 'PLACA', 'PLACA VEHICULO', 'VEHICULO', 'UNIDAD', 'PLACA UNIDAD', 'CAMION', 'PLACA CAMION'],
+  plataforma: ['PLATAFORMA', 'PLACA PLATAFORMA', 'CARRETA', 'PLACA CARRETA', 'SEMIREMOLQUE', 'SEMI REMOLQUE', 'PLACA SEMIREMOLQUE', 'REMOLQUE', 'PLACA REMOLQUE', 'TOLVA', 'PLACA TOLVA', 'ACOPLADO'],
+  ruc: ['RUC', 'RUC TRANSPORTISTA', 'RUC EMPRESA', 'N RUC', 'NRO RUC'],
+  empresa: ['TRANSPORTISTA', 'EMPRESA', 'RAZON SOCIAL', 'EMPRESA DE TRANSPORTE', 'EMPRESA TRANSPORTE', 'EMPRESA TRANSPORTISTA', 'NOMBRE COMERCIAL', 'TRANSPORTE'],
+  paterno: ['AP. PATERNO', 'APELLIDO PATERNO', 'AP PATERNO', 'PATERNO'],
+  materno: ['AP. MATERNO', 'APELLIDO MATERNO', 'AP MATERNO', 'MATERNO'],
+  nombre1: ['1ER NOMBRE', 'PRIMER NOMBRE', 'NOMBRES', 'NOMBRE'],
+  nombre2: ['2DO NOMBRE', 'SEGUNDO NOMBRE'],
+  apellidos: ['APELLIDOS'],
+  completo: ['APELLIDOS Y NOMBRES', 'NOMBRES Y APELLIDOS', 'CONDUCTOR', 'NOMBRE DEL CONDUCTOR', 'NOMBRE COMPLETO', 'NOMBRE CONDUCTOR', 'NOMBRE DEL CHOFER', 'APELLIDOS Y NOMBRES DEL CONDUCTOR'],
+  dni: ['DNI', 'N DNI', 'NRO DNI', 'DNI CONDUCTOR', 'DOCUMENTO', 'NRO DOCUMENTO', 'DOC IDENTIDAD', 'DOCUMENTO DE IDENTIDAD'],
+  brevete: ['BREVETE', 'LICENCIA', 'N LICENCIA', 'NRO LICENCIA', 'LICENCIA DE CONDUCIR', 'N BREVETE'],
+};
+const palabras = (v) => String(v ?? '').toUpperCase().replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
+/** "PEREZ GOMEZ, JUAN CARLOS" | "PEREZ GOMEZ JUAN CARLOS" -> partes del nombre. */
+function partirNombre(v, nombresPrimero = false) {
+  const t = String(v ?? '').toUpperCase().replace(/\s+/g, ' ').trim();
+  if (!t) return {};
+  if (t.includes(',')) {
+    const [ap, no] = t.split(',').map((x) => x.trim());
+    const a = palabras(ap), n = palabras(no);
+    return { ap_paterno: a[0] || null, ap_materno: a.slice(1).join(' ') || null, nombre1: n[0] || null, nombre2: n.slice(1).join(' ') || null };
+  }
+  const w = palabras(t);
+  if (nombresPrimero) { // "JUAN CARLOS PEREZ GOMEZ": últimas 2 palabras = apellidos
+    const ap = w.slice(-2), no = w.slice(0, -2);
+    return { ap_paterno: ap[0] || null, ap_materno: ap[1] || null, nombre1: no[0] || null, nombre2: no.slice(1).join(' ') || null };
+  }
+  return { ap_paterno: w[0] || null, ap_materno: w[1] || null, nombre1: w[2] || null, nombre2: w.slice(3).join(' ') || null };
+}
+function normDni(v) {
+  if (v === null || v === undefined || v === '') return null;
+  const d = String(typeof v === 'number' ? Math.round(v) : v).replace(/\D/g, '');
+  if (!d) return null;
+  return d.length < 8 ? d.padStart(8, '0') : d;
+}
+
+/** Lee las filas de LISTA de un libro: [{ ruc, empresa, ap_paterno, ..., tracto, plataforma }]. */
+export function leerLista(wb) {
+  const filas = [], hojas = [], avisos = [];
+  for (const ws of wb.worksheets) {
+    if (['DETALLE TRANSPORTE', 'REPORTE HUACHO', 'REPORTE CSPCP', 'TRANSPORTISTAS', 'BASE'].map(normH).includes(normH(ws.name))) continue;
+    const rows = rowsByHeader(ws, [AL.tracto, [...AL.dni, ...AL.brevete, ...AL.paterno, ...AL.completo, ...AL.apellidos]], 25);
+    if (!rows) continue;
+    let n = 0;
+    for (const r of rows) {
+      const tracto = C.normPlaca(r.get(...AL.tracto));
+      const dni = normDni(r.get(...AL.dni));
+      if (!tracto && !dni) continue;
+      if (tracto && !/[A-Z0-9]{5,7}/.test(tracto)) { avisos.push(`${ws.name}, fila ${r._row}: placa "${tracto}" no válida`); continue; }
+      let nom = { ap_paterno: str(r.get(...AL.paterno)), ap_materno: str(r.get(...AL.materno)), nombre1: str(r.get(...AL.nombre1)), nombre2: str(r.get(...AL.nombre2)) };
+      if (!nom.ap_paterno) {
+        const ap = str(r.get(...AL.apellidos));
+        if (ap) { const a = palabras(ap); nom.ap_paterno = a[0]; nom.ap_materno = a.slice(1).join(' ') || null; const nn = palabras(nom.nombre1); nom.nombre1 = nn[0] || null; nom.nombre2 = nn.slice(1).join(' ') || nom.nombre2; }
+        else if (str(r.get(...AL.completo))) nom = partirNombre(r.get(...AL.completo));
+      }
+      const up = (x) => (x ? String(x).toUpperCase().replace(/\s+/g, ' ').trim() : null);
+      const brevete = str(r.get(...AL.brevete));
+      const ruc = normDni(r.get(...AL.ruc));
+      filas.push({
+        hoja: ws.name, fila: r._row, ruc: ruc && ruc.length === 11 ? ruc : null, empresa: up(str(r.get(...AL.empresa))),
+        ap_paterno: up(nom.ap_paterno), ap_materno: up(nom.ap_materno), nombre1: up(nom.nombre1), nombre2: up(nom.nombre2),
+        dni, brevete: brevete ? String(brevete).toUpperCase().replace(/\s+/g, '') : null, tracto: tracto || null,
+        plataforma: C.normPlaca(r.get(...AL.plataforma)) || null,
+      });
+      n++;
+    }
+    if (n) hojas.push(`${ws.name} (${n})`);
+  }
+  return { filas, hojas, avisos };
+}
+
+/** Deriva un nombre comercial corto a partir de la razón social (TOLVEROS S.R.L. -> TOLVEROS). */
+export function nombreComercialDe(rs, usados = []) {
+  let b = String(rs || 'TRANSPORTISTA').toUpperCase()
+    .replace(/\b(S\.?\s?A\.?\s?C\.?|S\.?\s?R\.?\s?L\.?|E\.?\s?I\.?\s?R\.?\s?L\.?|S\.?\s?A\.?\s?A\.?|S\.?\s?A\.?|LTDA\.?|SOCIEDAD ANONIMA CERRADA)\s*$/g, '')
+    .replace(/^(EMPRESA DE TRANSPORTES?|TRANSPORTES|GRUPO)\s+/, '').replace(/[^A-Z0-9 ]/g, ' ').trim().split(/\s+/)
+    .filter((w) => !['DE', 'DEL', 'LA', 'LAS', 'LOS', 'EL', 'Y', 'E'].includes(w)).slice(0, 2).join('_') || 'TRANSPORTISTA';
+  let n = b, k = 2;
+  while (usados.includes(n)) n = `${b}_${k++}`;
+  return n;
+}
+
+/**
+ * Integra filas leídas a D.unidades sin duplicar. tidDe(fila) devuelve el id del transportista.
+ * Coincidencia: mismo DNI (el conductor cambió de unidad) o, sin DNI, misma placa de tracto.
+ * Sólo se completan/reemplazan los campos que vienen con dato.
+ */
+export function integrarLista(D, filas, tidDe) {
+  const res = { leidas: filas.length, insertados: 0, actualizados: 0, sin_cambios: 0, sin_transportista: [], repetidas_en_archivo: 0 };
+  const vistos = new Set();
+  for (const f of filas) {
+    const clave = f.dni ? `D${f.dni}` : `T${f.tracto}`;
+    if (vistos.has(clave)) res.repetidas_en_archivo++;
+    vistos.add(clave);
+    const tid = tidDe(f);
+    if (!tid) res.sin_transportista.push(`${f.hoja} fila ${f.fila}: ${f.tracto || ''} ${f.dni || ''} (${f.empresa || f.ruc || 'sin empresa'})`);
     asegurarParticipacion(D, tid);
-    const o = {
-      transportista_id: tid, ap_paterno: str(r.get('AP. PATERNO', 'APELLIDO PATERNO')), ap_materno: str(r.get('AP. MATERNO', 'APELLIDO MATERNO')),
-      nombre1: str(r.get('1ER NOMBRE', 'NOMBRES', 'NOMBRE')), nombre2: str(r.get('2DO NOMBRE')), dni: str(r.get('DNI')),
-      brevete: str(r.get('BREVETE', 'LICENCIA')), tracto, plataforma: C.normPlaca(r.get('PLATAFORMA', 'CARRETA')) || null,
-    };
-    const e = D.unidades.find((u) => u.tracto === tracto);
-    if (e) { Object.assign(e, o); res.actualizados++; } else { D.unidades.push({ id: nuevoId(D), ...o }); res.insertados++; }
+    const datos = { transportista_id: tid || null, ap_paterno: f.ap_paterno, ap_materno: f.ap_materno, nombre1: f.nombre1, nombre2: f.nombre2,
+      dni: f.dni, brevete: f.brevete, tracto: f.tracto, plataforma: f.plataforma };
+    const e = (f.dni && D.unidades.find((u) => u.dni === f.dni)) || (!f.dni && f.tracto && D.unidades.find((u) => u.tracto === f.tracto && !u.dni))
+      || (f.tracto && !f.dni && D.unidades.find((u) => u.tracto === f.tracto));
+    if (!e) { D.unidades.push({ id: nuevoId(D), ...datos }); res.insertados++; continue; }
+    let cambio = false;
+    for (const [k, v] of Object.entries(datos)) if (v !== null && v !== undefined && v !== '' && e[k] !== v) { e[k] = v; cambio = true; }
+    if (cambio) res.actualizados++; else res.sin_cambios++;
   }
   return res;
+}
+
+/** Compatibilidad: importar una lista desde un solo libro (transportistas ya existentes). */
+export function importarLista(D, T, wb) {
+  const { filas } = leerLista(wb);
+  if (!filas.length) throw new Error('No se encontraron columnas de placa (TRACTO/PLACA) y del conductor (DNI, BREVETE o nombres).');
+  return integrarLista(D, filas, (f) => (f.ruc && T.find((t) => t.ruc === f.ruc)?.id) || resolverTransportista(T, D, f.empresa, f.tracto));
 }
 
 function colLetra(n) { let s = ''; while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; }

@@ -3,6 +3,7 @@ import {
   tabla, sinOperacion, puedeEscribir, esAdmin, chart, colores, descargar,
 } from './core.js?v=__V__';
 import { NOMBRES_VUELTA } from './calc.js?v=__V__';
+import { formularioLista, enviarLista } from './views-admin.js?v=__V__';
 
 /* =================== REPORTES POR TURNO =================== */
 let tabRep = 'despacho';
@@ -263,7 +264,7 @@ export async function vUnidades(view, ctx) {
   view.innerHTML = `<div class="card"><div class="card-h">
       <div class="btns"><input id="q" type="search" placeholder="Buscar placa, DNI o conductor…" value="${esc(qU)}" style="width:260px" aria-label="Buscar">
       <span class="muted">${us.length} unidades en lista · ${tab.totales.unidades_activas} activas</span></div>
-      ${edit ? '<button class="btn primary" id="b-new">+ Nueva unidad</button>' : ''}</div><div id="tbl"></div></div>`;
+      ${edit ? '<div class="btns"><button class="btn" id="b-imp-lista">Importar lista (uno o varios archivos)</button><button class="btn primary" id="b-new">+ Nueva unidad</button></div>' : ''}</div><div id="tbl"></div></div>`;
   const pintar = () => {
     const q = qU.toUpperCase();
     const fil = us.filter((u) => !q || [u.tracto, u.plataforma, u.dni, u.ap_paterno, u.ap_materno, u.nombre1].some((x) => String(x || '').toUpperCase().includes(q)));
@@ -278,6 +279,17 @@ export async function vUnidades(view, ctx) {
   pintar();
   $('#q').addEventListener('input', (e) => { qU = e.target.value; pintar(); });
   $('#b-new')?.addEventListener('click', () => unidadModal(null, transp, ctx.rerender));
+  $('#b-imp-lista')?.addEventListener('click', async () => {
+    const dlg = document.createElement('dialog');
+    dlg.style.width = 'min(900px, calc(100vw - 32px))';
+    dlg.innerHTML = `<div class="dh"><h2>Importar LISTA de transportistas, conductores y unidades</h2><button type="button" class="btn sm" data-close aria-label="Cerrar">✕</button></div>
+      <div class="db">${await formularioLista()}</div><div class="df"><button type="button" class="btn" data-close>Cerrar</button></div>`;
+    document.body.appendChild(dlg);
+    dlg.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', () => { dlg.close(); dlg.remove(); }));
+    dlg.addEventListener('cancel', () => dlg.remove());
+    dlg.querySelector('[data-lista]').addEventListener('submit', (e) => enviarLista(e, ctx.rerender));
+    dlg.showModal();
+  });
   $('#tbl').addEventListener('click', (e) => {
     const id = e.target.closest('[data-u]')?.dataset.u;
     if (id) unidadModal(us.find((u) => u.id === Number(id)), transp, ctx.rerender);

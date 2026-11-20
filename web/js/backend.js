@@ -492,6 +492,58 @@ ruta('POST', '/importar/libro', async (p, b, form) => {
   const op = await crearOperacion(operacion, D);
   return { ...res, operacion_id: op.id };
 });
+/**
+ * LISTA de transportistas, conductores y unidades: uno o varios archivos (en una o varias cargas).
+ * Se integran a la lista de la operación sin duplicar; las empresas nuevas (por RUC) se crean en el maestro.
+ */
+ruta('POST', '/operaciones/:id/importar/lista', async ({ id }, b, form) => {
+  ESCRIBE();
+  const archivos = (form?.getAll('archivo') || []).filter((f) => f && f.size);
+  if (!archivos.length) throw err(400, 'Adjunte uno o más archivos Excel (.xlsx/.xlsm/.xls) o CSV');
+  const porDefecto = N(form.get('transportista_id'));
+  const lecturas = [];
+  for (const f of archivos) {
+    try {
+      const r = X.leerLista(await X.cargarLibro(f));
+      r.filas.forEach((x) => { x.hoja = `${f.name} › ${x.hoja}`; });
+      lecturas.push({ nombre: f.name, ...r });
+    } catch (e) { lecturas.push({ nombre: f.name, filas: [], hojas: [], avisos: [`No se pudo leer: ${e.message}`] }); }
+  }
+  const filas = lecturas.flatMap((l) => l.filas);
+  if (!filas.length) throw err(400, 'Ningún archivo tiene columnas de placa (TRACTO/PLACA) y del conductor (DNI, BREVETE o nombres).');
+  // Empresas: por RUC; las que no existen se crean en el maestro de transportistas
+  const nuevos = [];
+  await mutar(INDICE, (I) => {
+    for (const f of filas) {
+      if (!f.ruc || I.transportistas.some((t) => t.ruc === f.ruc)) continue;
+      const rs = f.empresa && !/^\d+$/.test(f.empresa) ? f.empresa : `TRANSPORTISTA RUC ${f.ruc}`;
+      I.seq_t = Math.max(I.seq_t || 0, ...I.transportistas.map((t) => t.id)) + 1;
+      const t = { id: I.seq_t, ruc: f.ruc, razon_social: rs, nombre_comercial: X.nombreComercialDe(rs, I.transportistas.map((x) => x.nombre_comercial)), contacto: null, telefono: null, emails: null };
+      I.transportistas.push(t);
+      nuevos.push(`${t.razon_social} (RUC ${t.ruc}) como ${t.nombre_comercial}`);
+    }
+    // completa la razón social si antes sólo se conocía el RUC
+    for (const f of filas) {
+      const t = f.ruc && I.transportistas.find((x) => x.ruc === f.ruc);
+      if (t && f.empresa && /^TRANSPORTISTA RUC /.test(t.razon_social) && !/^\d+$/.test(f.empresa)) t.razon_social = f.empresa;
+    }
+  });
+  const T = (await leer(INDICE)).transportistas;
+  const res = await mutarOp(id, (D) => {
+    const tidDe = (f) => (f.ruc && T.find((t) => t.ruc === f.ruc)?.id) || (f.empresa && X.resolverTransportista(T, D, f.empresa, null)) || porDefecto
+      || X.resolverTransportista(T, D, null, f.tracto) || null;
+    const r = X.integrarLista(D, filas, tidDe);
+    const nombres = archivos.map((f) => f.name).join(', ');
+    historial(D, 'importar_lista', nombres);
+    D.importaciones = [{ tipo: 'lista', archivo: nombres, en: ahora(), por: yo.nombre || yo.email,
+      resumen: { insertados: r.insertados, actualizados: r.actualizados, sin_cambios: r.sin_cambios, sin_transportista: r.sin_transportista.length, archivos: archivos.length } },
+    ...(D.importaciones || [])].slice(0, 50);
+    return r;
+  });
+  return { ...res, archivos: lecturas.map((l) => ({ nombre: l.nombre, hojas: l.hojas, filas: l.filas.length })), nuevos_transportistas: nuevos,
+    avisos: lecturas.flatMap((l) => l.avisos.map((a) => `${l.nombre}: ${a}`)) };
+});
+
 ruta('POST', '/operaciones/:id/importar/:tipo', async ({ id, tipo }, b, form) => {
   ESCRIBE();
   const wb = await X.cargarLibro(archivo(form));

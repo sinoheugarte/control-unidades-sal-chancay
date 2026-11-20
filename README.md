@@ -38,7 +38,12 @@ Funciona igual que **Pacifico TP Reporte**:
 - **Reporte de servicio por transportista** (como las pestañas TOLVEROS, RIAR, …), con cabecera, logo, totales y conformidad:
   - Vista previa en la app.
   - Exportación a **Excel y PDF**, por transportista o de todos juntos (un Excel con una hoja por transportista, o un solo PDF).
-- **Importación del libro completo** `.xlsm` (para crear una operación) y de la lista de unidades.
+- **Importación de la LISTA** (transportistas, conductores y unidades):
+  - Uno o varios archivos a la vez, o en distintos momentos. Se integran a la lista de la operación sin duplicar: el conductor se reconoce por su DNI y, si no tiene DNI, por la placa del tracto.
+  - Reconoce distintos nombres de columna, como APELLIDOS Y NOMBRES, LICENCIA o CARRETA.
+  - Lee todas las hojas con datos de conductores.
+  - Crea en el maestro las empresas nuevas por RUC.
+- **Importación del libro completo** `.xlsm`, para crear una operación.
 - **Roles** por correo: *admin*, *operador* y *lector*.
 - **Resumen para Exportaciones**: todas las operaciones por año, como el libro *RESUMEN DE OPERACIONES ACOPIO DE SAL*:
   - Tabla RESUMEN igual a la del libro (N°, NAVE, FECHA INICIO ACOPIO, FECHA FINAL ACOPIO, TN SAL ACOPIADA, TOTAL), descargable sola en Excel y PDF.

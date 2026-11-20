@@ -127,10 +127,11 @@ export async function vImportar(view, ctx) {
           : `${x.resumen.insertados} nuevas · ${x.resumen.actualizados} actualizadas`) },
     ], cr.importaciones)}</div>` : ''}`;
   view.insertAdjacentHTML('beforeend', `<div class="grid g2">
-      ${op ? `<div class="card"><h3>Lista de unidades (Lista SIO)</h3><p class="muted">Hoja con <em>RUC</em>, <em>AP. PATERNO</em>, <em>AP. MATERNO</em>, <em>1ER NOMBRE</em>, <em>DNI</em>, <em>BREVETE</em>, <em>TRACTO</em> y <em>PLATAFORMA</em> (hoja "LISTA").</p>${form('lista')}</div>` : ''}
+      ${op ? `<div class="card"><h3>LISTA: transportistas, conductores y unidades</h3>${await formularioLista()}</div>` : ''}
       <div class="card"><h3>Libro completo (nueva operación)</h3><p class="muted">Suba el archivo <em>REPORTE DE CONTROL UNIDADES SAL … .xlsm</em> para crear una operación nueva con todos sus datos.</p>${form('libro')}</div>
     </div>`);
   if (ultimoResultado) { const o = view.querySelector(`[data-res="${ultimoResultado.tipo}"]`); if (o) o.innerHTML = ultimoResultado.html; ultimoResultado = null; }
+  view.querySelector('[data-lista]')?.addEventListener('submit', (e) => enviarLista(e, () => ctx.rerender()));
   view.querySelectorAll('[data-imp]').forEach((f) => f.addEventListener('submit', async (e) => {
     e.preventDefault();
     const tipo = f.dataset.imp;
@@ -160,6 +161,43 @@ function resumenTexto(tipo, r) {
 function resumenImport(tipo, r) {
   const lista = (arr) => (arr?.length ? `<details style="margin-top:6px"><summary>${arr.length} observaciones</summary><ul>${arr.slice(0, 200).map((x) => `<li>${esc(x)}</li>`).join('')}</ul></details>` : '');
   return `<div class="alert ok">Operación creada: ${num(r.viajes, 0)} viajes y ${num(r.unidades || 0, 0)} unidades importadas. Ya está seleccionada.</div>${lista(r.avisos)}`;
+}
+
+/* =================== LISTA (uno o varios archivos) =================== */
+let resultadoLista = null;
+/** Formulario de importación de la LISTA (se usa en Importar datos y en Lista de unidades). */
+export async function formularioLista() {
+  const transp = await api('/transportistas');
+  const previo = resultadoLista; resultadoLista = null;
+  return `<p class="muted" style="margin:0">Suba la hoja LISTA del libro de control o las listas que envían los transportistas. Puede elegir <strong>varios archivos a la vez</strong>
+      y volver a cargar más en otro momento: todo se integra a la lista de la operación sin duplicar (un conductor se reconoce por su DNI; sin DNI, por la placa del tracto).
+      Reconoce columnas como <em>RUC, EMPRESA/TRANSPORTISTA, AP. PATERNO, AP. MATERNO, NOMBRES</em> o <em>APELLIDOS Y NOMBRES</em>, <em>DNI, BREVETE/LICENCIA, TRACTO/PLACA, PLATAFORMA/CARRETA</em>.
+      Las empresas nuevas (por RUC) se agregan al maestro de transportistas.</p>
+    <form data-lista class="form" style="margin-top:12px">
+      <label class="full">Archivos (uno o varios)<input type="file" name="archivo" multiple accept=".xlsx,.xlsm,.xls,.csv" required></label>
+      <label class="full">Si el archivo no indica la empresa, asignar a<select name="transportista_id"><option value="">— Identificar por RUC / nombre en el archivo —</option>
+        ${transp.map((t) => `<option value="${t.id}">${esc(t.razon_social)} (${esc(t.nombre_comercial)})</option>`).join('')}</select></label>
+      <div class="full"><button class="btn primary">Importar a la LISTA</button></div>
+    </form><div class="small" data-res-lista style="margin-top:10px">${previo || ''}</div>`;
+}
+export async function enviarLista(e, despues) {
+  e.preventDefault();
+  const f = e.target;
+  const out = f.parentElement.querySelector('[data-res-lista]');
+  const btn = f.querySelector('button'); btn.disabled = true;
+  out.innerHTML = '<span class="muted">Leyendo archivos…</span>';
+  try {
+    const r = await api(`/operaciones/${state.opId}/importar/lista`, { method: 'POST', form: new FormData(f) });
+    const obs = [...r.nuevos_transportistas.map((x) => `Empresa nueva agregada al maestro: ${x}`), ...r.sin_transportista.map((x) => `Sin empresa identificada: ${x}`), ...r.avisos];
+    resultadoLista = `<div class="alert ok">LISTA: ${r.insertados} registros nuevos, ${r.actualizados} actualizados, ${r.sin_cambios} sin cambios
+        (${r.leidas} filas leídas de ${r.archivos.length} archivo(s)${r.repetidas_en_archivo ? `; ${r.repetidas_en_archivo} repetidas entre archivos` : ''}).</div>
+      <ul class="muted small" style="margin:6px 0">${r.archivos.map((a) => `<li>${esc(a.nombre)}: ${a.filas} filas${a.hojas.length ? ` (hojas: ${esc(a.hojas.join(', '))})` : ' — no se encontraron datos de conductores/unidades'}</li>`).join('')}</ul>
+      ${obs.length ? `<details><summary>${obs.length} observaciones</summary><ul>${obs.slice(0, 300).map((x) => `<li>${esc(x)}</li>`).join('')}</ul></details>` : ''}`;
+    toast(`LISTA: ${r.insertados} nuevos, ${r.actualizados} actualizados`);
+    const html = resultadoLista;
+    if (despues) despues();
+    if (document.body.contains(out)) { out.innerHTML = html; f.reset(); }
+  } catch (err) { out.innerHTML = `<div class="alert bad">${esc(err.message)}</div>`; } finally { btn.disabled = false; }
 }
 
 /* =================== USUARIOS =================== */
