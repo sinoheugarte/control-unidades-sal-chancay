@@ -108,7 +108,9 @@ export async function vImportar(view, ctx) {
   const form = (id) => `<form class="btns" data-imp="${id}" style="margin-top:12px">
       <input type="file" name="archivo" accept=".xlsx,.xlsm,.xls,.csv" required style="max-width:340px" aria-label="Archivo">
       <button class="btn primary">Importar</button></form><div class="small" data-res="${id}" style="margin-top:10px"></div>`;
-  view.innerHTML = !op ? `<div class="alert">Seleccione o cree una operación primero. También puede crearla importando el libro completo (abajo).</div>` : `
+  view.innerHTML = !op ? `<div class="card"><h2>Primero cree la operación</h2>
+      <p class="muted">Los reportes (REPORTE HUACHO, REPORTE CSPCP) y la LISTA se importan dentro de una operación (nave + orden). Créela y vuelva a esta pantalla.</p>
+      <a class="btn primary" href="#/operaciones">+ Nueva operación</a></div>` : `
     <div class="alert ok">Operación activa: <strong>${esc(op.nave)} · Orden ${esc(op.orden)}</strong></div>
     <div class="grid g2">
       <div class="card"><div class="card-h"><h2>REPORTE HUACHO</h2><span class="pill info">${num(cr.con_guia, 0)} guías</span></div>
@@ -142,7 +144,7 @@ export async function vImportar(view, ctx) {
     ], cr.importaciones)}</div>` : ''}`;
   view.insertAdjacentHTML('beforeend', `<div class="grid g2">
       ${op ? `<div class="card"><h3>LISTA: transportistas, conductores y unidades</h3>${await formularioLista()}</div>` : ''}
-      <div class="card"><h3>Libro completo (nueva operación)</h3><p class="muted">Suba el archivo <em>REPORTE DE CONTROL UNIDADES SAL … .xlsm</em> para crear una operación nueva con todos sus datos.</p>${form('libro')}</div>
+      <div class="card"><h3>Migrar libro de control antiguo (opcional)</h3><p class="muted">Sólo para pasar a la app una operación que se llevó en el Excel <em>REPORTE DE CONTROL UNIDADES SAL … .xlsm</em> (con su hoja DETALLE TRANSPORTE). <strong>No</strong> es para los reportes de Huacho o CSPCP.</p>${form('libro')}</div>
     </div>`);
   if (ultimoResultado) { const o = view.querySelector(`[data-res="${ultimoResultado.tipo}"]`); if (o) o.innerHTML = ultimoResultado.html; ultimoResultado = null; }
   view.querySelector('[data-lista]')?.addEventListener('submit', (e) => enviarLista(e, () => ctx.rerender()));

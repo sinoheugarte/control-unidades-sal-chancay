@@ -381,7 +381,14 @@ export function importarLibro(wb, T, usuario) {
   const sh = (n) => wb.worksheets.find((w) => normH(w.name) === normH(n));
   const cv = (ws, a) => (ws ? val(ws.getCell(a)) : null);
   const emb = sh('RESUMEN EMBARQUE'), det = sh('DETALLE TRANSPORTE'), pre = sh('PREACOPIO');
-  if (!det) throw new Error('El libro no contiene la hoja "DETALLE TRANSPORTE".');
+  if (!det) {
+    const pista = findSheet(wb, [['Referencia'], ['Placa']]) ? 'Este archivo parece un REPORTE HUACHO (despachos de planta).'
+      : findSheet(wb, [['PLACA'], ['TICKET']]) ? 'Este archivo parece un REPORTE CSPCP (tickets del puerto).'
+        : findSheet(wb, [AL.tracto, [...AL.dni, ...AL.brevete]]) ? 'Este archivo parece una LISTA de conductores y unidades.' : null;
+    throw new Error(pista
+      ? `${pista} "Libro completo" es sólo para migrar un libro de control (.xlsm con la hoja DETALLE TRANSPORTE). Primero cree la operación en Operaciones → + Nueva operación y luego impórtelo en su tarjeta de Importar datos.`
+      : 'El libro no contiene la hoja "DETALLE TRANSPORTE". "Libro completo" es sólo para migrar un libro de control (.xlsm). Para una operación nueva use Operaciones → + Nueva operación.');
+  }
   const cab = wb.worksheets.find((w) => normH(cv(w, 'B4')) === normH('REPORTE DE SERVICIO TRANSPORTE') && cv(w, 'D5') && !w.getCell('D5').formula);
   const res = { avisos: [] };
 
