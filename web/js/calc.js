@@ -251,16 +251,38 @@ function tablaEmbarque(op, reportes, etapas) {
   };
 }
 
+export const N_VUELTAS = 15;
+export const NOMBRES_VUELTA = ['1 ERA', '2 DA', '3 ERA', '4 TA', '5 TA', '6 TA', '7 MA', '8 VA', '9 NA', '10 NA', '11 NA', '12 NA', '13 NA', '14 NA', '15 NA'].map((x) => `${x} VUELTA`);
+
+/**
+ * Planificación por vueltas (hoja TRANSPORTISTAS, columnas P:AE):
+ *  1ª vuelta = unidades solicitadas × TN prom. por unidad; vueltas 2-10 = 1ª vuelta × n;
+ *  vueltas 11-15 (y cualquier otra) se pueden escribir a mano. TOTAL TN = MAX de las vueltas.
+ */
+function vueltasPlan(p) {
+  const base = r3((p.unidades_solicitadas || 0) * (p.tn_prom_unidad || 0));
+  const man = p.vueltas_manual || {};
+  const vueltas = Array.from({ length: N_VUELTAS }, (_, i) => {
+    const m = man[i + 1];
+    if (m !== undefined && m !== null && m !== '') return { tn: Number(m), manual: true };
+    return i < 10 ? { tn: r3(base * (i + 1)), manual: false } : { tn: null, manual: false };
+  });
+  const total = Math.max(0, ...vueltas.map((v) => v.tn || 0), p.tn_asignadas || 0);
+  return { vueltas, total: r3(total) };
+}
+
 /** Resumen por transportista (hoja TRANSPORTISTAS). */
 function resumenTransportistas(vs, participantes, unidades) {
   return participantes.map((p) => {
     const mios = vs.filter((v) => v.transportista_id === p.transportista_id);
-    const tnAprox = p.tn_asignadas ?? (p.unidades_solicitadas || 0) * (p.tn_prom_unidad || 0);
+    const plan = vueltasPlan(p);
+    const tnAprox = plan.total;
     const vueltasMax = mios.reduce((m, v) => Math.max(m, v.vuelta), 0);
     return {
       ...p,
       unidades_en_lista: unidades.filter((u) => u.transportista_id === p.transportista_id).length,
       tn_aprox: r3(tnAprox),
+      vueltas: plan.vueltas,
       viajes_aprox: p.tn_prom_unidad ? Math.ceil(tnAprox / p.tn_prom_unidad) : 0,
       unidades_activas: new Set(mios.map((v) => v.placa)).size,
       viajes_realizados: mios.length,
@@ -365,5 +387,5 @@ export {
   JORNADAS, RANGOS, STATUS,
   normPlaca, toMs, fmtDT, normDT, normDate, jornadaDe, turnoDe, rangoDe, r3,
   enriquecerViajes, totales, tablaReportes, tablaEmbarque,
-  resumenTransportistas, resumenJornadas, resumenUnidades, resumenTiempos, preacopio,
+  resumenTransportistas, vueltasPlan, resumenJornadas, resumenUnidades, resumenTiempos, preacopio,
 };

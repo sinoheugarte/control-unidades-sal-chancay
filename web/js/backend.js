@@ -92,7 +92,7 @@ async function cargar(id) {
 const participantes = (D, I) => D.op_transportistas.map((p) => {
   const t = I.transportistas.find((x) => x.id === p.transportista_id) || {};
   return { ...p, operacion_id: D.operacion.id, ruc: t.ruc, razon_social: t.razon_social, nombre_comercial: t.nombre_comercial, contacto: t.contacto, telefono: t.telefono, emails: t.emails };
-}).sort((a, b) => String(a.nombre_comercial).localeCompare(String(b.nombre_comercial)));
+}); // mismo orden que la hoja TRANSPORTISTAS del Excel (orden de registro)
 const unidadesDe = (D, I) => D.unidades.map((u) => ({ ...u, transportista_nombre: nombreT(I.transportistas, u.transportista_id) }))
   .sort((a, b) => String(a.transportista_nombre).localeCompare(String(b.transportista_nombre)) || String(a.ap_paterno).localeCompare(String(b.ap_paterno)));
 
@@ -296,8 +296,10 @@ ruta('PUT', '/operaciones/:id/transportistas/:tid', async ({ id, tid }, b) => {
   ESCRIBE();
   await mutarOp(id, (D) => {
     X.asegurarParticipacion(D, Number(tid));
+    const vueltas_manual = {};
+    for (let i = 1; i <= C.N_VUELTAS; i++) { const v = N(b[`v${i}`]); if (v !== null) vueltas_manual[i] = v; }
     Object.assign(D.op_transportistas.find((p) => p.transportista_id === Number(tid)), {
-      unidades_solicitadas: N(b.unidades_solicitadas) || 0, tn_prom_unidad: N(b.tn_prom_unidad) || 33, tn_asignadas: N(b.tn_asignadas),
+      unidades_solicitadas: N(b.unidades_solicitadas) || 0, tn_prom_unidad: N(b.tn_prom_unidad) || 33, tn_asignadas: null, vueltas_manual,
       reporte_confirmado: b.reporte_confirmado ? 1 : 0, observacion: S(b.observacion),
     });
   });

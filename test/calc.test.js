@@ -60,3 +60,12 @@ test('planificación PREACOPIO', () => {
   assert.strictEqual(p.unidades_min, 24);
   assert.strictEqual(p.unidades_necesarias, 36);
 });
+
+test('planificación por vueltas (hoja TRANSPORTISTAS)', () => {
+  const p = C.vueltasPlan({ unidades_solicitadas: 40, tn_prom_unidad: 33, vueltas_manual: { 11: 13240 } });
+  assert.deepStrictEqual(p.vueltas.slice(0, 3).map((v) => v.tn), [1320, 2640, 3960]);
+  assert.strictEqual(p.vueltas[9].tn, 13200);
+  assert.deepStrictEqual(p.vueltas[10], { tn: 13240, manual: true });
+  assert.strictEqual(p.vueltas[11].tn, null);
+  assert.strictEqual(p.total, 13240);
+});

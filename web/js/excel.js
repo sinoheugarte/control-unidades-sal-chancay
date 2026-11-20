@@ -109,7 +109,7 @@ export function resolverTransportista(T, D, nombre, placa) {
 }
 export function asegurarParticipacion(D, tid) {
   if (!tid || D.op_transportistas.some((p) => p.transportista_id === tid)) return;
-  D.op_transportistas.push({ transportista_id: tid, unidades_solicitadas: 0, tn_prom_unidad: 33, tn_asignadas: null, reporte_confirmado: 0, observacion: null });
+  D.op_transportistas.push({ transportista_id: tid, unidades_solicitadas: 0, tn_prom_unidad: 33, tn_asignadas: null, vueltas_manual: {}, reporte_confirmado: 0, observacion: null });
 }
 const nuevoId = (D) => { D.seq = (D.seq || 0) + 1; return D.seq; };
 const ahora = () => C.fmtDT(Date.now() - new Date().getTimezoneOffset() * 60000, true);
@@ -330,8 +330,14 @@ export function importarLibro(wb, T, usuario) {
       const nc = str(cv(trs, `B${r}`)), rs = str(cv(trs, `C${r}`)), ruc = str(cv(trs, `D${r}`));
       if (!nc || !ruc || normH(rs) === 'TOTAL') continue;
       const t = upT(ruc, rs || nc, nc);
+      // Vueltas escritas a mano (P:AD sin fórmula) = valores manuales; las de fórmula se recalculan en la app.
+      const vueltas_manual = {};
+      for (let i = 0; i < 15; i++) {
+        const cell = trs.getCell(r, 16 + i);
+        if (typeof cell.value === 'number') vueltas_manual[i + 1] = cell.value;
+      }
       D.op_transportistas.push({ transportista_id: t.id, unidades_solicitadas: toNum(cv(trs, `E${r}`)) || 0, tn_prom_unidad: toNum(cv(trs, `G${r}`)) || 33,
-        tn_asignadas: toNum(cv(trs, `AE${r}`)), reporte_confirmado: cv(trs, `N${r}`) ? 1 : 0, observacion: null });
+        tn_asignadas: null, vueltas_manual, reporte_confirmado: cv(trs, `N${r}`) ? 1 : 0, observacion: null });
       const hoja = sh(nc) || wb.worksheets.find((w) => normH(cv(w, 'K10')) === normH(nc));
       if (hoja) {
         const emails = ['O2', 'O3', 'O4', 'O5', 'O6'].map((a) => str(cv(hoja, a))).filter((x) => x && x.includes('@'));

@@ -2,6 +2,7 @@ import {
   state, api, esc, num, fecha, fechaHora, horas, toInputDT, normPlaca, toast, $, modal, confirmar,
   tabla, sinOperacion, puedeEscribir, esAdmin, chart, colores, descargar,
 } from './core.js?v=__V__';
+import { NOMBRES_VUELTA } from './calc.js?v=__V__';
 
 /* =================== REPORTES POR TURNO =================== */
 let tabRep = 'despacho';
@@ -153,6 +154,17 @@ export async function vTransportistas(view, ctx) {
       empty: 'Ningún transportista asignado a la operación',
       foot: ['Total', `${res.length}`, num(tot('unidades_solicitadas'), 0), '', num(tot('viajes_aprox'), 0), num(tot('tn_aprox')),
         num(tot('viajes_realizados'), 0), num(tot('tn_final'))],
+    })}</div>
+  <div class="card"><div class="card-h"><div><h2>Detallado por vueltas (TN)</h2>
+      <p class="muted small" style="margin:4px 0 0">1ª vuelta = unidades solicitadas × TN prom. por unidad · vueltas 2-10 = 1ª vuelta × n · las vueltas en <strong>negrita</strong> fueron ingresadas a mano · TOTAL TN = mayor valor (es el "Total aprox. TN").</p></div></div>
+    ${tabla([
+      { t: 'Razón social', f: (x) => `<strong>${esc(x.razon_social)}</strong>` },
+      ...NOMBRES_VUELTA.map((nom, i) => ({ t: nom, n: 1, f: (x) => { const v = x.vueltas[i]; return v.tn === null ? '' : v.manual ? `<strong>${num(v.tn, 0)}</strong>` : num(v.tn, 0); } })),
+      { t: 'TOTAL TN', n: 1, f: (x) => `<strong>${num(x.tn_aprox, 0)}</strong>` },
+      ...(edit ? [{ t: '', f: (x) => `<button class="btn sm" data-part="${x.transportista_id}">Editar</button>` }] : []),
+    ], res, {
+      empty: 'Ningún transportista asignado a la operación',
+      foot: ['Total', ...NOMBRES_VUELTA.map((_, i) => num(res.reduce((s, x) => s + (x.vueltas[i].tn || 0), 0), 0)), num(tot('tn_aprox'), 0)],
     })}</div>` : sinOperacion()}
   <div class="card"><div class="card-h"><h2>Maestro de transportistas</h2>${edit ? '<button class="btn primary" id="b-new">+ Nuevo transportista</button>' : ''}</div>
     ${tabla([
@@ -205,12 +217,19 @@ function partModal(p, disponibles, done) {
   const nuevo = !p; p = p || { unidades_solicitadas: 0, tn_prom_unidad: 33 };
   const dlg = modal({
     title: nuevo ? 'Agregar transportista a la operación' : `Participación de ${p.nombre_comercial}`,
+    wide: true,
     body: `<div class="form">
       ${nuevo ? `<label class="full">Transportista *<select name="tid" required>${disponibles.map((t) => `<option value="${t.id}">${esc(t.nombre_comercial)} — ${esc(t.razon_social)}</option>`).join('')}</select></label>` : ''}
       <label>Unidades solicitadas<input name="unidades_solicitadas" type="number" min="0" value="${p.unidades_solicitadas ?? 0}"></label>
       <label>TN prom. por unidad<input name="tn_prom_unidad" type="number" step="0.1" min="1" value="${p.tn_prom_unidad ?? 33}"></label>
-      <label>TN asignadas (opcional)<input name="tn_asignadas" type="number" step="0.01" min="0" value="${p.tn_asignadas ?? ''}" placeholder="unid. × TN prom."></label>
       <label class="check"><input type="checkbox" name="reporte_confirmado" ${p.reporte_confirmado ? 'checked' : ''}> Reporte confirmado</label>
+      <div class="full"><h3 style="margin:8px 0 2px">Detallado por vueltas (TN)</h3>
+        <p class="muted small" style="margin:0">Deje en blanco para el cálculo automático (unidades × TN prom. × n, hasta la 10ª vuelta). Escriba un valor para fijarlo a mano, como en el Excel (p. ej. la 11ª vuelta).</p></div>
+      ${NOMBRES_VUELTA.map((nom, i) => {
+        const man = p.vueltas_manual?.[i + 1];
+        const auto = i < 10 ? Math.round((p.unidades_solicitadas || 0) * (p.tn_prom_unidad || 0) * (i + 1) * 100) / 100 : '';
+        return `<label>${nom}<input name="v${i + 1}" type="number" step="0.01" min="0" value="${man ?? ''}" placeholder="${auto === '' ? '—' : auto}" data-n="${i + 1}"></label>`;
+      }).join('')}
       <label class="full">Observación<input name="observacion" value="${esc(p.observacion || '')}"></label>
       ${!nuevo ? '<div class="full"><button type="button" class="btn danger sm" id="b-del">Quitar de la operación</button></div>' : ''}</div>`,
     onSubmit: async (d) => {
@@ -220,6 +239,13 @@ function partModal(p, disponibles, done) {
       done();
     },
   });
+  const f = dlg.querySelector('form');
+  const actualizar = () => {
+    const base = (Number(f.unidades_solicitadas.value) || 0) * (Number(f.tn_prom_unidad.value) || 0);
+    f.querySelectorAll('[data-n]').forEach((el) => { const n = Number(el.dataset.n); if (n <= 10) el.placeholder = String(Math.round(base * n * 100) / 100); });
+  };
+  f.unidades_solicitadas.addEventListener('input', actualizar);
+  f.tn_prom_unidad.addEventListener('input', actualizar);
   $('#b-del', dlg)?.addEventListener('click', async () => {
     await api(`/operaciones/${state.opId}/transportistas/${p.transportista_id}`, { method: 'DELETE' }); dlg.close(); dlg.remove(); done();
   });
