@@ -1,32 +1,61 @@
 import { state, api, esc, num, fecha, fechaHora, toInputDT, toast, $, modal, confirmar, tabla, puedeEscribir, esAdmin, sinOperacion, opActual } from './core.js?v=__V__';
 
-const refrescar = (id, render = true) => window.dispatchEvent(new CustomEvent('app:ops', { detail: { id, render } }));
+const refrescar = (id, render = true, luego) => window.dispatchEvent(new CustomEvent('app:ops', { detail: { id, render, luego } }));
 
-/* =================== OPERACIONES =================== */
-export async function vOperaciones(view) {
+/* =================== OPERACIONES (búsqueda) =================== */
+const filtroOps = { q: '', estado: '', anio: '' };
+const anioDe = (o) => String(o.fecha_inicio || o.primer_viaje || o.eta || o.actualizado_en || '').slice(0, 4);
+const sinTildes = (s) => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
+
+export async function vOperaciones(view, ctx) {
   const ops = await api('/operaciones');
   const edit = puedeEscribir();
+  const anios = [...new Set(ops.map(anioDe).filter(Boolean))].sort().reverse();
   view.innerHTML = `<div class="card"><div class="card-h"><div><h2>Operaciones (nave / orden)</h2>
-      <p class="muted small" style="margin:4px 0 0">Cada operación es un reporte independiente, como cada libro Excel. Se guarda en SharePoint con el nombre del reporte. Para una nave nueva use <strong>+ Nueva operación</strong> (o importe su libro Excel).</p></div>
+      <p class="muted small" style="margin:4px 0 0">Cada operación es un reporte independiente, como cada libro Excel, guardado en SharePoint con el nombre del reporte. Búsquela para abrirla o editarla; para una nave nueva use <strong>+ Nueva operación</strong>.</p></div>
       ${edit ? '<div class="btns"><a class="btn" href="#/importar">Importar libro Excel</a><button class="btn primary" id="b-new">+ Nueva operación</button></div>' : ''}</div>
-    ${tabla([
-      { t: 'Reporte', f: (o) => `<strong>${esc(o.nombre || `${o.nave} - ORDEN ${o.orden}`)}</strong>` },
-      { t: 'Nave', k: 'nave' }, { t: 'Orden', k: 'orden' }, { t: 'Cliente', k: 'cliente' },
-      { t: 'ETA', f: (o) => fechaHora(o.eta) }, { t: 'Inicio', f: (o) => fecha(o.fecha_inicio) }, { t: 'TN prog.', k: 'tn_programadas', n: 1, d: 0 },
-      { t: 'Viajes', k: 'n_viajes', n: 1, d: 0 }, { t: 'Estado', f: (o) => `<span class="pill ${o.estado === 'CERRADA' ? 'ok' : 'info'}">${esc(o.estado)}</span>` },
-      { t: '', f: (o) => `<div class="btns" style="flex-wrap:nowrap"><button class="btn sm" data-sel="${o.id}">${o.id === state.opId ? 'Activa ✓' : 'Seleccionar'}</button>
+    <div class="btns" style="margin-bottom:12px">
+      <input id="op-q" type="search" placeholder="Buscar nave, orden, cliente, DAM, referencia…" value="${esc(filtroOps.q)}" style="width:min(360px,100%)" aria-label="Buscar operación">
+      <select id="op-estado" aria-label="Estado"><option value="">Todos los estados</option><option>EN CURSO</option><option>CERRADA</option></select>
+      <select id="op-anio" aria-label="Año"><option value="">Todos los años</option>${anios.map((a) => `<option>${a}</option>`).join('')}</select>
+      <span class="muted small" id="op-n"></span>
+    </div>
+    <div id="op-tbl"></div></div>`;
+  $('#op-estado').value = filtroOps.estado; $('#op-anio').value = filtroOps.anio;
+  const pintar = () => {
+    const q = sinTildes(filtroOps.q).trim();
+    const fil = ops.filter((o) => (!q || q.split(/\s+/).every((t) => sinTildes([o.nombre, o.nave, o.orden, o.cliente, o.producto, o.dam, o.manifiesto, o.referencia].join(' ')).includes(t)))
+      && (!filtroOps.estado || o.estado === filtroOps.estado) && (!filtroOps.anio || anioDe(o) === filtroOps.anio));
+    $('#op-n').textContent = `${fil.length} de ${ops.length} operaciones`;
+    $('#op-tbl').innerHTML = tabla([
+      { t: 'Reporte', f: (o) => `<a href="#" data-abrir="${o.id}"><strong>${esc(o.nombre || `${o.nave} - ORDEN ${o.orden}`)}</strong></a>${o.id === state.opId ? ' <span class="pill info">activa</span>' : ''}` },
+      { t: '', f: (o) => `<div class="btns" style="flex-wrap:nowrap"><button class="btn sm primary" data-abrir="${o.id}">Abrir</button>
         ${edit ? `<button class="btn sm" data-op="${o.id}">Editar</button>` : ''}</div>` },
-    ], ops, { empty: 'No hay operaciones. Cree una nueva o importe el libro Excel del reporte.' })}</div>`;
+      { t: 'Cliente', k: 'cliente' }, { t: 'DAM', k: 'dam' },
+      { t: 'ETA', f: (o) => fechaHora(o.eta) }, { t: 'Inicio', f: (o) => fecha(o.fecha_inicio || o.primer_viaje) }, { t: 'Último viaje', f: (o) => fecha(o.ultimo_viaje) },
+      { t: 'TN prog.', k: 'tn_programadas', n: 1, d: 0 }, { t: 'Viajes', k: 'n_viajes', n: 1, d: 0 },
+      { t: 'Estado', f: (o) => `<span class="pill ${o.estado === 'CERRADA' ? 'ok' : 'info'}">${esc(o.estado || 'EN CURSO')}</span>` },
+      { t: 'Modificado', f: (o) => (o.actualizado_en ? `${fechaHora(o.actualizado_en)}<div class="muted small">${esc(o.actualizado_por || '')}</div>` : '—') },
+    ], fil, { empty: ops.length ? 'Ninguna operación coincide con la búsqueda' : 'No hay operaciones. Cree una nueva o importe el libro Excel del reporte.' });
+  };
+  pintar();
+  $('#op-q').addEventListener('input', (e) => { filtroOps.q = e.target.value; pintar(); });
+  $('#op-estado').addEventListener('change', (e) => { filtroOps.estado = e.target.value; pintar(); });
+  $('#op-anio').addEventListener('change', (e) => { filtroOps.anio = e.target.value; pintar(); });
+  $('#op-q').focus();
   $('#b-new')?.addEventListener('click', () => opModal(null));
-  view.addEventListener('click', (e) => {
-    const s = e.target.closest('[data-sel]')?.dataset.sel;
-    if (s) { refrescar(Number(s)); toast('Operación seleccionada'); return; }
+  view.addEventListener('click', async (e) => {
+    const ab = e.target.closest('[data-abrir]')?.dataset.abrir;
+    if (ab) { e.preventDefault(); refrescar(Number(ab), false, () => { location.hash = '#/tablero'; }); return; }
     const id = e.target.closest('[data-op]')?.dataset.op;
-    if (id) opModal(ops.find((o) => o.id === Number(id)));
+    if (id) {
+      // Cargar la operación completa (el listado sólo tiene un resumen) antes de editar
+      try { opModal(await api(`/operaciones/${id}`), () => ctx?.rerender()); } catch (err) { toast(err.message, true); }
+    }
   });
 }
 
-function opModal(o) {
+function opModal(o, despues) {
   const nuevo = !o; o = o || { empresa: 'PACIFICO DESPACHOS S.A.C.', estado: 'EN CURSO' };
   const f = (k, l, type = 'text', extra = '') => `<label>${l}<input name="${k}" type="${type}" value="${esc(type === 'datetime-local' ? toInputDT(o[k]) : o[k] ?? '')}" ${extra}></label>`;
   const dlg = modal({
@@ -45,11 +74,12 @@ function opModal(o) {
     </div>`,
     onSubmit: async (d) => {
       const r = nuevo ? await api('/operaciones', { method: 'POST', body: d }) : await api(`/operaciones/${o.id}`, { method: 'PUT', body: d });
-      toast('Operación guardada'); refrescar(r.id);
+      toast('Operación guardada');
+      if (nuevo) refrescar(r.id); else { refrescar(state.opId, !despues); despues?.(); }
     },
   });
   $('#b-del', dlg)?.addEventListener('click', async () => {
-    if (!(await confirmar(`Se eliminarán la operación ${o.nave} / ${o.orden}, sus ${o.n_viajes} viajes, unidades y reportes. ¿Continuar?`))) return;
+    if (!(await confirmar(`Se eliminará la operación ${o.nave} - ORDEN ${o.orden} con todos sus viajes, tickets, unidades y reportes. ¿Continuar?`))) return;
     await api(`/operaciones/${o.id}`, { method: 'DELETE' }); dlg.close(); dlg.remove(); toast('Operación eliminada'); refrescar();
   });
 }

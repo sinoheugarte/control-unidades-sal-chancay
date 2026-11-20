@@ -138,9 +138,13 @@ const unidadesDe = (D, I) => D.unidades.map((u) => ({ ...u, transportista_nombre
 async function syncIndice(D) {
   const o = D.operacion;
   const actual = (await leer(INDICE)).operaciones.find((x) => x.id === o.id);
+  const fechas = D.viajes.map((v) => v.fecha_despacho).filter(Boolean).sort();
   const res = { id: o.id, nombre: nombreReporte(o), archivo: actual?.archivo || `op-${o.id}.json`, nave: o.nave, orden: o.orden, cliente: o.cliente,
-    producto: o.producto, eta: o.eta, fecha_inicio: o.fecha_inicio, tn_programadas: o.tn_programadas, estado: o.estado, n_viajes: D.viajes.length };
-  if (actual && JSON.stringify(actual) === JSON.stringify(res)) return;
+    producto: o.producto, dam: o.dam || null, manifiesto: o.manifiesto || null, referencia: o.referencia || null, eta: o.eta, fecha_inicio: o.fecha_inicio,
+    tn_programadas: o.tn_programadas, estado: o.estado, n_viajes: D.viajes.length,
+    primer_viaje: fechas[0] || null, ultimo_viaje: fechas[fechas.length - 1] || null, actualizado_en: ahora(), actualizado_por: yo?.nombre || yo?.email || null };
+  const sinMarca = ({ actualizado_en, actualizado_por, ...r }) => r; // eslint-disable-line no-unused-vars
+  if (actual && JSON.stringify(sinMarca(actual)) === JSON.stringify(sinMarca(res))) return;
   await mutar(INDICE, (I) => { I.operaciones = I.operaciones.filter((x) => x.id !== o.id); I.operaciones.push(res); });
 }
 async function mutarOp(id, fn) {

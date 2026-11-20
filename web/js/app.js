@@ -113,6 +113,7 @@ function pintarSelector() {
   sel.innerHTML = state.ops.length
     ? state.ops.map((o) => `<option value="${o.id}" ${o.id === state.opId ? 'selected' : ''}>${esc(o.nave)} · Orden ${esc(o.orden)}</option>`).join('')
     : '<option value="">Sin operaciones</option>';
+  sel.insertAdjacentHTML('beforeend', '<option value="__buscar">🔍 Buscar / nueva operación…</option>');
 }
 
 function shell(root, ruta) {
@@ -135,7 +136,10 @@ function shell(root, ruta) {
       <main class="content" id="view"></main>
     </div></div>`;
   pintarSelector();
-  $('#op-sel').addEventListener('change', (e) => { setOp(Number(e.target.value)); render(); });
+  $('#op-sel').addEventListener('change', (e) => {
+    if (e.target.value === '__buscar') { e.target.value = String(state.opId ?? ''); location.hash = '#/operaciones'; return; }
+    setOp(Number(e.target.value)); render();
+  });
   $('#menu').addEventListener('click', () => $('#side').classList.toggle('open'));
   $('#side').addEventListener('click', (e) => { if (e.target.closest('a')) $('#side').classList.remove('open'); });
   $('#salir').addEventListener('click', () => { B.cerrarSesion(); state.user = null; location.hash = '#/login'; });
@@ -185,8 +189,8 @@ async function render() {
 
 window.addEventListener('hashchange', render);
 window.addEventListener('app:ops', (e) => {
-  const { id, render: rerender = true } = e.detail || {};
-  refrescarOps(id).then(() => rerender && render());
+  const { id, render: rerender = true, luego } = e.detail || {};
+  refrescarOps(id).then(() => { if (luego) luego(); else if (rerender) render(); });
 });
 render();
 $$('dialog').forEach((d) => d.remove());
