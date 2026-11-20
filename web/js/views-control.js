@@ -264,7 +264,7 @@ export async function vUnidades(view, ctx) {
   view.innerHTML = `<div class="card"><div class="card-h">
       <div class="btns"><input id="q" type="search" placeholder="Buscar placa, DNI o conductor…" value="${esc(qU)}" style="width:260px" aria-label="Buscar">
       <span class="muted">${us.length} unidades en lista · ${tab.totales.unidades_activas} activas</span></div>
-      ${edit ? '<div class="btns"><button class="btn" id="b-imp-lista">Importar lista (uno o varios archivos)</button><button class="btn primary" id="b-new">+ Nueva unidad</button></div>' : ''}</div><div id="tbl"></div></div>`;
+      ${edit ? '<div class="btns"><button class="btn" id="b-copiar">Copiar lista de otra operación</button><button class="btn" id="b-imp-lista">Importar lista (uno o varios archivos)</button><button class="btn primary" id="b-new">+ Nueva unidad</button></div>' : ''}</div><div id="tbl"></div></div>`;
   const pintar = () => {
     const q = qU.toUpperCase();
     const fil = us.filter((u) => !q || [u.tracto, u.plataforma, u.dni, u.ap_paterno, u.ap_materno, u.nombre1].some((x) => String(x || '').toUpperCase().includes(q)));
@@ -279,6 +279,26 @@ export async function vUnidades(view, ctx) {
   pintar();
   $('#q').addEventListener('input', (e) => { qU = e.target.value; pintar(); });
   $('#b-new')?.addEventListener('click', () => unidadModal(null, transp, ctx.rerender));
+  $('#b-copiar')?.addEventListener('click', () => {
+    const otras = state.ops.filter((o) => o.id !== state.opId);
+    if (!otras.length) { toast('No hay otras operaciones de las que copiar', true); return; }
+    modal({
+      title: 'Copiar lista de otra operación',
+      submitText: 'Copiar a esta operación',
+      body: `<p class="muted" style="margin-top:0">Se copian los transportistas, conductores y unidades de la operación elegida a la LISTA de esta operación.
+        Se integra sin duplicar: un conductor que ya está (mismo DNI, o misma placa si no tiene DNI) se actualiza con los datos de la operación de origen.</p>
+        <div class="form">
+          <label class="full">Copiar desde *<select name="origen_id" required>${otras.map((o) => `<option value="${o.id}">${esc(o.nave)} · Orden ${esc(o.orden)}${o.estado === 'FINALIZADA' ? ' (finalizada)' : ''}</option>`).join('')}</select></label>
+          <label class="full">Empresa<select name="transportista_id"><option value="">Todas las empresas</option>${transp.map((t) => `<option value="${t.id}">${esc(t.razon_social)} (${esc(t.nombre_comercial)})</option>`).join('')}</select></label>
+          <label class="check full"><input type="checkbox" name="participacion"> Copiar también la participación de transportistas (unidades solicitadas, TN prom. por unidad y vueltas)</label>
+        </div>`,
+      onSubmit: async (d) => {
+        const r = await api(`/operaciones/${state.opId}/copiar-lista`, { method: 'POST', body: d });
+        toast(`LISTA copiada: ${r.insertados} nuevos, ${r.actualizados} actualizados, ${r.sin_cambios} sin cambios`);
+        ctx.rerender();
+      },
+    });
+  });
   $('#b-imp-lista')?.addEventListener('click', async () => {
     const dlg = document.createElement('dialog');
     dlg.style.width = 'min(900px, calc(100vw - 32px))';

@@ -544,6 +544,33 @@ ruta('POST', '/operaciones/:id/importar/lista', async ({ id }, b, form) => {
     avisos: lecturas.flatMap((l) => l.avisos.map((a) => `${l.nombre}: ${a}`)) };
 });
 
+/** Copia la LISTA (y opcionalmente la participación de transportistas) desde otra operación. */
+ruta('POST', '/operaciones/:id/copiar-lista', async ({ id }, b) => {
+  ESCRIBE();
+  const origen = await datosOp(N(b.origen_id));
+  if (Number(b.origen_id) === Number(id)) throw err(400, 'Elija una operación distinta a la actual');
+  const tid = N(b.transportista_id);
+  const unidades = origen.unidades.filter((u) => !tid || u.transportista_id === tid);
+  if (!unidades.length) throw err(400, 'La operación de origen no tiene unidades en su LISTA' + (tid ? ' para esa empresa' : ''));
+  const nombreOrigen = `${origen.operacion.nave} - ORDEN ${origen.operacion.orden}`;
+  const filas = unidades.map((u, i) => ({ ...u, hoja: nombreOrigen, fila: i + 1 }));
+  return mutarOp(id, (D) => {
+    const r = X.integrarLista(D, filas, (f) => f.transportista_id || null);
+    if (b.participacion) {
+      for (const p of origen.op_transportistas.filter((x) => !tid || x.transportista_id === tid)) {
+        X.asegurarParticipacion(D, p.transportista_id);
+        const d = D.op_transportistas.find((x) => x.transportista_id === p.transportista_id);
+        Object.assign(d, { unidades_solicitadas: p.unidades_solicitadas, tn_prom_unidad: p.tn_prom_unidad, vueltas_manual: { ...(p.vueltas_manual || {}) } });
+      }
+    }
+    historial(D, 'copiar_lista', { origen: nombreOrigen, transportista_id: tid });
+    D.importaciones = [{ tipo: 'lista', archivo: `Copia de ${nombreOrigen}`, en: ahora(), por: yo.nombre || yo.email,
+      resumen: { insertados: r.insertados, actualizados: r.actualizados, sin_cambios: r.sin_cambios, sin_transportista: r.sin_transportista.length } },
+    ...(D.importaciones || [])].slice(0, 50);
+    return r;
+  });
+});
+
 ruta('POST', '/operaciones/:id/importar/:tipo', async ({ id, tipo }, b, form) => {
   ESCRIBE();
   const wb = await X.cargarLibro(archivo(form));
