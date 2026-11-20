@@ -153,7 +153,7 @@ export async function vImportar(view, ctx) {
     const tipo = f.dataset.imp;
     if (f.dataset.proceso && !f.cierre.value) { toast('Ingrese la fecha y hora de cierre del reporte antes de importar.', true); f.cierre.focus(); return; }
     const out = view.querySelector(`[data-res="${tipo}"]`);
-    const btn = f.querySelector('button'); btn.disabled = true;
+    const btn = f.querySelector('button:not([type=button])'); btn.disabled = true;
     out.innerHTML = '<span class="muted">Procesando… (un archivo grande puede tardar unos segundos)</span>';
     try {
       const fd = new FormData(f);
@@ -162,7 +162,7 @@ export async function vImportar(view, ctx) {
         : await api(`/operaciones/${state.opId}/importar/${tipo}`, { method: 'POST', form: fd });
       if (tipo === 'libro') { out.innerHTML = resumenImport(tipo, r); refrescar(r.operacion_id, false); f.reset(); return; }
       toast(resumenTexto(tipo, r));
-      const obs = [...(r.errores || []), ...(r.sin_transportista || []).map((x) => `Placa sin transportista identificado: ${x}`), ...(r.sin_viaje || []).map((x) => `Ticket sin viaje: ${x}`)];
+      const obs = [...(r.transportistas_creados || []).map((x) => `Empresa agregada al maestro: ${x}`), ...(r.errores || []), ...(r.sin_transportista || []).map((x) => `Placa sin transportista identificado: ${x}`), ...(r.sin_viaje || []).map((x) => `Ticket sin viaje: ${x}`)];
       ultimoResultado = { tipo, html: `<div class="alert ok">${esc(resumenTexto(tipo, r))}</div>${obs.length ? `<details style="margin-top:6px"><summary>${obs.length} observaciones</summary><ul>${obs.slice(0, 300).map((x) => `<li>${esc(x)}</li>`).join('')}</ul></details>` : ''}` };
       ctx.rerender();
     } catch (err) { out.innerHTML = `<div class="alert bad">${esc(err.message)}</div>`; } finally { btn.disabled = false; }
@@ -171,7 +171,7 @@ export async function vImportar(view, ctx) {
 
 function resumenTexto(tipo, r) {
   const corte = r.corte ? ` ${r.corte.actualizado ? 'Se actualizó el' : 'Se creó el'} ${r.corte.numero}° reporte de ${tipo === 'despachos' ? 'despacho' : 'acopio'}: ${fechaHora(r.corte.inicio)} a ${fechaHora(r.corte.fin)}.${r.corte.posteriores ? ` ${r.corte.posteriores} viajes posteriores al cierre quedan para el siguiente reporte.` : ''}` : '';
-  if (tipo === 'despachos') return `REPORTE HUACHO: ${r.insertados} viajes nuevos, ${r.actualizados} actualizados, ${r.sin_cambios} sin cambios. ${r.tickets_cruzados} tickets cruzados.${r.sin_transportista.length ? ` ${r.sin_transportista.length} placas sin transportista.` : ''}${corte}`;
+  if (tipo === 'despachos') return `REPORTE HUACHO: ${r.insertados} viajes nuevos, ${r.actualizados} actualizados, ${r.sin_cambios} sin cambios. ${r.tickets_cruzados} tickets cruzados.${r.transportistas_creados?.length ? ` ${r.transportistas_creados.length} empresas de transporte agregadas al maestro.` : ''}${r.completados ? ` ${r.completados} viajes completados con su empresa.` : ''}${r.sin_transportista.length ? ` ${r.sin_transportista.length} placas sin transportista.` : ''}${corte}`;
   if (tipo === 'tickets') return `REPORTE CSPCP: ${r.nuevos} tickets nuevos, ${r.actualizados} actualizados. ${r.asignados} cruzados con su viaje; ${r.sin_viaje.length} sin viaje.${corte}`;
   return `LISTA: ${r.insertados} unidades nuevas, ${r.actualizados} actualizadas.`;
 }
@@ -202,7 +202,7 @@ export async function enviarLista(e, despues) {
   e.preventDefault();
   const f = e.target;
   const out = f.parentElement.querySelector('[data-res-lista]');
-  const btn = f.querySelector('button'); btn.disabled = true;
+  const btn = f.querySelector('button:not([type=button])'); btn.disabled = true;
   out.innerHTML = '<span class="muted">Leyendo archivos…</span>';
   try {
     const r = await api(`/operaciones/${state.opId}/importar/lista`, { method: 'POST', form: new FormData(f) });

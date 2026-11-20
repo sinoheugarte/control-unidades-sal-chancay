@@ -68,6 +68,8 @@ async function leer(nombre, forzar = false) {
   return d;
 }
 
+const leerSync = () => cache.get(INDICE)?.data || indiceVacio();
+
 /** Aplica fn(datos) y guarda; reintenta si hubo un cambio concurrente. */
 async function mutar(nombre, fn) {
   for (let intento = 0; intento < 5; intento++) {
@@ -395,7 +397,7 @@ ruta('PUT', '/transportistas/:tid', async ({ tid }, b) => {
   return mutar(INDICE, (I) => {
     const t = I.transportistas.find((x) => x.id === Number(tid)); if (!t) throw err(404, 'No encontrado');
     for (const k of T_CAMPOS) if (k in b) t[k] = S(b[k]);
-    if (I.transportistas.some((x) => x !== t && (x.ruc === t.ruc || x.nombre_comercial === t.nombre_comercial))) throw err(409, 'RUC o nombre comercial duplicado');
+    if (I.transportistas.some((x) => x !== t && ((x.ruc && x.ruc === t.ruc) || x.nombre_comercial === t.nombre_comercial))) throw err(409, 'RUC o nombre comercial duplicado');
     return t;
   });
 });
@@ -566,6 +568,8 @@ ruta('POST', '/operaciones/:id/importar/lista', async ({ id }, b, form) => {
   await mutar(INDICE, (I) => {
     for (const f of filas) {
       if (!f.ruc || I.transportistas.some((t) => t.ruc === f.ruc)) continue;
+      const sinRuc = f.empresa && I.transportistas.find((t) => !t.ruc && X.mismoNombre(t.razon_social, f.empresa));
+      if (sinRuc) { sinRuc.ruc = f.ruc; nuevos.push(`RUC ${f.ruc} asignado a ${sinRuc.razon_social}`); continue; }
       const rs = f.empresa && !/^\d+$/.test(f.empresa) ? f.empresa : `TRANSPORTISTA RUC ${f.ruc}`;
       I.seq_t = Math.max(I.seq_t || 0, ...I.transportistas.map((t) => t.id)) + 1;
       const t = { id: I.seq_t, ruc: f.ruc, razon_social: rs, nombre_comercial: X.nombreComercialDe(rs, I.transportistas.map((x) => x.nombre_comercial)), contacto: null, telefono: null, emails: null };
@@ -583,6 +587,7 @@ ruta('POST', '/operaciones/:id/importar/lista', async ({ id }, b, form) => {
     const tidDe = (f) => (f.ruc && T.find((t) => t.ruc === f.ruc)?.id) || (f.empresa && X.resolverTransportista(T, D, f.empresa, null)) || porDefecto
       || X.resolverTransportista(T, D, null, f.tracto) || null;
     const r = X.integrarLista(D, filas, tidDe);
+    r.viajes_completados = X.completarTransportistas(D, T);
     const nombres = archivos.map((f) => f.name).join(', ');
     historial(D, 'importar_lista', nombres);
     D.importaciones = [{ tipo: 'lista', archivo: nombres, en: ahora(), por: yo.nombre || yo.email,
@@ -603,9 +608,11 @@ ruta('POST', '/operaciones/:id/copiar-lista', async ({ id }, b) => {
   const unidades = origen.unidades.filter((u) => !tid || u.transportista_id === tid);
   if (!unidades.length) throw err(400, 'La operación de origen no tiene unidades en su LISTA' + (tid ? ' para esa empresa' : ''));
   const nombreOrigen = `${origen.operacion.nave} - ORDEN ${origen.operacion.orden}`;
+  const T0 = (await leer(INDICE)).transportistas;
   const filas = unidades.map((u, i) => ({ ...u, hoja: nombreOrigen, fila: i + 1 }));
   return mutarOp(id, (D) => {
     const r = X.integrarLista(D, filas, (f) => f.transportista_id || null);
+    r.viajes_completados = X.completarTransportistas(D, T0);
     if (b.participacion) {
       for (const p of origen.op_transportistas.filter((x) => !tid || x.transportista_id === tid)) {
         X.asegurarParticipacion(D, p.transportista_id);
@@ -630,10 +637,27 @@ ruta('POST', '/operaciones/:id/importar/:tipo', async ({ id, tipo }, b, form) =>
   const modo = form?.get('modo') === 'actualizar' ? 'actualizar' : 'nuevo';
   if (proceso && !cierre) throw err(400, `Ingrese la fecha y hora de cierre del reporte de ${proceso} antes de importar.`);
   const wb = await X.cargarLibro(archivo(form));
+  const creadas = [];
+  if (tipo === 'despachos') {
+    const nombres = X.transportistasEnDespachos(wb);
+    const faltan = nombres.filter((n) => !(leerSync().transportistas || []).some((t) => X.mismoNombre(t.razon_social, n) || X.mismoNombre(t.nombre_comercial, n)));
+    if (faltan.length) {
+      await mutar(INDICE, (I0) => {
+        for (const n of faltan) {
+          if (I0.transportistas.some((t) => X.mismoNombre(t.razon_social, n) || X.mismoNombre(t.nombre_comercial, n))) continue;
+          I0.seq_t = Math.max(I0.seq_t || 0, ...I0.transportistas.map((t) => t.id)) + 1;
+          const t = { id: I0.seq_t, ruc: null, razon_social: n, nombre_comercial: X.nombreComercialDe(n, I0.transportistas.map((x) => x.nombre_comercial)), contacto: null, telefono: null, emails: null };
+          I0.transportistas.push(t);
+          creadas.push(`${t.razon_social} (como ${t.nombre_comercial})`);
+        }
+      });
+    }
+  }
   const I = await leer(INDICE);
   return mutarOp(id, (D) => {
     const r = tipo === 'despachos' ? X.importarDespachos(D, I.transportistas, wb, yo.email) : tipo === 'tickets' ? X.importarTickets(D, wb) : X.importarLista(D, I.transportistas, wb);
     if (proceso) r.corte = registrarCorte(D, proceso, cierre, modo);
+    if (creadas.length) r.transportistas_creados = creadas;
     historial(D, `importar_${tipo}`, archivo(form).name);
     D.importaciones = [{ tipo, archivo: archivo(form).name, en: ahora(), por: yo.nombre || yo.email,
       resumen: { ...r, sin_viaje: r.sin_viaje?.length, errores: r.errores?.length, sin_transportista: r.sin_transportista?.length } },

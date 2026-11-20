@@ -8,7 +8,8 @@ const f = { anio: null, q: '', estado: '', cliente: '', transp: '', abiertas: ne
 const estadoDe = (o) => (o.estado === 'CERRADA' ? 'FINALIZADA' : o.estado || 'EN CURSO');
 
 /** Filas del cuadro por transportista de una operación (filtradas por transportista si corresponde). */
-const filasT = (o) => (o.resumen?.transportistas || []).filter((t) => !f.transp || t.ruc === f.transp);
+const kT = (t) => t.ruc || t.razon_social;
+const filasT = (o) => (o.resumen?.transportistas || []).filter((t) => !f.transp || kT(t) === f.transp);
 /** Totales de la operación según el filtro de transportista. */
 function totalesOp(o) {
   if (!f.transp) return { tn_acopio: o.resumen?.tn_acopio || 0, tn_despacho: o.resumen?.tn_despacho || 0, viajes: o.resumen?.viajes || 0 };
@@ -28,7 +29,7 @@ export async function vResumenAnual(view, ctx) {
   const delAnio = todas.filter((o) => o.anio_calc === f.anio);
   const clientes = [...new Set(delAnio.map((o) => o.cliente).filter(Boolean))].sort();
   const transps = new Map();
-  delAnio.forEach((o) => filasTodas(o).forEach((t) => { if (t.ruc && (t.viajes_realizados || t.tn_cspcp)) transps.set(t.ruc, t.razon_social); }));
+  delAnio.forEach((o) => filasTodas(o).forEach((t) => { if (kT(t) && (t.viajes_realizados || t.tn_cspcp)) transps.set(kT(t), t.razon_social); }));
 
   view.innerHTML = `
     <div class="card"><div class="card-h">
@@ -56,7 +57,7 @@ export async function vResumenAnual(view, ctx) {
       .sort((a, b) => String(a.resumen?.inicio_acopio || a.fecha_inicio || '9999').localeCompare(String(b.resumen?.inicio_acopio || b.fecha_inicio || '9999')) || a.id - b.id);
     const tot = ops.map(totalesOp);
     const sum = (k) => tot.reduce((s, x) => s + (x[k] || 0), 0);
-    const nT = new Set(ops.flatMap((o) => filasT(o).filter((t) => t.viajes_realizados || t.tn_cspcp).map((t) => t.ruc))).size;
+    const nT = new Set(ops.flatMap((o) => filasT(o).filter((t) => t.viajes_realizados || t.tn_cspcp).map((t) => kT(t)))).size;
     const body = $('#r-body');
     body.innerHTML = `
       <div class="kpis">
@@ -127,7 +128,7 @@ export async function vResumenAnual(view, ctx) {
       options: { plugins: { legend: { display: false }, tooltip: { callbacks: { label: (x) => `${num(x.raw)} TN` } } }, scales: { y: { beginAtZero: true } } },
     });
     const porT = new Map();
-    ops.forEach((o) => filasT(o).forEach((t) => { if (!t.tn_cspcp) return; const e = porT.get(t.ruc) || { rs: t.razon_social, tn: 0 }; e.tn += t.tn_cspcp; porT.set(t.ruc, e); }));
+    ops.forEach((o) => filasT(o).forEach((t) => { if (!t.tn_cspcp) return; const e = porT.get(kT(t)) || { rs: t.razon_social, tn: 0 }; e.tn += t.tn_cspcp; porT.set(kT(t), e); }));
     const lt = [...porT.entries()].sort((a, b) => b[1].tn - a[1].tn);
     const totT = lt.reduce((s, x) => s + x[1].tn, 0) || 1;
     chart($('#c-tra'), {
@@ -142,7 +143,7 @@ export async function vResumenAnual(view, ctx) {
       data: {
         labels: ops.map((o) => o.nave),
         datasets: rucs.map((ruc, i) => ({ label: porT.get(ruc).rs, backgroundColor: c.serie[i % c.serie.length],
-          data: ops.map((o) => (o.resumen?.transportistas || []).find((t) => t.ruc === ruc)?.tn_cspcp || 0) })),
+          data: ops.map((o) => (o.resumen?.transportistas || []).find((t) => kT(t) === ruc)?.tn_cspcp || 0) })),
       },
       options: { plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } } }, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } } },
     });

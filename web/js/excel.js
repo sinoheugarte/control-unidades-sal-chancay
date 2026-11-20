@@ -93,6 +93,9 @@ const toTn = (v) => { const n = toNum(v); return n === null ? null : n > 1000 ? 
 const str = (v) => (v === null || v === undefined ? null : v instanceof Date ? C.normDT(v) : String(v).trim() || null);
 
 /* ---------------- utilidades sobre los datos ---------------- */
+/** Compara nombres de empresa ignorando mayúsculas, espacios y puntuación ("S.A.C." = "SAC"). */
+export const mismoNombre = (a, b) => !!a && !!b && normH(a) === normH(b);
+
 export function resolverTransportista(T, D, nombre, placa) {
   if (nombre) {
     const n = normH(nombre);
@@ -168,6 +171,31 @@ export function asignarTicket(D, t) {
 }
 
 /* ---------------- importadores ---------------- */
+/** Columna del REPORTE HUACHO (SAP) con el nombre de la empresa de transporte. */
+const COL_TRANSP_HUACHO = ['Número de transportista', 'Numero de transportista', 'TRANSPORTE', 'TRANSPORTISTA', 'Nombre transportista', 'Empresa de transporte'];
+
+/** Empresas de transporte que aparecen en un REPORTE HUACHO (razón social), para crearlas si no existen. */
+export function transportistasEnDespachos(wb) {
+  const found = findSheet(wb, [['Referencia', 'GUIA R. HUACHO', 'GUIA REMISION', 'GUIA'], ['Placa', 'PLACA']], ['REPORTE HUACHO'], ['DETALLE TRANSPORTE']);
+  if (!found) return [];
+  const nombres = new Map();
+  for (const r of found.rows) {
+    const n = str(r.get(...COL_TRANSP_HUACHO));
+    if (n && !/^\d+$/.test(n)) nombres.set(normH(n), n.toUpperCase().replace(/\s+/g, ' ').trim());
+  }
+  return [...nombres.values()];
+}
+
+/** Asigna empresa a los viajes que no la tienen, usando la placa (LISTA u otros viajes). Devuelve cuántos se completaron. */
+export function completarTransportistas(D, T) {
+  let n = 0;
+  for (const v of D.viajes) {
+    if (v.transportista_id) continue;
+    const tid = resolverTransportista(T, D, null, v.placa);
+    if (tid) { v.transportista_id = tid; asegurarParticipacion(D, tid); n++; }
+  }
+  return n;
+}
 
 /** REPORTE HUACHO (exportación SAP de despachos de planta). Acumulativo: las guías ya cargadas se actualizan. */
 export function importarDespachos(D, T, wb, usuario) {
@@ -186,13 +214,16 @@ export function importarDespachos(D, T, wb, usuario) {
     const inicioCarga = combinarFechaHora(r.get('InActCarga', 'FeActDpExp', 'Fe.SM real', 'DIA DESPACHO', 'FECHA'), r.get('HrAICg', 'HrADpExp', 'HORA'));
     if (!salida) { res.omitidos++; res.errores.push(`Fila ${r._row} (guía ${guia}): sin fecha de despacho`); continue; }
     const e = porGuia.get(guia);
+    const nombreT = str(r.get(...COL_TRANSP_HUACHO));
     if (e) {
-      if (e.placa === placa && e.peso_origen === peso && e.despacho_en === salida) { res.sin_cambios++; continue; }
-      Object.assign(e, { placa, peso_origen: peso, despacho_en: salida });
+      // Completa la empresa si el viaje quedó sin transportista en una carga anterior
+      const tidE = e.transportista_id || resolverTransportista(T, D, nombreT, placa);
+      if (e.placa === placa && e.peso_origen === peso && e.despacho_en === salida && e.transportista_id === tidE) { res.sin_cambios++; continue; }
+      Object.assign(e, { placa, peso_origen: peso, despacho_en: salida, transportista_id: tidE || null });
+      asegurarParticipacion(D, tidE);
       res.actualizados++;
       continue;
     }
-    const nombreT = str(r.get('Número de transportista', 'TRANSPORTE', 'TRANSPORTISTA', 'Nombre transportista'));
     const tid = resolverTransportista(T, D, nombreT, placa);
     if (!tid) res.sin_transportista.push(`${placa} (${nombreT || 'sin nombre'})`);
     asegurarParticipacion(D, tid);
@@ -210,6 +241,7 @@ export function importarDespachos(D, T, wb, usuario) {
   const c = conciliar(D);
   res.tickets_cruzados = c.asignados;
   res.tickets_sin_viaje = c.sin_viaje.length;
+  res.completados = completarTransportistas(D, T);
   res.sin_transportista = [...new Set(res.sin_transportista)];
   return res;
 }
