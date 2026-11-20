@@ -120,7 +120,7 @@ async function paginaTransportista(doc, op, t, viajes) {
     startY: y,
     head: [COLS_TRANSP.map((c) => c[0])],
     body: orden.map((v) => COLS_TRANSP.map(([, k, , tt]) => texto(v, k, tt))),
-    foot: [['Total', '', String(orden.length), '', '', '', n2(suma(orden, 'peso_origen')), '', '', '', n2(suma(orden, 'peso_destino_calc'))]],
+    foot: [['Total', '', String(orden.length), '', '', '', n2(suma(orden, 'peso_origen')), '', n2(suma(orden, 'peso_destino_calc'))]],
     styles: { fontSize: 7.5, cellPadding: 1, lineColor: [200, 200, 200], lineWidth: 0.1 },
     headStyles: { fillColor: AZUL, textColor: 255, fontStyle: 'bold', halign: 'center', valign: 'middle' },
     footStyles: { fillColor: [235, 240, 246], textColor: 0, fontStyle: 'bold' },

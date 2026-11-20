@@ -418,12 +418,12 @@ export const COLS_DETALLE = [
   ['TIEMPO', 'tiempo_min', 9, 'h'], ['RANGO', 'rango', 15], ['# REPORTE DESPACHO', 'rep_despacho_calc', 10, 'i'],
   ['# REPORTE ACOPIO', 'rep_acopio_calc', 10, 'i'], ['VIAJE X UNIDAD', 'vuelta', 9, 'i'], ['CONTEO', 'conteo', 8, 'i'], ['STATUS', 'status', 16],
 ];
-// Columnas de las hojas por transportista (TOLVEROS, RIAR, ...)
+// Columnas VISIBLES de las hojas por transportista (TOLVEROS, RIAR, ...).
+// En el libro original DIA RECEPCION y JORNADA RECEPCION (columnas I-J) están ocultas, por eso no se incluyen.
 export const COLS_TRANSP = [
-  ['DIA DESPACHO', 'fecha_despacho', 12, 'f'], ['JORNADA DESPACHO', 'jornada_despacho', 14], ['NRO. VIAJE', 'nro', 8, 'i'],
-  ['TRANSPORTE', 'transportista_nombre', 16], ['PLACA', 'placa', 10], ['GUIA R.', 'guia', 19], ['PESO X UNID HUACHO', 'peso_origen', 11, 'n'],
-  ['DIA RECEPCION', 'fecha_recepcion', 12, 'f'], ['JORNADA RECEPCION', 'jornada_recepcion', 14], ['TICKET CSPCP', 'ticket', 15],
-  ['PESO X UNID CSPCP', 'peso_destino_calc', 11, 'n'],
+  ['DIA DESPACHO', 'fecha_despacho', 13, 'f'], ['JORNADA DESPACHO', 'jornada_despacho', 15], ['NRO. VIAJE', 'nro', 10, 'i'],
+  ['TRANSPORTE', 'transportista_nombre', 18], ['PLACA', 'placa', 10], ['GUIA R.', 'guia', 19], ['PESO X UNID HUACHO', 'peso_origen', 14, 'n'],
+  ['TICKET CSPCP', 'ticket', 15], ['PESO X UNID CSPCP', 'peso_destino_calc', 14, 'n'],
 ];
 
 /** Valor de celda: fechas como fecha de Excel, tiempos como h:mm:ss, números como número. */
@@ -512,12 +512,12 @@ async function hojaTransportista(wb, op, t, viajes) {
   const ws = wb.addWorksheet(nombre, { views: [{ state: 'frozen', ySplit: 11 }], pageSetup: { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, paperSize: 9 } });
   ws.getColumn(1).width = 2;
   COLS_TRANSP.forEach((c, i) => { ws.getColumn(i + 2).width = c[2]; });
-  ws.getColumn(13).width = 3; ws.getColumn(14).width = 11; ws.getColumn(15).width = 30;
+  ws.getColumn(11).width = 3; ws.getColumn(12).width = 11; ws.getColumn(13).width = 30;
   const logo = await logoBase64();
   if (logo) ws.addImage(wb.addImage({ base64: logo, extension: 'png' }), { tl: { col: 1.1, row: 0.1 }, ext: { width: 110, height: 62 } });
   ws.getCell('D1').value = (op.empresa || 'PACIFICO DESPACHOS S.A.C.').trim();
   ws.getCell('D1').font = { bold: true, size: 14, color: { argb: AZUL } };
-  ws.mergeCells('B4:L4');
+  ws.mergeCells('B4:J4');
   ws.getCell('B4').value = 'REPORTE DE SERVICIO TRANSPORTE';
   ws.getCell('B4').font = { bold: true, size: 13, color: { argb: 'FFFFFFFF' } };
   ws.getCell('B4').alignment = { horizontal: 'center' };
@@ -538,34 +538,34 @@ async function hojaTransportista(wb, op, t, viajes) {
     ws.getCell(`H${r}`).value = v2 ?? ''; ws.getCell(`H${r}`).font = { size: 9 };
     if (typeof v2 === 'number' && r === 9) ws.getCell(`H${r}`).numFmt = FMT.n;
   }
-  ws.getCell('K9').value = 'TOTAL PESO TM CSPCP:'; ws.getCell('K9').font = { bold: true, size: 9 };
-  ws.getCell('L9').value = suma(viajes, 'peso_destino_calc'); ws.getCell('L9').numFmt = FMT.n;
-  ws.getCell('K10').value = t.nombre_comercial; ws.getCell('K10').font = { bold: true, size: 9 };
+  ws.getCell('I9').value = 'TOTAL PESO TM CSPCP:'; ws.getCell('I9').font = { bold: true, size: 9 };
+  ws.getCell('J9').value = suma(viajes, 'peso_destino_calc'); ws.getCell('J9').numFmt = FMT.n;
+  ws.getCell('I10').value = t.nombre_comercial; ws.getCell('I10').font = { bold: true, size: 9 };
   // Contacto (columna N-O como en el libro)
   const emails = String(t.emails || '').split(/[,;]\s*/).filter(Boolean);
-  ws.getCell('N2').value = 'EMAIL:';
-  emails.slice(0, 4).forEach((e, i) => { ws.getCell(`O${2 + i}`).value = e; });
-  ws.getCell('N7').value = 'CONTACTO:'; ws.getCell('O7').value = t.contacto || '';
-  ws.getCell('N8').value = 'TELEFONO:'; ws.getCell('O8').value = t.telefono || '';
-  ['N2', 'N7', 'N8'].forEach((a) => { ws.getCell(a).font = { bold: true, size: 9 }; });
+  ws.getCell('L2').value = 'EMAIL:';
+  emails.slice(0, 4).forEach((e, i) => { ws.getCell(`M${2 + i}`).value = e; });
+  ws.getCell('L7').value = 'CONTACTO:'; ws.getCell('M7').value = t.contacto || '';
+  ws.getCell('L8').value = 'TELEFONO:'; ws.getCell('M8').value = t.telefono || '';
+  ['L2', 'L7', 'L8'].forEach((a) => { ws.getCell(a).font = { bold: true, size: 9 }; });
 
   ws.getRow(11).values = [null, ...COLS_TRANSP.map((c) => c[0])];
   cabecera(ws.getRow(11));
   const orden = [...viajes].sort((a, b) => a.nro - b.nro);
   filasDatos(ws, COLS_TRANSP, orden, 2);
-  const tr = ws.addRow([null, 'Total', null, orden.length, null, null, null, suma(orden, 'peso_origen'), null, null, null, suma(orden, 'peso_destino_calc')]);
+  const tr = ws.addRow([null, 'Total', null, orden.length, null, null, null, suma(orden, 'peso_origen'), null, suma(orden, 'peso_destino_calc')]);
   tr.font = { bold: true, size: 9 };
-  tr.getCell(8).numFmt = FMT.n; tr.getCell(12).numFmt = FMT.n;
-  for (let c = 2; c <= 12; c++) tr.getCell(c).border = { top: { style: 'thin' }, bottom: { style: 'double' } };
+  tr.getCell(8).numFmt = FMT.n; tr.getCell(10).numFmt = FMT.n;
+  for (let c = 2; c <= 10; c++) tr.getCell(c).border = { top: { style: 'thin' }, bottom: { style: 'double' } };
   const f = tr.number + 2;
   ws.getCell(`B${f}`).value = '** CONFORMIDAD ACEPTADA **'; ws.getCell(`B${f}`).font = { bold: true };
   ws.getCell(`B${f + 1}`).value = 'FECHA:';
   ws.getCell(`B${f + 2}`).value = `APROBADO: ${(op.coordinador || '').toUpperCase()}`;
-  ws.getCell(`J${f}`).value = op.coordinador || '';
-  ws.getCell(`J${f + 1}`).value = 'Coordinador de Transporte';
-  ws.getCell(`J${f + 2}`).value = (op.empresa || 'PACIFICO DESPACHOS S.A.C.').trim();
-  ws.getCell(`J${f}`).border = { top: { style: 'thin' } };
-  ws.getCell(`J${f}`).font = { bold: true };
+  ws.getCell(`H${f}`).value = op.coordinador || '';
+  ws.getCell(`H${f + 1}`).value = 'Coordinador de Transporte';
+  ws.getCell(`H${f + 2}`).value = (op.empresa || 'PACIFICO DESPACHOS S.A.C.').trim();
+  ws.getCell(`H${f}`).border = { top: { style: 'thin' } };
+  ws.getCell(`H${f}`).font = { bold: true };
   ws.pageSetup.printTitlesRow = '11:11';
 }
 

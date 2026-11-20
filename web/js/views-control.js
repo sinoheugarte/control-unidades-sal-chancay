@@ -405,9 +405,8 @@ export async function vReporteTransportista(view) {
       <div style="margin-top:14px">${tabla([
         { t: 'Día despacho', f: (v) => fecha(v.fecha_despacho) }, { t: 'Jornada despacho', k: 'jornada_despacho' }, { t: 'Nro. viaje', k: 'nro' },
         { t: 'Transporte', k: 'transportista_nombre' }, { t: 'Placa', k: 'placa' }, { t: 'Guía R.', k: 'guia' }, { t: 'Peso x unid Huacho', k: 'peso_origen', n: 1 },
-        { t: 'Día recepción', f: (v) => fecha(v.fecha_recepcion) }, { t: 'Jornada recepción', k: 'jornada_recepcion' }, { t: 'Ticket CSPCP', k: 'ticket' },
-        { t: 'Peso x unid CSPCP', k: 'peso_destino_calc', n: 1 },
-      ], vs, { empty: 'Sin viajes', foot: ['Total', '', num(vs.length, 0), '', '', '', num(sum('peso_origen')), '', '', '', num(sum('peso_destino_calc'))] })}</div>
+        { t: 'Ticket CSPCP', k: 'ticket' }, { t: 'Peso x unid CSPCP', k: 'peso_destino_calc', n: 1 },
+      ], vs, { empty: 'Sin viajes', foot: ['Total', '', num(vs.length, 0), '', '', '', num(sum('peso_origen')), '', num(sum('peso_destino_calc'))] })}</div>
       <div class="grid g2" style="margin-top:28px">
         <div><strong>** CONFORMIDAD ACEPTADA **</strong><br>FECHA:<br>APROBADO: ${esc((op.coordinador || '').toUpperCase())}</div>
         <div style="text-align:center;border-top:1px solid var(--text);padding-top:6px;max-width:300px;justify-self:end;width:100%"><strong>${esc(op.coordinador || '')}</strong><br>Coordinador de Transporte<br>${esc((op.empresa || '').trim())}</div>
