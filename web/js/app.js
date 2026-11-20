@@ -26,7 +26,7 @@ const RUTAS = {
   tablero: { t: 'Tablero', v: vTablero },
   registro: { t: 'Registro rápido', v: vRegistro },
   viajes: { t: 'Detalle de viajes', v: vViajes },
-  reportes: { t: 'Reportes por turno', v: vReportes },
+  reportes: { t: 'Reporte de avance', v: vReportes },
   transportistas: { t: 'Transportistas', v: vTransportistas },
   'reporte-transportista': { t: 'Reporte por transportista', v: vReporteTransportista, nav: 'transportistas' },
   unidades: { t: 'Lista de unidades', v: vUnidades },

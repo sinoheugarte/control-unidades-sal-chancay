@@ -1,5 +1,5 @@
 // Exportación a PDF (jsPDF + AutoTable): detalle de viajes y reporte de servicio por transportista.
-import { COLS_DETALLE, COLS_TRANSP, COLS_UNIDADES, COLS_RESUMEN_T, logoBase64 } from './excel.js?v=__V__';
+import { COLS_DETALLE, COLS_TRANSP, COLS_UNIDADES, COLS_RESUMEN_T, FILAS_CORTE, logoBase64 } from './excel.js?v=__V__';
 
 const AZUL = [31, 78, 121];
 const nf = new Intl.NumberFormat('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -216,6 +216,30 @@ export async function pdfResumenAnual(anio, ops, empresa, { soloTabla = false } 
       styles: { fontSize: 7.5, cellPadding: 1.1 }, headStyles: { fillColor: AZUL, textColor: 255, halign: 'center', valign: 'middle' },
       footStyles: { fillColor: [235, 240, 246], textColor: 0, fontStyle: 'bold' },
       columnStyles: Object.fromEntries(COLS_RESUMEN_T.map(([, , , t], i) => [i, { halign: t ? 'right' : 'left' }])),
+      margin: { left: 10, right: 10, bottom: 14 },
+    });
+  }
+  piePaginas(doc, op);
+  return blob(doc);
+}
+
+/** REPORTES de avance por cortes (matriz como la hoja REPORTES). Se parte en bloques de 6 reportes por página. */
+export async function pdfCortes(op, proceso, cortes, ordinal) {
+  const doc = nuevoDoc('a4');
+  const P = proceso === 'despacho' ? 'DESPACHO' : 'ACOPIO';
+  const fmt = (v, t) => (v == null || v === '' ? '' : t === 'dt' ? fh(v).slice(0, 16) : t === 'n' ? n2(v) : String(v));
+  for (let i = 0; i < Math.max(1, cortes.length); i += 6) {
+    if (i) doc.addPage();
+    const y = await encabezado(doc, op, `PROCESO DE ${P} — ${op.nave} / ORDEN ${op.orden}`);
+    const bloque = cortes.slice(i, i + 6);
+    doc.autoTable({
+      startY: y,
+      head: [[`PROCESO DE ${P}`, ...bloque.map((r) => `${ordinal(r.numero)} REPORTE`)]],
+      body: FILAS_CORTE.map(([l, f, t]) => [l, ...bloque.map((r) => fmt(f(r), t))]),
+      styles: { fontSize: 8.5, cellPadding: 1.5, halign: 'center', lineColor: [200, 200, 200], lineWidth: 0.1 },
+      headStyles: { fillColor: AZUL, textColor: 255, fontStyle: 'bold' },
+      columnStyles: { 0: { halign: 'left', fontStyle: 'bold', fillColor: [238, 242, 247], cellWidth: 38 } },
+      didParseCell: (d) => { if (d.section === 'body' && ['TN PARCIAL', 'TN TOTAL', 'TN RESTANTES', 'FCH. EST. TERM.'].includes(d.row.raw[0]) && d.column.index > 0) d.cell.styles.fontStyle = 'bold'; },
       margin: { left: 10, right: 10, bottom: 14 },
     });
   }

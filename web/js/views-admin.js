@@ -90,6 +90,20 @@ export async function vImportar(view, ctx) {
   if (!puedeEscribir()) { view.innerHTML = '<div class="alert">Su usuario es de sólo lectura.</div>'; return; }
   const op = opActual();
   const cr = op ? await api(`/operaciones/${state.opId}/cruce`) : null;
+  const ct = op ? await api(`/operaciones/${state.opId}/cortes`) : null;
+  // Formulario de REPORTE HUACHO / CSPCP: exige la fecha y hora de cierre del corte
+  const formCorte = (id, proceso) => {
+    const c = ct[proceso];
+    const quien = proceso === 'despacho' ? 'despacho de la 1ra unidad (se toma del REPORTE HUACHO)' : 'ingreso al puerto de la 1ra unidad (se toma del REPORTE CSPCP)';
+    return `<form class="form" data-imp="${id}" data-proceso="${proceso}" style="margin-top:12px;grid-template-columns:repeat(auto-fill,minmax(220px,1fr))">
+      <label class="full">Archivo *<input type="file" name="archivo" accept=".xlsx,.xlsm,.xls,.csv" required aria-label="Archivo"></label>
+      <label>Corte<select name="modo">
+        <option value="nuevo">Nuevo: ${c.siguiente}° reporte de ${proceso}</option>
+        ${c.ultimo ? `<option value="actualizar">Actualizar el ${c.ultimo.numero}° reporte (corrección)</option>` : ''}</select></label>
+      <label>Fecha y hora de cierre del reporte *<input type="datetime-local" name="cierre" required></label>
+      <p class="full muted small" style="margin:0" data-inicio>Inicio del ${c.siguiente}° reporte: <strong>${c.inicio_siguiente ? `${fechaHora(c.inicio_siguiente)} (cierre del ${c.siguiente - 1}° reporte)` : `hora de ${quien}`}</strong>${!c.inicio_siguiente && c.primera ? ` · actualmente ${fechaHora(c.primera)}` : ''}</p>
+      <div class="full"><button class="btn primary">Importar</button></div></form><div class="small" data-res="${id}" style="margin-top:10px"></div>`;
+  };
   const ultima = (u) => (u ? `<p class="muted small" style="margin:6px 0 0">Última carga: <strong>${esc(fechaHora(u.en))}</strong> por ${esc(u.por)} · ${esc(u.archivo)}</p>` : '<p class="muted small" style="margin:6px 0 0">Aún no se ha cargado.</p>');
   const form = (id) => `<form class="btns" data-imp="${id}" style="margin-top:12px">
       <input type="file" name="archivo" accept=".xlsx,.xlsm,.xls,.csv" required style="max-width:340px" aria-label="Archivo">
@@ -99,10 +113,10 @@ export async function vImportar(view, ctx) {
     <div class="grid g2">
       <div class="card"><div class="card-h"><h2>REPORTE HUACHO</h2><span class="pill info">${num(cr.con_guia, 0)} guías</span></div>
         <p class="muted" style="margin:0">Despachos de planta (exportación SAP). Suba el archivo que le envían cada vez, completo o sólo las filas nuevas: las guías nuevas se agregan, las ya cargadas se actualizan si cambiaron y no se duplica nada.</p>
-        ${ultima(cr.ultima_huacho)}${form('despachos')}</div>
+        ${ultima(cr.ultima_huacho)}${formCorte('despachos', 'despacho')}</div>
       <div class="card"><div class="card-h"><h2>REPORTE CSPCP</h2><span class="pill info">${num(cr.tickets, 0)} tickets</span></div>
         <p class="muted" style="margin:0">Tickets de balanza del puerto (PLACA, TICKET, PESO NETO, TIEMPO INGRESO, TIEMPO SALIDA). Cada ticket se cruza con el viaje por <strong>placa + vuelta</strong>, igual que en el Excel. Si un ticket llega antes que su despacho, queda guardado y se cruza solo al importar el siguiente reporte de Huacho.</p>
-        ${ultima(cr.ultima_cspcp)}${form('tickets')}</div>
+        ${ultima(cr.ultima_cspcp)}${formCorte('tickets', 'acopio')}</div>
     </div>
     <div class="card"><div class="card-h"><h2>Estado del cruce Huacho ↔ CSPCP</h2><a class="btn sm" href="#/viajes">Ver detalle de viajes</a></div>
       <div class="kpis">
@@ -135,6 +149,7 @@ export async function vImportar(view, ctx) {
   view.querySelectorAll('[data-imp]').forEach((f) => f.addEventListener('submit', async (e) => {
     e.preventDefault();
     const tipo = f.dataset.imp;
+    if (f.dataset.proceso && !f.cierre.value) { toast('Ingrese la fecha y hora de cierre del reporte antes de importar.', true); f.cierre.focus(); return; }
     const out = view.querySelector(`[data-res="${tipo}"]`);
     const btn = f.querySelector('button'); btn.disabled = true;
     out.innerHTML = '<span class="muted">Procesando… (un archivo grande puede tardar unos segundos)</span>';
@@ -153,8 +168,9 @@ export async function vImportar(view, ctx) {
 }
 
 function resumenTexto(tipo, r) {
-  if (tipo === 'despachos') return `REPORTE HUACHO: ${r.insertados} viajes nuevos, ${r.actualizados} actualizados, ${r.sin_cambios} sin cambios. ${r.tickets_cruzados} tickets cruzados.${r.sin_transportista.length ? ` ${r.sin_transportista.length} placas sin transportista.` : ''}`;
-  if (tipo === 'tickets') return `REPORTE CSPCP: ${r.nuevos} tickets nuevos, ${r.actualizados} actualizados. ${r.asignados} cruzados con su viaje; ${r.sin_viaje.length} sin viaje.`;
+  const corte = r.corte ? ` ${r.corte.actualizado ? 'Se actualizó el' : 'Se creó el'} ${r.corte.numero}° reporte de ${tipo === 'despachos' ? 'despacho' : 'acopio'}: ${fechaHora(r.corte.inicio)} a ${fechaHora(r.corte.fin)}.${r.corte.posteriores ? ` ${r.corte.posteriores} viajes posteriores al cierre quedan para el siguiente reporte.` : ''}` : '';
+  if (tipo === 'despachos') return `REPORTE HUACHO: ${r.insertados} viajes nuevos, ${r.actualizados} actualizados, ${r.sin_cambios} sin cambios. ${r.tickets_cruzados} tickets cruzados.${r.sin_transportista.length ? ` ${r.sin_transportista.length} placas sin transportista.` : ''}${corte}`;
+  if (tipo === 'tickets') return `REPORTE CSPCP: ${r.nuevos} tickets nuevos, ${r.actualizados} actualizados. ${r.asignados} cruzados con su viaje; ${r.sin_viaje.length} sin viaje.${corte}`;
   return `LISTA: ${r.insertados} unidades nuevas, ${r.actualizados} actualizadas.`;
 }
 

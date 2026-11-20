@@ -243,6 +243,35 @@ function validarViaje(v, D, id) {
   return null;
 }
 
+/* ---------------- cortes (reportes de avance) ----------------
+   Corte 1: inicio = despacho (o ingreso al puerto) de la 1ra unidad; fin = cierre indicado al importar.
+   Corte n: inicio = cierre del corte n-1; fin = cierre indicado al importar el reporte n. */
+function primeraHora(D, proceso) {
+  const hs = proceso === 'despacho'
+    ? D.viajes.map((v) => v.despacho_en || (v.fecha_despacho ? `${v.fecha_despacho} 00:00:00` : null))
+    : [...D.viajes.map((v) => (v.ticket && v.ticket !== '-' ? v.ingreso_en : null)), ...(D.tickets || []).map((t) => t.ingreso)];
+  return hs.filter(Boolean).sort()[0] || null;
+}
+function registrarCorte(D, proceso, cierre, modo = 'nuevo', inicioManual = null) {
+  const cortes = D.reportes.filter((r) => r.tipo === proceso).sort((a, b) => a.numero - b.numero);
+  const ultimo = cortes[cortes.length - 1];
+  const nombre = proceso === 'despacho' ? 'despacho' : 'acopio';
+  if (modo === 'actualizar' && ultimo) {
+    if (C.toMs(cierre) <= C.toMs(ultimo.inicio)) throw err(400, `El cierre (${cierre}) debe ser posterior al inicio del corte N° ${ultimo.numero} (${ultimo.inicio})`);
+    ultimo.fin = cierre;
+    return { numero: ultimo.numero, inicio: ultimo.inicio, fin: cierre, actualizado: true };
+  }
+  const inicio = ultimo ? ultimo.fin : (inicioManual || primeraHora(D, proceso));
+  if (!inicio) throw err(400, `No se encontró la hora de ${proceso === 'despacho' ? 'despacho' : 'ingreso al puerto'} de la 1ra unidad para iniciar el 1er reporte de ${nombre}.`);
+  if (C.toMs(cierre) <= C.toMs(inicio)) throw err(400, `El cierre (${C.fmtDT(C.toMs(cierre))}) debe ser posterior al inicio del corte (${C.fmtDT(C.toMs(inicio))}).`);
+  D.seq = (D.seq || 0) + 1;
+  const numero = (ultimo?.numero || 0) + 1;
+  D.reportes.push({ id: D.seq, tipo: proceso, numero, inicio: C.normDT(inicio, false), fin: cierre, tn_acumulado: null, observacion: null });
+  const fuera = proceso === 'despacho'
+    ? D.viajes.filter((v) => v.despacho_en && C.toMs(v.despacho_en) >= C.toMs(cierre)).length
+    : D.viajes.filter((v) => v.ingreso_en && C.toMs(v.ingreso_en) >= C.toMs(cierre)).length;
+  return { numero, inicio: C.normDT(inicio, false), fin: cierre, posteriores: fuera };
+}
 /* ---------------- router ---------------- */
 const rutas = [];
 const ruta = (m, patron, fn) => rutas.push({ m, re: new RegExp(`^${patron.replace(/:(\w+)/g, '(?<$1>[^/]+)')}$`), fn });
@@ -434,6 +463,13 @@ ruta('GET', '/operaciones/:id/reportes', async ({ id }) => {
 ruta('POST', '/operaciones/:id/reportes', async ({ id }, b) => {
   ESCRIBE();
   if (!['despacho', 'acopio', 'embarque'].includes(b.tipo)) throw err(400, 'Tipo inválido');
+  if (b.tipo !== 'embarque') {
+    const fin = C.normDT(b.fin, false);
+    if (!fin) throw err(400, 'Ingrese la fecha y hora de cierre del corte');
+    let corte;
+    await mutarOp(id, (D) => { corte = registrarCorte(D, b.tipo, fin, 'nuevo', C.normDT(b.inicio, false)); });
+    return corte;
+  }
   const inicio = C.normDT(b.inicio, false), fin = C.normDT(b.fin, false);
   if (!inicio) throw err(400, 'Fecha-hora de inicio obligatoria');
   if (fin && C.toMs(fin) <= C.toMs(inicio)) throw err(400, 'El fin debe ser posterior al inicio');
@@ -451,11 +487,23 @@ ruta('PUT', '/reportes/:rid', async ({ rid }, b) => {
     const r = D.reportes.find((x) => x.id === Number(rid)); if (!r) throw err(404, 'No encontrado');
     const inicio = C.normDT(b.inicio ?? r.inicio, false), fin = C.normDT(b.fin, false);
     if (fin && C.toMs(fin) <= C.toMs(inicio)) throw err(400, 'El fin debe ser posterior al inicio');
+    const sig = r.tipo !== 'embarque' && D.reportes.find((x) => x.tipo === r.tipo && x.numero === r.numero + 1);
+    if (sig && fin && sig.fin && C.toMs(fin) >= C.toMs(sig.fin)) throw err(400, `El cierre debe ser anterior al cierre del corte N° ${sig.numero} (${sig.fin})`);
     Object.assign(r, { inicio, fin, tn_acumulado: N(b.tn_acumulado), observacion: S(b.observacion) });
+    // Encadenamiento: el cierre de un corte es el inicio del siguiente
+    if (sig && fin) sig.inicio = fin;
   });
   return { ok: true };
 });
-ruta('DELETE', '/reportes/:rid', async ({ rid }) => { ESCRIBE(); await mutarOp(opActualId, (D) => { D.reportes = D.reportes.filter((x) => x.id !== Number(rid)); }); return { ok: true }; });
+ruta('DELETE', '/reportes/:rid', async ({ rid }) => {
+  ESCRIBE();
+  await mutarOp(opActualId, (D) => {
+    const r = D.reportes.find((x) => x.id === Number(rid)); if (!r) return;
+    if (r.tipo !== 'embarque' && D.reportes.some((x) => x.tipo === r.tipo && x.numero > r.numero)) throw err(400, 'Sólo se puede eliminar el último corte');
+    D.reportes = D.reportes.filter((x) => x.id !== r.id);
+  });
+  return { ok: true };
+});
 const etapaBody = (b) => ({ nombre: S(b.nombre), inicio: C.normDT(b.inicio, false), fin: C.normDT(b.fin, false), observacion: S(b.observacion) });
 ruta('POST', '/operaciones/:id/etapas', async ({ id }, b) => {
   ESCRIBE();
@@ -573,11 +621,17 @@ ruta('POST', '/operaciones/:id/copiar-lista', async ({ id }, b) => {
 
 ruta('POST', '/operaciones/:id/importar/:tipo', async ({ id, tipo }, b, form) => {
   ESCRIBE();
+  if (!['despachos', 'tickets', 'lista'].includes(tipo)) throw err(400, 'Tipo de importación inválido');
+  // REPORTE HUACHO / CSPCP: la fecha y hora de cierre del corte es obligatoria
+  const proceso = tipo === 'despachos' ? 'despacho' : tipo === 'tickets' ? 'acopio' : null;
+  const cierre = proceso ? C.normDT(form?.get('cierre'), false) : null;
+  const modo = form?.get('modo') === 'actualizar' ? 'actualizar' : 'nuevo';
+  if (proceso && !cierre) throw err(400, `Ingrese la fecha y hora de cierre del reporte de ${proceso} antes de importar.`);
   const wb = await X.cargarLibro(archivo(form));
   const I = await leer(INDICE);
-  if (!['despachos', 'tickets', 'lista'].includes(tipo)) throw err(400, 'Tipo de importación inválido');
   return mutarOp(id, (D) => {
     const r = tipo === 'despachos' ? X.importarDespachos(D, I.transportistas, wb, yo.email) : tipo === 'tickets' ? X.importarTickets(D, wb) : X.importarLista(D, I.transportistas, wb);
+    if (proceso) r.corte = registrarCorte(D, proceso, cierre, modo);
     historial(D, `importar_${tipo}`, archivo(form).name);
     D.importaciones = [{ tipo, archivo: archivo(form).name, en: ahora(), por: yo.nombre || yo.email,
       resumen: { ...r, sin_viaje: r.sin_viaje?.length, errores: r.errores?.length, sin_transportista: r.sin_transportista?.length } },
@@ -908,6 +962,16 @@ ruta('GET', '/portal/op/:id/exportar/unidades-xlsx', async ({ id }) => {
 ruta('GET', '/portal/op/:id/exportar/unidades-pdf', async ({ id }) => {
   const v = await vistaPortal(id);
   return { blob: await P.pdfUnidades(v.operacion, v.transportista, v.unidades), nombre: `${v.operacion.nombre} - UNIDADES ${v.transportista.nombre_comercial}.pdf` };
+});
+
+ruta('GET', '/operaciones/:id/cortes', async ({ id }) => {
+  const D = await datosOp(id);
+  const info = (p) => {
+    const cs = D.reportes.filter((r) => r.tipo === p).sort((a, b) => a.numero - b.numero);
+    const u = cs[cs.length - 1];
+    return { siguiente: (u?.numero || 0) + 1, inicio_siguiente: u ? u.fin : null, primera: primeraHora(D, p), ultimo: u || null };
+  };
+  return { despacho: info('despacho'), acopio: info('acopio') };
 });
 
 /** Punto de entrada: igual a fetch('/api' + path). */

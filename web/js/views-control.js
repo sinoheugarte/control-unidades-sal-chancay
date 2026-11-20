@@ -1,6 +1,6 @@
 import {
   state, api, esc, num, fecha, fechaHora, horas, toInputDT, normPlaca, toast, $, modal, confirmar,
-  tabla, sinOperacion, puedeEscribir, esAdmin, chart, colores, descargar,
+  tabla, sinOperacion, puedeEscribir, esAdmin, chart, colores, descargar, descargarBlob,
 } from './core.js?v=__V__';
 import { NOMBRES_VUELTA } from './calc.js?v=__V__';
 import { formularioLista, enviarLista } from './views-admin.js?v=__V__';
@@ -21,26 +21,8 @@ export async function vReportes(view, ctx) {
   const acc = (r) => (edit ? `<button class="btn sm" data-r="${r.id}">Editar</button>` : '');
 
   if (tabRep !== 'embarque') {
-    const filas = d[tabRep];
-    const ult = [...filas].reverse().find((r) => r.tn_total !== null);
-    body.innerHTML = `
-      <div class="card-h"><p class="muted" style="margin:0">Cada reporte suma los viajes cuya hora de ${tabRep === 'despacho' ? 'salida de planta' : 'ingreso a puerto'}
-        cae dentro de su ventana (o que tienen el número de reporte asignado manualmente).</p>
-        ${edit ? '<button class="btn primary" id="b-add">+ Nuevo reporte</button>' : ''}</div>
-      ${ult ? `<div class="kpis" style="margin-bottom:14px">
-        <div class="kpi"><div class="l">TN total</div><div class="v">${num(ult.tn_total)}</div></div>
-        <div class="kpi"><div class="l">TN restantes</div><div class="v">${num(ult.tn_restantes)}</div></div>
-        <div class="kpi"><div class="l">Viajes est. restantes</div><div class="v">${num(ult.viajes_est_rest, 0)}</div></div>
-        <div class="kpi"><div class="l">Fecha est. término</div><div class="v" style="font-size:18px">${fechaHora(ult.fecha_est_termino)}</div></div></div>` : ''}
-      ${tabla([
-        { t: 'Reporte', f: (r) => `<strong>${r.numero}° reporte</strong>` }, { t: 'Inicio', f: (r) => fechaHora(r.inicio) }, { t: 'Fin', f: (r) => fechaHora(r.fin) },
-        { t: 'TN parcial', k: 'tn_parcial', n: 1 }, { t: '# Viajes', k: 'viajes', n: 1, d: 0 }, { t: '# Horas', f: (r) => horas(r.horas) },
-        { t: 'Prom. TN x unid.', k: 'tn_x_unidad', n: 1 }, { t: 'Prom. unid. x hr', k: 'unid_x_hora', n: 1 },
-        { t: 'TN total', k: 'tn_total', n: 1 }, { t: 'Viajes total', k: 'viajes_total', n: 1, d: 0 }, { t: 'Hrs. total', f: (r) => horas(r.horas_total) },
-        { t: 'TN restantes', k: 'tn_restantes', n: 1 }, { t: 'Viajes est. rest.', k: 'viajes_est_rest', n: 1, d: 0 },
-        { t: 'Hrs. est. rest.', f: (r) => horas(r.horas_est_rest) }, { t: 'Fch. est. término', f: (r) => fechaHora(r.fecha_est_termino) },
-        { t: '', f: acc },
-      ], filas, { empty: 'Aún no hay reportes. Cree el primero con su hora de inicio y fin.' })}`;
+    pintarCortes(body, d[tabRep], tabRep, edit, ctx);
+    return;
   } else {
     const e = d.embarque;
     body.innerHTML = `
@@ -82,8 +64,106 @@ export async function vReportes(view, ctx) {
   });
 }
 
+export const ordinal = (n) => `${n}${({ 1: 'er', 2: 'do', 3: 'er', 4: 'to', 5: 'to', 6: 'to', 7: 'mo', 8: 'vo', 9: 'no', 0: 'mo' })[n % 10]}`
+  .replace(/^11er$/, '11mo').replace(/^12do$/, '12mo').replace(/^13er$/, '13er');
+
+/** PROCESO DE DESPACHO / ACOPIO: avance por cortes (como la hoja REPORTES). */
+function pintarCortes(body, cortes, proceso, edit, ctx) {
+  const P = proceso === 'despacho' ? 'DESPACHO' : 'ACOPIO';
+  const hechos = cortes.filter((r) => r.tn_total !== null);
+  const u = hechos[hechos.length - 1];
+  const prog = state.ops.find((o) => o.id === state.opId)?.tn_programadas || 0;
+  const tph = u && u.horas_total ? u.tn_total / u.horas_total : null;
+  const filas = [
+    ['INICIO', (r) => fechaHora(r.inicio)], ['CIERRE', (r) => fechaHora(r.fin)],
+    ['TN PARCIAL', (r) => num(r.tn_parcial), true], ['# VIAJES', (r) => num(r.viajes, 0)], ['# HORAS', (r) => horas(r.horas)],
+    ['Ø TN X UNID.', (r) => num(r.tn_x_unidad)], ['Ø UNID. X HR', (r) => num(r.unid_x_hora)],
+    ['TN TOTAL', (r) => num(r.tn_total), true], ['VIAJES TOTAL', (r) => num(r.viajes_total, 0)], ['HRS. TOTAL', (r) => horas(r.horas_total)],
+    ['TN RESTANTES', (r) => num(r.tn_restantes), true], ['VIAJES EST. REST.', (r) => num(r.viajes_est_rest, 0)],
+    ['HRS. EST. REST.', (r) => horas(r.horas_est_rest)], ['FCH. EST. TERM.', (r) => fechaHora(r.fecha_est_termino), true],
+  ];
+  body.innerHTML = `
+    <div class="card-h"><div><h2>PROCESO DE ${P}</h2>
+      <p class="muted small" style="margin:4px 0 0">El 1er reporte inicia con la hora de ${proceso === 'despacho' ? 'despacho de la 1ra unidad (REPORTE HUACHO)' : 'ingreso al puerto de la 1ra unidad (REPORTE CSPCP)'};
+      cada reporte cierra con la fecha y hora indicada al importar, y ese cierre es el inicio del siguiente.</p></div>
+      <div class="btns"><button class="btn" id="c-xls">Excel</button><button class="btn" id="c-pdf">PDF</button>
+      ${edit ? `<a class="btn primary" href="#/importar">Importar ${proceso === 'despacho' ? 'REPORTE HUACHO' : 'REPORTE CSPCP'}</a>` : ''}</div></div>
+    ${!cortes.length ? `<div class="empty">Aún no hay reportes de ${proceso}. Se crean al importar el ${proceso === 'despacho' ? 'REPORTE HUACHO' : 'REPORTE CSPCP'} indicando la fecha y hora de cierre.</div>` : `
+    <div class="kpis" style="margin-bottom:16px">
+      <div class="kpi"><div class="l">TN total ${proceso}</div><div class="v">${num(u?.tn_total)}</div>
+        <div class="s">${prog ? `${num(Math.min(100, ((u?.tn_total || 0) / prog) * 100), 1)} % de ${num(prog, 0)} TN` : ''}</div>
+        ${prog ? `<div class="bar ${u?.tn_total >= prog ? 'ok' : ''}"><i style="width:${Math.min(100, ((u?.tn_total || 0) / prog) * 100)}%"></i></div>` : ''}</div>
+      <div class="kpi"><div class="l">Reportes (cortes)</div><div class="v">${cortes.length}</div><div class="s">${u ? `último: ${fechaHora(u.fin)}` : ''}</div></div>
+      <div class="kpi"><div class="l">Ritmo promedio</div><div class="v">${num(tph)}</div><div class="s">TN por hora · ${num(u?.horas_total ? u.viajes_total / u.horas_total : null)} unid./h</div></div>
+      <div class="kpi"><div class="l">TN restantes</div><div class="v">${num(u?.tn_restantes)}</div><div class="s">${num(u?.viajes_est_rest, 0)} viajes estimados</div></div>
+      <div class="kpi"><div class="l">Fecha est. término</div><div class="v" style="font-size:19px">${fechaHora(u?.fecha_est_termino)}</div><div class="s">faltan ${horas(u?.horas_est_rest)} h</div></div>
+    </div>
+    <div class="grid g2" style="margin-bottom:16px">
+      <div class="card"><div class="card-h"><h3>TN por reporte y acumulado</h3><span class="muted small">clic en una barra para ver sus viajes</span></div><div class="chart-box"><canvas id="c-tn"></canvas></div></div>
+      <div class="card"><div class="card-h"><h3>Ritmo por reporte</h3><span class="muted small">unidades por hora y TN por unidad</span></div><div class="chart-box"><canvas id="c-ritmo"></canvas></div></div>
+    </div>
+    <div class="table-wrap" style="max-height:none"><table class="matriz">
+      <thead><tr><th style="position:sticky;left:0;z-index:2">PROCESO DE ${P}</th>${cortes.map((r) => `<th class="num" style="text-align:center">
+        <button class="btn sm" data-ver="${r.numero}" title="Ver viajes de este reporte">${ordinal(r.numero)} REPORTE</button></th>`).join('')}</tr></thead>
+      <tbody>${filas.map(([l, f, fuerte]) => `<tr><th style="position:sticky;left:0;background:var(--surface-2)">${l}</th>${cortes.map((r) => `<td class="num" style="text-align:center">${fuerte ? `<strong>${f(r)}</strong>` : f(r)}</td>`).join('')}</tr>`).join('')}</tbody>
+      ${edit ? `<tfoot><tr><td style="position:sticky;left:0"></td>${cortes.map((r, i) => `<td style="text-align:center"><button class="btn sm" data-r="${r.id}">Editar cierre</button>${i === cortes.length - 1 ? ` <button class="btn sm danger" data-del="${r.id}">Eliminar</button>` : ''}</td>`).join('')}</tr></tfoot>` : ''}
+    </table></div>`}`;
+  if (cortes.length) {
+    const c = colores();
+    const etiquetas = cortes.map((r) => `${ordinal(r.numero)} rep.`);
+    chart($('#c-tn'), {
+      data: { labels: etiquetas, datasets: [
+        { type: 'bar', label: 'TN parcial', data: cortes.map((r) => r.tn_parcial), backgroundColor: c.serie[0], borderRadius: 4, yAxisID: 'y' },
+        { type: 'line', label: 'TN acumulada', data: cortes.map((r) => r.tn_total), borderColor: c.serie[1], backgroundColor: c.serie[1], tension: 0.25, yAxisID: 'y' },
+        ...(prog ? [{ type: 'line', label: 'Programado', data: cortes.map(() => prog), borderColor: c.texto, borderDash: [5, 4], pointRadius: 0, borderWidth: 1, yAxisID: 'y' }] : []),
+      ] },
+      options: { plugins: { legend: { position: 'bottom' } }, scales: { y: { beginAtZero: true } },
+        onClick: (e, els) => { if (els[0]) verViajes(proceso, cortes[els[0].index]); } },
+    });
+    chart($('#c-ritmo'), {
+      type: 'line',
+      data: { labels: etiquetas, datasets: [
+        { label: 'Unid. por hora', data: cortes.map((r) => r.unid_x_hora), borderColor: c.serie[2], backgroundColor: c.serie[2], tension: 0.25, yAxisID: 'y' },
+        { label: 'TN por unidad', data: cortes.map((r) => r.tn_x_unidad), borderColor: c.serie[3], backgroundColor: c.serie[3], tension: 0.25, yAxisID: 'y1' },
+      ] },
+      options: { plugins: { legend: { position: 'bottom' } }, scales: { y: { beginAtZero: true, position: 'left' }, y1: { beginAtZero: false, position: 'right', grid: { drawOnChartArea: false } } } },
+    });
+  }
+  body.addEventListener('click', async (e) => {
+    const n = e.target.closest('[data-ver]')?.dataset.ver;
+    if (n) return verViajes(proceso, cortes.find((r) => r.numero === Number(n)));
+    const ed = e.target.closest('[data-r]')?.dataset.r;
+    if (ed) return corteModal(cortes.find((r) => r.id === Number(ed)), ctx.rerender, false);
+    const del = e.target.closest('[data-del]')?.dataset.del;
+    if (del) {
+      const r = cortes.find((x) => x.id === Number(del));
+      if (!(await confirmar(`¿Eliminar el ${ordinal(r.numero)} reporte de ${proceso}? Sus viajes pasarán al siguiente reporte que se cree.`))) return;
+      try { await api(`/reportes/${r.id}`, { method: 'DELETE' }); ctx.rerender(); } catch (err) { toast(err.message, true); }
+    }
+  });
+  $('#c-xls', body).onclick = async () => { const { exportarCortes } = await import('./excel.js?v=__V__'); const op = state.ops.find((o) => o.id === state.opId);
+    descargarBlob(await exportarCortes(op, proceso, cortes, ordinal), `${op.nombre || `${op.nave} - ORDEN ${op.orden}`} - REPORTES ${P}.xlsx`); };
+  $('#c-pdf', body).onclick = async () => { const { pdfCortes } = await import('./pdf.js?v=__V__'); const op = state.ops.find((o) => o.id === state.opId);
+    descargarBlob(await pdfCortes(await api(`/operaciones/${state.opId}`), proceso, cortes, ordinal), `${op.nombre || `${op.nave} - ORDEN ${op.orden}`} - REPORTES ${P}.pdf`); };
+}
+
+async function verViajes(proceso, r) {
+  const vs = (await api(`/operaciones/${state.opId}/viajes`)).filter((v) => (proceso === 'despacho' ? v.rep_despacho_calc : v.rep_acopio_calc) === r.numero
+    && (proceso === 'despacho' || v.status !== 'FALTA DESCARGAR'));
+  const k = proceso === 'despacho' ? 'peso_origen' : 'peso_destino_calc';
+  modal({
+    title: `${ordinal(r.numero)} reporte de ${proceso}: ${fechaHora(r.inicio)} a ${fechaHora(r.fin)}`, wide: true,
+    body: tabla([
+      { t: 'N° viaje', k: 'nro' }, { t: 'Transporte', k: 'transportista_nombre' }, { t: 'Placa', k: 'placa' }, { t: 'Guía', k: 'guia' },
+      { t: proceso === 'despacho' ? 'Despacho' : 'Ingreso CSPCP', f: (v) => fechaHora(proceso === 'despacho' ? v.despacho_en : v.ingreso_en) },
+      { t: proceso === 'despacho' ? 'TN Huacho' : 'TN CSPCP', k, n: 1 },
+    ], vs, { empty: 'Sin viajes en este reporte', foot: [`${vs.length} viajes`, '', '', '', '', num(vs.reduce((s, v) => s + (v[k] || 0), 0))] }),
+  });
+}
+
 function reporteModal(r, done, nuevo) {
   const emb = r.tipo === 'embarque';
+  if (!emb) return corteModal(r, done, nuevo);
   const dlg = modal({
     title: nuevo ? `Nuevo reporte de ${r.tipo}` : `${r.numero}° reporte de ${r.tipo}`,
     body: `<div class="form">
@@ -103,6 +183,21 @@ function reporteModal(r, done, nuevo) {
   $('#b-del', dlg)?.addEventListener('click', async () => {
     if (!(await confirmar(`¿Eliminar el ${r.numero}° reporte de ${r.tipo}?`))) return;
     await api(`/reportes/${r.id}`, { method: 'DELETE' }); dlg.close(); dlg.remove(); done();
+  });
+}
+
+function corteModal(r, done, nuevo) {
+  modal({
+    title: nuevo ? `Nuevo reporte de ${r.tipo} (manual)` : `Cierre del ${ordinal(r.numero)} reporte de ${r.tipo}`,
+    body: `<div class="form">
+      <p class="full muted" style="margin:0">Inicio: <strong>${r.inicio ? fechaHora(r.inicio) : 'hora de la 1ra unidad'}</strong>${nuevo ? ' (cierre del reporte anterior)' : ''}. Al cambiar el cierre, el siguiente reporte empieza en esa nueva hora.</p>
+      <label>Fecha y hora de cierre *<input name="fin" type="datetime-local" required value="${toInputDT(r.fin)}"></label>
+      <label class="full">Observación<input name="observacion" value="${esc(r.observacion || '')}"></label></div>`,
+    onSubmit: async (d) => {
+      if (nuevo) await api(`/operaciones/${state.opId}/reportes`, { method: 'POST', body: { ...d, tipo: r.tipo } });
+      else await api(`/reportes/${r.id}`, { method: 'PUT', body: { ...d, inicio: r.inicio } });
+      toast('Reporte guardado'); done();
+    },
   });
 }
 

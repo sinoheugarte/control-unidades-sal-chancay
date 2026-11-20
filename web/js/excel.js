@@ -769,3 +769,33 @@ export async function exportarResumenAnual(anio, ops, { soloTabla = false } = {}
   }
   return blob(wb);
 }
+
+/* ---------------- REPORTES de avance por cortes (PROCESO DE DESPACHO / ACOPIO) ---------------- */
+const horasTxt = (h) => (h == null ? '' : `${Math.floor(Math.round(h * 60) / 60)}:${String(Math.round(h * 60) % 60).padStart(2, '0')}`);
+export const FILAS_CORTE = [
+  ['INICIO', (r) => r.inicio, 'dt'], ['CIERRE', (r) => r.fin, 'dt'], ['TN PARCIAL', (r) => r.tn_parcial, 'n'], ['# VIAJES', (r) => r.viajes, 'i'],
+  ['# HORAS', (r) => horasTxt(r.horas)], ['Ø TN X UNID.', (r) => r.tn_x_unidad, 'n'], ['Ø UNID. X HR', (r) => r.unid_x_hora, 'n'],
+  ['TN TOTAL', (r) => r.tn_total, 'n'], ['VIAJES TOTAL', (r) => r.viajes_total, 'i'], ['HRS. TOTAL', (r) => horasTxt(r.horas_total)],
+  ['TN RESTANTES', (r) => r.tn_restantes, 'n'], ['VIAJES EST. REST.', (r) => r.viajes_est_rest, 'i'], ['HRS. EST. REST.', (r) => horasTxt(r.horas_est_rest)],
+  ['FCH. EST. TERM.', (r) => r.fecha_est_termino, 'dt'],
+];
+export async function exportarCortes(op, proceso, cortes, ordinal) {
+  const wb = new (XL().Workbook)();
+  const P = proceso === 'despacho' ? 'DESPACHO' : 'ACOPIO';
+  const ws = wb.addWorksheet(`PROCESO DE ${P}`, { pageSetup: { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, paperSize: 9 } });
+  ws.getColumn(1).width = 2; ws.getColumn(2).width = 20;
+  cortes.forEach((_, i) => { ws.getColumn(i + 3).width = 18; });
+  const logo = await logoBase64();
+  if (logo) ws.addImage(wb.addImage({ base64: logo, extension: 'png' }), { tl: { col: 1.1, row: 0.1 }, ext: { width: 90, height: 50 } });
+  ws.getCell('C1').value = (op.empresa || 'PACIFICO DESPACHOS S.A.C.').trim(); ws.getCell('C1').font = { bold: true, size: 13, color: { argb: AZUL } };
+  ws.getCell('C2').value = `PROCESO DE ${P} — ${op.nave} / ORDEN ${op.orden}`; ws.getCell('C2').font = { bold: true, size: 11 };
+  const h = ws.getRow(4);
+  h.values = [null, `PROCESO DE ${P}`, ...cortes.map((r) => `${ordinal(r.numero)} REPORTE ${P}`)];
+  cabecera(h);
+  for (const [l, f, t] of FILAS_CORTE) {
+    const row = ws.addRow([null, l, ...cortes.map((r) => { const v = f(r); if (v == null || v === '') return null; return t === 'dt' ? new Date(C.toMs(v)) : v; })]);
+    row.getCell(2).font = { bold: true, size: 9 }; row.getCell(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEEF2F7' } };
+    for (let c = 2; c <= cortes.length + 2; c++) { const cell = row.getCell(c); cell.border = borde; if (c > 2) { cell.alignment = { horizontal: 'center' }; cell.font = { size: 9, bold: ['TN PARCIAL', 'TN TOTAL', 'TN RESTANTES', 'FCH. EST. TERM.'].includes(l) }; if (FMT[t]) cell.numFmt = t === 'dt' ? 'dd/mm/yyyy hh:mm' : FMT[t]; } }
+  }
+  return blob(wb);
+}

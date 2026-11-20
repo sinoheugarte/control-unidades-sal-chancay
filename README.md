@@ -25,7 +25,12 @@ Funciona igual que **Pacifico TP Reporte**:
   1. Salida de planta: placa, guía, peso y hora.
   2. Recepción en puerto: placa, ticket y peso. Se asigna sola al viaje pendiente de esa placa.
 - **Detalle de viajes** con todas las columnas calculadas del Excel: vuelta, diferencia de pesos, acumulado, restante, tiempo y rango de atención, status.
-- **Reportes por turno** de despacho, acopio y embarque, con TN restantes y fecha estimada de término.
+- **Reporte de avance por cortes** (PROCESO DE DESPACHO / ACOPIO, como la hoja REPORTES):
+  - El 1er corte inicia con la hora de despacho de la 1ra unidad (REPORTE HUACHO), o de ingreso al puerto en el caso de CSPCP.
+  - Cada corte cierra con la fecha y hora que se indica, de forma **obligatoria**, al importar el reporte. Ese cierre es el inicio del siguiente corte.
+  - Se puede actualizar el último corte, por ejemplo al subir de nuevo un reporte corregido.
+  - Incluye indicadores, gráficos, la matriz por corte (TN, viajes, horas, promedios, restantes y fecha estimada de término) y el detalle de viajes de cada corte.
+  - Exporta a Excel y PDF.
 - **Tablero** con indicadores, gráficos y el balance planta → puerto → embarque → draft SGS.
 - **Transportistas**, con el reporte de servicio de cada uno exportable a Excel.
 - **Lista de unidades**, **resúmenes** y **planificación** (pre-acopio).
