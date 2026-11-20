@@ -347,21 +347,36 @@ function resumenJornadas(vs) {
   };
 }
 
-/** Viajes por unidad y distribución de vueltas (hoja RESUMEN 3). */
+/**
+ * Hoja RESUMEN 3 (dos tablas dinámicas sobre DETALLE TRANSPORTE):
+ *  - TablaDinámica3: TRANSPORTE → PLACA con CONTEO (correlativo dentro de cada empresa) y # VIAJES;
+ *    empresas y placas ordenadas de mayor a menor # de viajes. Total general y UNIDADES ACTIVAS.
+ *  - TablaDinámica2: # VUELTAS (de la mayor a la 1) → CANT. UNIDADES = cuántas unidades llegaron a esa
+ *    vuelta (cuenta de filas con esa vuelta). La suma es el total de viajes.
+ */
 function resumenUnidades(vs) {
   const m = new Map();
   for (const v of vs) {
-    const o = m.get(v.placa) || { placa: v.placa, transportista: v.transportista_nombre, viajes: 0, tn: 0 };
+    const o = m.get(v.placa) || { placa: v.placa, transportista: v.transportista_nombre || 'SIN TRANSPORTISTA', viajes: 0, tn: 0 };
     o.viajes++; o.tn = r3(o.tn + (v.peso_destino_calc || 0));
+    if (!o.transportista || o.transportista === 'SIN TRANSPORTISTA') o.transportista = v.transportista_nombre || o.transportista;
     m.set(v.placa, o);
   }
   const unidades = [...m.values()].sort((a, b) => b.viajes - a.viajes || a.placa.localeCompare(b.placa));
-  const dist = new Map();
-  for (const u of unidades) dist.set(u.viajes, (dist.get(u.viajes) || 0) + 1);
-  return {
-    unidades,
-    distribucion: [...dist.entries()].map(([vueltas, cantidad]) => ({ vueltas, cantidad })).sort((a, b) => b.vueltas - a.vueltas),
-  };
+  const g = new Map();
+  for (const u of unidades) {
+    const x = g.get(u.transportista) || { transportista: u.transportista, viajes: 0, tn: 0, unidades: [] };
+    x.viajes += u.viajes; x.tn = r3(x.tn + u.tn);
+    x.unidades.push({ ...u, conteo: x.unidades.length + 1 });
+    g.set(u.transportista, x);
+  }
+  const grupos = [...g.values()].sort((a, b) => b.viajes - a.viajes || a.transportista.localeCompare(b.transportista));
+  const porVuelta = new Map();
+  for (const v of vs) { const n = v.vuelta || 1; porVuelta.set(n, (porVuelta.get(n) || 0) + 1); }
+  const max = Math.max(0, ...porVuelta.keys());
+  const distribucion = [];
+  for (let n = max; n >= 1; n--) distribucion.push({ vueltas: n, cantidad: porVuelta.get(n) || 0 });
+  return { unidades, grupos, distribucion, total_viajes: vs.length, unidades_activas: unidades.length };
 }
 
 /** Tiempo de atención en puerto por día (RESUMEN ACOPIO, Q21). */

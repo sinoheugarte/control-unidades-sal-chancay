@@ -455,11 +455,13 @@ export async function vResumenes(view) {
   view.innerHTML = `
     <div class="grid g2">${jTabla(d.jornadas.despacho, 'Despacho de sal por jornada (planta)')}${jTabla(d.jornadas.acopio, 'Acopio de sal por jornada (puerto)')}</div>
     <div class="grid g2">
-      <div class="card"><div class="card-h"><h3>Distribución de vueltas por unidad</h3></div><div class="chart-box"><canvas id="ch-vueltas"></canvas></div>
-        ${tabla([{ t: '# Vueltas', k: 'vueltas' }, { t: 'Cant. unidades', k: 'cantidad', n: 1, d: 0 }], d.unidades.distribucion, { foot: ['Total', num(d.unidades.unidades.length, 0)] })}</div>
-      <div class="card"><div class="card-h"><h3>Viajes por unidad</h3></div>${tabla([
-        { t: 'Placa', f: (u) => `<strong>${esc(u.placa)}</strong>` }, { t: 'Transporte', k: 'transportista' }, { t: '# Viajes', k: 'viajes', n: 1, d: 0 }, { t: 'TN', k: 'tn', n: 1 },
-      ], d.unidades.unidades)}</div>
+      <div class="card"><div class="card-h"><h3>Viajes por transportista y unidad</h3></div>
+        <p class="muted small" style="margin:0 0 8px">Empresas y placas ordenadas de mayor a menor número de viajes (hoja RESUMEN 3).</p>
+        ${pintarViajesUnidad(d.unidades)}</div>
+      <div class="card"><div class="card-h"><h3>Unidades por vuelta</h3></div>
+        <p class="muted small" style="margin:0 0 8px">Cantidad de unidades que llegaron a cada vuelta (1ª vuelta = todas las unidades activas). La suma es el total de viajes.</p>
+        <div class="chart-box"><canvas id="ch-vueltas"></canvas></div>
+        ${tabla([{ t: '# Vueltas', k: 'vueltas' }, { t: 'Cant. unidades', k: 'cantidad', n: 1, d: 0 }], d.unidades.distribucion, { foot: ['Total viajes', num(d.unidades.total_viajes ?? d.unidades.distribucion.reduce((a, x) => a + x.cantidad, 0), 0)] })}</div>
     </div>
     <div class="card"><div class="card-h"><h3>Tiempo de atención en puerto (por día de ingreso)</h3></div>${tabla([
       { t: 'Día', f: (x) => fecha(x.dia) }, ...R.map((r) => ({ t: r, k: r, n: 1, d: 0 })), { t: 'Total viajes', k: 'total', n: 1, d: 0 },
@@ -468,9 +470,20 @@ export async function vResumenes(view) {
   const dist = [...d.unidades.distribucion].sort((a, b) => a.vueltas - b.vueltas);
   chart($('#ch-vueltas'), {
     type: 'bar',
-    data: { labels: dist.map((x) => `${x.vueltas} v.`), datasets: [{ label: 'Unidades', data: dist.map((x) => x.cantidad), backgroundColor: c.serie[2], borderRadius: 4 }] },
+    data: { labels: dist.map((x) => `${x.vueltas}ª`), datasets: [{ label: 'Unidades', data: dist.map((x) => x.cantidad), backgroundColor: c.serie[2], borderRadius: 4 }] },
     options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } },
   });
+}
+
+/** Tabla agrupada TRANSPORTE → PLACA (CONTEO, # VIAJES), como la tabla dinámica de RESUMEN 3. */
+function pintarViajesUnidad(u) {
+  const grupos = u.grupos || [];
+  if (!grupos.length) return '<div class="empty">Sin viajes</div>';
+  const filas = grupos.map((g) => `<tr class="grp"><td><strong>${esc(g.transportista)}</strong></td><td class="num"><strong>${num(g.unidades.length, 0)} und.</strong></td><td class="num"><strong>${num(g.viajes, 0)}</strong></td><td class="num"><strong>${num(g.tn)}</strong></td></tr>`
+    + g.unidades.map((x) => `<tr><td style="padding-left:22px">${esc(x.placa)}</td><td class="num">${x.conteo}</td><td class="num">${num(x.viajes, 0)}</td><td class="num">${num(x.tn)}</td></tr>`).join('')).join('');
+  return `<div class="table-wrap" style="max-height:640px"><table><thead><tr><th>Transporte / placa</th><th class="num">Conteo</th><th class="num"># Viajes</th><th class="num">TN</th></tr></thead>
+    <tbody>${filas}</tbody>
+    <tfoot><tr><td>Total general · unidades activas</td><td class="num">${num(u.unidades_activas, 0)} und.</td><td class="num">${num(u.total_viajes, 0)}</td><td class="num">${num(grupos.reduce((a, g) => a + g.tn, 0))}</td></tr></tfoot></table></div>`;
 }
 
 /* =================== PLANIFICACIÓN (PREACOPIO) =================== */
