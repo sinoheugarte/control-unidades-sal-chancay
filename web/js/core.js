@@ -129,6 +129,14 @@ export function sinOperacion() {
     <a class="btn primary" href="#/operaciones">Ir a Operaciones</a></div>`;
 }
 
+/** Descarga un Blob generado en el navegador. */
+export function descargarBlob(blob, nombre) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = nombre;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+}
+
 /** Descarga un archivo generado por la "API" local (rutas /api/...exportar...). */
 export async function descargar(url) {
   try {

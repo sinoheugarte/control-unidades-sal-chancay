@@ -297,6 +297,36 @@ function resumenTransportistas(vs, participantes, unidades) {
   });
 }
 
+/**
+ * Resumen compacto de una operación para el RESUMEN ANUAL (como el libro
+ * "RESUMEN DE OPERACIONES ACOPIO DE SAL"): fechas y TN de acopio, y el cuadro por transportista.
+ */
+function resumenOperacion(vs, op, participantes, unidades) {
+  const desc = vs.filter((v) => v.status === STATUS.DESCARGADO);
+  const fechasAcopio = desc.map((v) => (v.ingreso_en || v.fecha_recepcion || '').slice(0, 10)).filter(Boolean).sort();
+  const fechasDesp = vs.map((v) => v.fecha_despacho).filter(Boolean).sort();
+  const rt = resumenTransportistas(vs, participantes, unidades);
+  return {
+    viajes: vs.length,
+    unidades: new Set(vs.map((v) => v.placa)).size,
+    tn_despacho: r3(vs.reduce((s, v) => s + (v.peso_origen || 0), 0)),
+    tn_acopio: r3(desc.reduce((s, v) => s + (v.peso_destino || 0), 0)),
+    inicio_acopio: fechasAcopio[0] || fechasDesp[0] || null,
+    fin_acopio: fechasAcopio[fechasAcopio.length - 1] || fechasDesp[fechasDesp.length - 1] || null,
+    transportistas: rt.map((t) => ({
+      razon_social: t.razon_social, ruc: t.ruc, nombre_comercial: t.nombre_comercial,
+      unidades_solicitadas: t.unidades_solicitadas || 0, unidades_en_lista: t.unidades_en_lista, tn_prom_unidad: t.tn_prom_unidad,
+      viajes_aprox: t.viajes_aprox, tn_aprox: t.tn_aprox, unidades_activas: t.unidades_activas, viajes_realizados: t.viajes_realizados,
+      tn_huacho: t.tn_despacho, tn_cspcp: t.tn_final, observacion: t.observacion || t.observacion_calc || '',
+    })),
+  };
+}
+
+/** Año al que pertenece una operación (para el resumen anual). */
+function anioOperacion(o) {
+  return Number(o.anio || String(o.resumen?.inicio_acopio || o.fecha_inicio || o.eta || '').slice(0, 4)) || null;
+}
+
 /** Resumen operativo por día y jornada (hoja RESUMEN 2). */
 function resumenJornadas(vs) {
   const agrupar = (lista, fFecha, fJornada, fPeso) => {
@@ -387,5 +417,5 @@ export {
   JORNADAS, RANGOS, STATUS,
   normPlaca, toMs, fmtDT, normDT, normDate, jornadaDe, turnoDe, rangoDe, r3,
   enriquecerViajes, totales, tablaReportes, tablaEmbarque,
-  resumenTransportistas, vueltasPlan, resumenJornadas, resumenUnidades, resumenTiempos, preacopio,
+  resumenTransportistas, vueltasPlan, resumenOperacion, anioOperacion, resumenJornadas, resumenUnidades, resumenTiempos, preacopio,
 };

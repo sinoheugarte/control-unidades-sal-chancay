@@ -147,13 +147,24 @@ const unidadesDe = (D, I) => D.unidades.map((u) => ({ ...u, transportista_nombre
   .sort((a, b) => String(a.transportista_nombre).localeCompare(String(b.transportista_nombre)) || String(a.ap_paterno).localeCompare(String(b.ap_paterno)));
 
 /** Mantiene el resumen de la operación en el índice. */
+/** Resumen para el RESUMEN ANUAL: calculado de los viajes, o el importado de un libro de resumen histórico. */
+function calcularResumen(D, I) {
+  const fechas = (r) => ({ ...r, inicio_acopio: D.operacion.inicio_acopio || r.inicio_acopio, fin_acopio: D.operacion.fin_acopio || r.fin_acopio });
+  if (!D.viajes.length && D.resumen_manual) return fechas(D.resumen_manual);
+  const raw = D.viajes.map((v) => ({ ...v, transportista_nombre: nombreT(I.transportistas, v.transportista_id) }));
+  const vs = C.enriquecerViajes(raw, D.operacion, D.reportes);
+  return fechas(C.resumenOperacion(vs, D.operacion, participantes(D, I), unidadesDe(D, I)));
+}
 async function syncIndice(D) {
   const o = D.operacion;
-  const actual = (await leer(INDICE)).operaciones.find((x) => x.id === o.id);
+  const I0 = await leer(INDICE);
+  const actual = I0.operaciones.find((x) => x.id === o.id);
   const fechas = D.viajes.map((v) => v.fecha_despacho).filter(Boolean).sort();
+  const resumen = calcularResumen(D, I0);
   const res = { id: o.id, nombre: nombreReporte(o), archivo: actual?.archivo || `op-${o.id}.json`, nave: o.nave, orden: o.orden, cliente: o.cliente,
     producto: o.producto, dam: o.dam || null, manifiesto: o.manifiesto || null, referencia: o.referencia || null, eta: o.eta, fecha_inicio: o.fecha_inicio,
-    tn_programadas: o.tn_programadas, estado: o.estado, n_viajes: D.viajes.length,
+    tn_programadas: o.tn_programadas, estado: o.estado, n_viajes: D.viajes.length, anio: o.anio || null, origen: o.origen || null,
+    finalizada_en: o.finalizada_en || null, resumen,
     primer_viaje: fechas[0] || null, ultimo_viaje: fechas[fechas.length - 1] || null, actualizado_en: ahora(), actualizado_por: yo?.nombre || yo?.email || null };
   const sinMarca = ({ actualizado_en, actualizado_por, ...r }) => r; // eslint-disable-line no-unused-vars
   if (actual && JSON.stringify(sinMarca(actual)) === JSON.stringify(sinMarca(res))) return;
@@ -169,15 +180,15 @@ async function mutarOp(id, fn) {
 
 /* ---------------- operaciones ---------------- */
 const OP_CAMPOS = ['nave', 'orden', 'manifiesto', 'dam', 'eta', 'cliente', 'producto', 'referencia', 'punto_salida', 'punto_llegada',
-  'empresa', 'coordinador', 'fecha_inicio', 'tn_programadas', 'tn_embarque_programadas', 'tn_draft_sgs', 'params', 'estado'];
+  'empresa', 'coordinador', 'fecha_inicio', 'tn_programadas', 'tn_embarque_programadas', 'tn_draft_sgs', 'params', 'estado', 'anio', 'inicio_acopio', 'fin_acopio'];
 function opDesdeBody(b) {
   const o = {};
   for (const k of OP_CAMPOS) {
     if (!(k in b)) continue;
-    if (k.startsWith('tn_')) o[k] = N(b[k]);
+    if (k.startsWith('tn_') || k === 'anio') o[k] = N(b[k]);
     else if (k === 'params') o[k] = typeof b[k] === 'string' ? b[k] : JSON.stringify(b[k] || {});
     else if (k === 'eta') o[k] = C.normDT(b[k], false);
-    else if (k === 'fecha_inicio') o[k] = C.normDate(b[k]);
+    else if (['fecha_inicio', 'inicio_acopio', 'fin_acopio'].includes(k)) o[k] = C.normDate(b[k]);
     else o[k] = S(b[k]);
   }
   if (o.nave) o.nave = o.nave.toUpperCase().replace(/\s+/g, ' ');
@@ -505,6 +516,36 @@ ruta('GET', '/operaciones/:id/exportar/transportista/:tid', async ({ id, tid }) 
   const { op, viajes, I } = await cargar(id);
   const t = I.transportistas.find((x) => x.id === Number(tid)); if (!t) throw err(404, 'Transportista no encontrado');
   return { blob: await X.exportarTransportista(op, t, viajes.filter((v) => v.transportista_id === t.id)), nombre: `${nombreReporte(op)} - ${t.nombre_comercial}.xlsx` };
+});
+
+/* ================= RESUMEN ANUAL ================= */
+ruta('GET', '/resumen-anual', async () => {
+  let I = await leer(INDICE, true);
+  // Completa el resumen de operaciones guardadas antes de esta versión
+  for (const o of I.operaciones.filter((x) => !x.resumen)) {
+    try { const D = await leer(await opFile(o.id)); if (D?.operacion) await syncIndice(D); } catch (e) { console.warn('resumen', o.id, e.message); }
+  }
+  I = await leer(INDICE);
+  return I.operaciones.map((o) => ({ ...o, anio_calc: C.anioOperacion(o) }));
+});
+ruta('POST', '/importar/resumen', async (p, b, form) => {
+  ESCRIBE();
+  const wb = await X.cargarLibro(archivo(form));
+  const anio = N(form.get('anio'));
+  if (!anio) throw err(400, 'Indique el año de las operaciones del resumen');
+  const hojas = X.leerResumenHistorico(wb);
+  if (!hojas.length) throw err(400, 'No se encontraron hojas con el cuadro de transportistas (RAZON SOCIAL, RUC, VIAJES REALIZADOS, TOTAL FINAL TN HUACHO/CSPCP).');
+  const I = await leer(INDICE, true);
+  const res = { creadas: [], omitidas: [] };
+  for (const h of hojas) {
+    const yaExiste = I.operaciones.find((o) => String(o.nave).toUpperCase().replace(/\s+/g, ' ') === h.nave);
+    if (yaExiste) { res.omitidas.push(`${h.nave}: ya existe en la app (${yaExiste.nombre || yaExiste.orden}); se mantiene el detalle de la app`); continue; }
+    const D = opVacia();
+    D.resumen_manual = h.resumen;
+    await crearOperacion({ nave: h.nave, orden: h.orden || `RESUMEN ${anio}`, anio, estado: 'FINALIZADA', origen: 'resumen', tn_programadas: h.resumen.tn_aprox_total || 0, params: '{}' }, D);
+    res.creadas.push(h.nave);
+  }
+  return res;
 });
 
 /* estado del cruce HUACHO ↔ CSPCP */

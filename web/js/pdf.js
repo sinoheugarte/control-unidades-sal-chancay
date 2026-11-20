@@ -1,5 +1,5 @@
 // Exportación a PDF (jsPDF + AutoTable): detalle de viajes y reporte de servicio por transportista.
-import { COLS_DETALLE, COLS_TRANSP, COLS_UNIDADES, logoBase64 } from './excel.js?v=__V__';
+import { COLS_DETALLE, COLS_TRANSP, COLS_UNIDADES, COLS_RESUMEN_T, logoBase64 } from './excel.js?v=__V__';
 
 const AZUL = [31, 78, 121];
 const nf = new Intl.NumberFormat('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -181,6 +181,42 @@ export async function pdfUnidades(op, t, unidades) {
     alternateRowStyles: { fillColor: [247, 249, 252] },
     margin: { left: 10, right: 10, bottom: 14 }, showFoot: 'lastPage',
   });
+  piePaginas(doc, op);
+  return blob(doc);
+}
+
+/** RESUMEN ANUAL: cuadro de naves y el cuadro de transportistas de cada nave. */
+export async function pdfResumenAnual(anio, ops, empresa) {
+  const doc = nuevoDoc('a4');
+  const op = { empresa: empresa || 'PACIFICO DESPACHOS S.A.C.', nave: `Resumen ${anio}`, orden: '-' };
+  let y = await encabezado(doc, op, `RESUMEN DE OPERACIONES ACOPIO DE SAL CHANCAY ${anio}`);
+  const tn = ops.reduce((s, o) => s + o.tot.tn_acopio, 0);
+  doc.autoTable({
+    startY: y,
+    head: [['N°', 'NAVE', 'ORDEN', 'FECHA INICIO ACOPIO', 'FECHA FINAL ACOPIO', 'TN SAL ACOPIADA', 'VIAJES']],
+    body: ops.map((o, i) => [i + 1, o.nave, o.orden, fecha(o.resumen?.inicio_acopio), fecha(o.resumen?.fin_acopio), n2(o.tot.tn_acopio), String(o.tot.viajes)]),
+    foot: [['', 'TOTAL', '', '', '', n2(tn), String(ops.reduce((s, o) => s + o.tot.viajes, 0))]],
+    styles: { fontSize: 9, cellPadding: 1.4 }, headStyles: { fillColor: AZUL, textColor: 255, halign: 'center' },
+    footStyles: { fillColor: [235, 240, 246], textColor: 0, fontStyle: 'bold' }, columnStyles: { 5: { halign: 'right' }, 6: { halign: 'right' } },
+    margin: { left: 10, right: 10, bottom: 14 },
+  });
+  for (const o of ops) {
+    doc.addPage();
+    y = await encabezado(doc, op, `${o.nave} · ORDEN ${o.orden}`);
+    doc.setFontSize(9); doc.setFont('helvetica', 'normal');
+    doc.text(`Acopio: ${fecha(o.resumen?.inicio_acopio) || '—'} al ${fecha(o.resumen?.fin_acopio) || '—'} · TN sal acopiada: ${n2(o.tot.tn_acopio)} · Viajes: ${o.tot.viajes}`, 10, y);
+    const s = (k) => o.filas.reduce((a, x) => a + (Number(x[k]) || 0), 0);
+    doc.autoTable({
+      startY: y + 4,
+      head: [COLS_RESUMEN_T.map((c) => c[0])],
+      body: o.filas.map((r) => COLS_RESUMEN_T.map(([, k, , t]) => (t === 'n' ? n2(r[k] || 0) : String(r[k] ?? (k === 'observacion' ? '' : 0))))),
+      foot: [['TOTAL', String(o.filas.filter((x) => x.ruc).length), String(s('unidades_solicitadas')), '-', String(s('viajes_aprox')), String(s('tn_aprox')), String(s('viajes_realizados')), n2(s('tn_huacho')), n2(s('tn_cspcp')), '']],
+      styles: { fontSize: 7.5, cellPadding: 1.1 }, headStyles: { fillColor: AZUL, textColor: 255, halign: 'center', valign: 'middle' },
+      footStyles: { fillColor: [235, 240, 246], textColor: 0, fontStyle: 'bold' },
+      columnStyles: Object.fromEntries(COLS_RESUMEN_T.map(([, , , t], i) => [i, { halign: t ? 'right' : 'left' }])),
+      margin: { left: 10, right: 10, bottom: 14 },
+    });
+  }
   piePaginas(doc, op);
   return blob(doc);
 }

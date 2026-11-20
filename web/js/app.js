@@ -4,6 +4,7 @@ import { vReportes, vTransportistas, vUnidades, vResumenes, vPlanificacion, vRep
 import { vOperaciones, vImportar, vUsuarios } from './views-admin.js?v=__V__';
 import * as G from './graph.js?v=__V__';
 import { vPortal, vPortalUnidades } from './views-portal.js?v=__V__';
+import { vResumenAnual } from './views-resumen.js?v=__V__';
 import * as B from './backend.js?v=__V__';
 
 const I = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
@@ -31,6 +32,7 @@ const RUTAS = {
   unidades: { t: 'Lista de unidades', v: vUnidades },
   resumenes: { t: 'Resúmenes', v: vResumenes },
   planificacion: { t: 'Planificación', v: vPlanificacion },
+  'resumen-anual': { t: 'Resumen anual', v: vResumenAnual },
   operaciones: { t: 'Operaciones', v: vOperaciones },
   importar: { t: 'Importar datos', v: vImportar },
   usuarios: { t: 'Usuarios', v: vUsuarios, admin: true },
@@ -41,11 +43,12 @@ const RUTAS = {
 const NAV = [
   ['Operación', ['tablero', 'registro', 'viajes', 'reportes']],
   ['Control', ['transportistas', 'unidades', 'resumenes', 'planificacion']],
-  ['Administración', ['operaciones', 'importar', 'usuarios']],
+  ['Administración', ['resumen-anual', 'operaciones', 'importar', 'usuarios']],
 ];
 const NAV_PORTAL = [['Mi empresa', ['portal', 'portal-unidades']]];
 const esTransp = () => state.user?.rol === 'transportista';
 ICON.portal = ICON.viajes;
+ICON['resumen-anual'] = ICON.reportes;
 ICON['portal-unidades'] = ICON.unidades;
 
 // Tema claro/oscuro persistente por navegador

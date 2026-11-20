@@ -16,7 +16,7 @@ export async function vOperaciones(view, ctx) {
       ${edit ? '<div class="btns"><a class="btn" href="#/importar">Importar libro Excel</a><button class="btn primary" id="b-new">+ Nueva operación</button></div>' : ''}</div>
     <div class="btns" style="margin-bottom:12px">
       <input id="op-q" type="search" placeholder="Buscar nave, orden, cliente, DAM, referencia…" value="${esc(filtroOps.q)}" style="width:min(360px,100%)" aria-label="Buscar operación">
-      <select id="op-estado" aria-label="Estado"><option value="">Todos los estados</option><option>EN CURSO</option><option>CERRADA</option></select>
+      <select id="op-estado" aria-label="Estado"><option value="">Todos los estados</option><option>EN CURSO</option><option>FINALIZADA</option></select>
       <select id="op-anio" aria-label="Año"><option value="">Todos los años</option>${anios.map((a) => `<option>${a}</option>`).join('')}</select>
       <span class="muted small" id="op-n"></span>
     </div>
@@ -25,7 +25,7 @@ export async function vOperaciones(view, ctx) {
   const pintar = () => {
     const q = sinTildes(filtroOps.q).trim();
     const fil = ops.filter((o) => (!q || q.split(/\s+/).every((t) => sinTildes([o.nombre, o.nave, o.orden, o.cliente, o.producto, o.dam, o.manifiesto, o.referencia].join(' ')).includes(t)))
-      && (!filtroOps.estado || o.estado === filtroOps.estado) && (!filtroOps.anio || anioDe(o) === filtroOps.anio));
+      && (!filtroOps.estado || (o.estado === 'CERRADA' ? 'FINALIZADA' : o.estado || 'EN CURSO') === filtroOps.estado) && (!filtroOps.anio || anioDe(o) === filtroOps.anio));
     $('#op-n').textContent = `${fil.length} de ${ops.length} operaciones`;
     $('#op-tbl').innerHTML = tabla([
       { t: 'Reporte', f: (o) => `<a href="#" data-abrir="${o.id}"><strong>${esc(o.nombre || `${o.nave} - ORDEN ${o.orden}`)}</strong></a>${o.id === state.opId ? ' <span class="pill info">activa</span>' : ''}` },
@@ -34,7 +34,7 @@ export async function vOperaciones(view, ctx) {
       { t: 'Cliente', k: 'cliente' }, { t: 'DAM', k: 'dam' },
       { t: 'ETA', f: (o) => fechaHora(o.eta) }, { t: 'Inicio', f: (o) => fecha(o.fecha_inicio || o.primer_viaje) }, { t: 'Último viaje', f: (o) => fecha(o.ultimo_viaje) },
       { t: 'TN prog.', k: 'tn_programadas', n: 1, d: 0 }, { t: 'Viajes', k: 'n_viajes', n: 1, d: 0 },
-      { t: 'Estado', f: (o) => `<span class="pill ${o.estado === 'CERRADA' ? 'ok' : 'info'}">${esc(o.estado || 'EN CURSO')}</span>` },
+      { t: 'Estado', f: (o) => `<span class="pill ${['CERRADA', 'FINALIZADA'].includes(o.estado) ? 'ok' : 'info'}">${esc(o.estado === 'CERRADA' ? 'FINALIZADA' : o.estado || 'EN CURSO')}</span>` },
       { t: 'Modificado', f: (o) => (o.actualizado_en ? `${fechaHora(o.actualizado_en)}<div class="muted small">${esc(o.actualizado_por || '')}</div>` : '—') },
     ], fil, { empty: ops.length ? 'Ninguna operación coincide con la búsqueda' : 'No hay operaciones. Cree una nueva o importe el libro Excel del reporte.' });
   };
@@ -66,10 +66,11 @@ function opModal(o, despues) {
       ${f('eta', 'ETA', 'datetime-local')}${f('fecha_inicio', 'Fecha inicio', 'date')}${f('cliente', 'Cliente')}${f('producto', 'Producto')}
       ${f('referencia', 'Referencia')}${f('punto_salida', 'Punto de salida')}${f('punto_llegada', 'Punto de llegada')}${f('empresa', 'Empresa')}
       ${f('coordinador', 'Coordinador de transporte')}
+      ${f('inicio_acopio', 'Fecha inicio acopio (opcional)', 'date')}${f('fin_acopio', 'Fecha final acopio (opcional)', 'date')}
       ${f('tn_programadas', 'TN programadas *', 'number', 'step="0.01" min="0" required')}
       ${f('tn_embarque_programadas', 'TN programadas embarque', 'number', 'step="0.01" min="0"')}
       ${f('tn_draft_sgs', 'TN embarcadas draft SGS', 'number', 'step="0.01" min="0"')}
-      <label>Estado<select name="estado">${['EN CURSO', 'CERRADA'].map((s) => `<option ${s === o.estado ? 'selected' : ''}>${s}</option>`).join('')}</select></label>
+      <label>Estado<select name="estado">${['EN CURSO', 'FINALIZADA'].map((s) => `<option ${s === (o.estado === 'CERRADA' ? 'FINALIZADA' : o.estado) ? 'selected' : ''}>${s}</option>`).join('')}</select></label>
       ${!nuevo && esAdmin() ? '<div class="full"><button type="button" class="btn danger sm" id="b-del">Eliminar operación y todos sus datos</button></div>' : ''}
     </div>`,
     onSubmit: async (d) => {
