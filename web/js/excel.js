@@ -1,6 +1,6 @@
 // Importación y exportación de Excel en el navegador (ExcelJS).
 // Trabaja sobre objetos en memoria: D = datos de una operación, T = maestro de transportistas.
-import * as C from './calc.js';
+import * as C from './calc.js?v=__V__';
 
 const XL = () => window.ExcelJS;
 

@@ -1,7 +1,7 @@
 import {
   state, api, esc, num, pct, fecha, fechaHora, horas, toInputDT, normPlaca, toast, $, modal, confirmar,
   tabla, sinOperacion, puedeEscribir, esAdmin, chart, colores, descargar,
-} from './core.js';
+} from './core.js?v=__V__';
 
 /* =================== REPORTES POR TURNO =================== */
 let tabRep = 'despacho';

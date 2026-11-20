@@ -1,4 +1,4 @@
-import { state, api, esc, num, fecha, fechaHora, toInputDT, toast, $, modal, confirmar, tabla, puedeEscribir, esAdmin, sinOperacion, opActual } from './core.js';
+import { state, api, esc, num, fecha, fechaHora, toInputDT, toast, $, modal, confirmar, tabla, puedeEscribir, esAdmin, sinOperacion, opActual } from './core.js?v=__V__';
 
 const refrescar = (id, render = true) => window.dispatchEvent(new CustomEvent('app:ops', { detail: { id, render } }));
 

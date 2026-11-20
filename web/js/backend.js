@@ -2,9 +2,9 @@
 //  - indice.json        -> operaciones (resumen), maestro de transportistas y roles de usuario
 //  - op-<id>.json       -> datos completos de una operación (viajes, unidades, reportes, etc.)
 // Cada escritura usa el eTag del archivo: si otro usuario guardó antes, se recarga y se reintenta.
-import * as C from './calc.js';
-import * as G from './graph.js';
-import * as X from './excel.js';
+import * as C from './calc.js?v=__V__';
+import * as G from './graph.js?v=__V__';
+import * as X from './excel.js?v=__V__';
 
 const INDICE = 'indice.json';
 const opFile = (id) => `op-${id}.json`;

@@ -27,6 +27,8 @@ jobs:
           node-version: 22
       - name: Pruebas de cálculo
         run: npm test
+      - name: Versionar archivos (evita caché del navegador)
+        run: grep -rl "__V__" web | xargs sed -i "s/__V__/${GITHUB_SHA::7}/g"
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

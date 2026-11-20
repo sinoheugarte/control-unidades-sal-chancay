@@ -1,9 +1,9 @@
-import { state, api, esc, toast, $, $$, modal, destruirGraficos, esAdmin } from './core.js';
-import { vTablero, vViajes, vRegistro } from './views-operacion.js';
-import { vReportes, vTransportistas, vUnidades, vResumenes, vPlanificacion } from './views-control.js';
-import { vOperaciones, vImportar, vUsuarios } from './views-admin.js';
-import * as G from './graph.js';
-import * as B from './backend.js';
+import { state, api, esc, toast, $, $$, modal, destruirGraficos, esAdmin } from './core.js?v=__V__';
+import { vTablero, vViajes, vRegistro } from './views-operacion.js?v=__V__';
+import { vReportes, vTransportistas, vUnidades, vResumenes, vPlanificacion } from './views-control.js?v=__V__';
+import { vOperaciones, vImportar, vUsuarios } from './views-admin.js?v=__V__';
+import * as G from './graph.js?v=__V__';
+import * as B from './backend.js?v=__V__';
 
 const I = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
 const ICON = {

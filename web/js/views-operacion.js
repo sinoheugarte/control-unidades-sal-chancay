@@ -1,7 +1,7 @@
 import {
   state, api, esc, num, pct, fecha, fechaHora, minutos, toInputDT, ahoraInput, hoyInput, normPlaca,
   statusPill, rangoPill, toast, $, modal, confirmar, tabla, sinOperacion, puedeEscribir, chart, colores, descargar,
-} from './core.js';
+} from './core.js?v=__V__';
 
 /* =================== TABLERO =================== */
 export async function vTablero(view) {

@@ -1,5 +1,5 @@
 // Utilidades compartidas: API, formato, DOM, diálogos y notificaciones.
-import { request } from './backend.js';
+import { request } from './backend.js?v=__V__';
 
 export const state = { user: null, ops: [], opId: null, catalogos: null };
 
