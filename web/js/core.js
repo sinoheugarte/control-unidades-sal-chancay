@@ -1,16 +1,15 @@
 // Utilidades compartidas: API, formato, DOM, diálogos y notificaciones.
+import { request } from './backend.js';
 
 export const state = { user: null, ops: [], opId: null, catalogos: null };
 
-export async function api(path, { method = 'GET', body, form } = {}) {
-  const opts = { method, headers: {} };
-  if (form) opts.body = form;
-  else if (body !== undefined) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
-  const res = await fetch(`/api${path}`, opts);
-  if (res.status === 401 && path !== '/login' && path !== '/me') { location.hash = '#/login'; throw new Error('Sesión expirada'); }
-  const data = res.headers.get('content-type')?.includes('json') ? await res.json() : null;
-  if (!res.ok) throw new Error(data?.error || `Error ${res.status}`);
-  return data;
+export async function api(path, opts = {}) {
+  try {
+    return await request(path, opts);
+  } catch (e) {
+    if (e.status === 401 && path !== '/me') { state.user = null; location.hash = '#/login'; }
+    throw e;
+  }
 }
 
 export const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -130,10 +129,16 @@ export function sinOperacion() {
     <a class="btn primary" href="#/operaciones">Ir a Operaciones</a></div>`;
 }
 
-export function descargar(url) {
-  const a = document.createElement('a');
-  a.href = url; a.rel = 'noopener';
-  document.body.appendChild(a); a.click(); a.remove();
+/** Descarga un archivo generado por la "API" local (rutas /api/...exportar...). */
+export async function descargar(url) {
+  try {
+    toast('Generando archivo…');
+    const { blob, nombre } = await request(url.replace(/^\/api/, ''));
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = nombre;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+  } catch (e) { toast(e.message, true); }
 }
 
 // Paleta para gráficos (lee variables CSS para respetar el tema)

@@ -1,4 +1,3 @@
-'use strict';
 /**
  * Lógica de cálculo replicada del libro "REPORTE DE CONTROL UNIDADES SAL".
  * Todas las fechas-hora se guardan como texto local "YYYY-MM-DD HH:MM[:SS]"
@@ -353,7 +352,7 @@ function preacopio(op) {
   };
 }
 
-module.exports = {
+export {
   JORNADAS, RANGOS, STATUS,
   normPlaca, toMs, fmtDT, normDT, normDate, jornadaDe, rangoDe, r3,
   enriquecerViajes, totales, tablaReportes, tablaEmbarque,

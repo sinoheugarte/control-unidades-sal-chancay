@@ -1,7 +1,7 @@
-'use strict';
-const test = require('node:test');
-const assert = require('node:assert');
-const C = require('../src/calc');
+
+import test from 'node:test';
+import assert from 'node:assert';
+import * as C from '../web/js/calc.js';
 
 const op = { tn_programadas: 100, params: '{}' };
 const base = (o) => ({ transportista_id: 1, transportista_nombre: 'T1', fecha_despacho: '2026-10-20', ...o });

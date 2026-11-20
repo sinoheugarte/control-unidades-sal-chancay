@@ -97,32 +97,40 @@ function resumenImport(tipo, r) {
 /* =================== USUARIOS =================== */
 export async function vUsuarios(view, ctx) {
   if (!esAdmin()) { view.innerHTML = sinOperacion(); return; }
-  const us = await api('/usuarios');
-  view.innerHTML = `<div class="card"><div class="card-h"><div><h2>Usuarios</h2>
-      <p class="muted small" style="margin:4px 0 0"><strong>Admin</strong>: todo, incluye usuarios y eliminar operaciones · <strong>Operador</strong>: registra e importa datos · <strong>Lector</strong>: sólo consulta.</p></div>
-      <button class="btn primary" id="b-new">+ Nuevo usuario</button></div>
+  const { usuarios, rol_por_defecto: def } = await api('/usuarios');
+  const rolSel = (r, name = 'rol') => `<select name="${name}">${['operador', 'lector', 'admin'].map((x) => `<option ${x === r ? 'selected' : ''}>${x}</option>`).join('')}</select>`;
+  view.innerHTML = `<div class="card"><div class="card-h"><div><h2>Usuarios y roles</h2>
+      <p class="muted small" style="margin:4px 0 0">Todos ingresan con su cuenta de Microsoft 365. <strong>Admin</strong>: todo · <strong>Operador</strong>: registra e importa · <strong>Lector</strong>: sólo consulta.
+      ${usuarios.length ? '' : '<br><strong>Aún no hay usuarios registrados: por ahora todos los que ingresan son administradores.</strong>'}</p></div>
+      <button class="btn primary" id="b-new">+ Agregar usuario</button></div>
+    <form id="f-def" class="btns" style="margin-bottom:12px"><label style="display:flex;gap:8px;align-items:center">Rol para usuarios no registrados ${rolSel(def === 'operador' ? 'operador' : 'lector', 'rol_por_defecto').replace('<option>admin</option>', '').replace('<option selected>admin</option>', '')}</label>
+      <button class="btn sm">Guardar</button></form>
     ${tabla([
-      { t: 'Usuario', f: (u) => `<strong>${esc(u.usuario)}</strong>` }, { t: 'Nombre', k: 'nombre' }, { t: 'Rol', k: 'rol' },
-      { t: 'Estado', f: (u) => (u.activo ? '<span class="pill ok">Activo</span>' : '<span class="pill bad">Inactivo</span>') },
-      { t: 'Creado', f: (u) => fechaHora(u.creado_en) }, { t: '', f: (u) => `<button class="btn sm" data-u="${u.id}">Editar</button>` },
-    ], us)}</div>`;
-  const rolSel = (r) => `<select name="rol">${['operador', 'lector', 'admin'].map((x) => `<option ${x === r ? 'selected' : ''}>${x}</option>`).join('')}</select>`;
+      { t: 'Correo', f: (u) => `<strong>${esc(u.email)}</strong>` }, { t: 'Nombre', k: 'nombre' }, { t: 'Rol', k: 'rol' },
+      { t: 'Estado', f: (u) => (u.activo !== false ? '<span class="pill ok">Activo</span>' : '<span class="pill bad">Inactivo</span>') },
+      { t: '', f: (u) => `<button class="btn sm" data-u="${esc(u.email)}">Editar</button>` },
+    ], usuarios, { empty: 'Sin usuarios registrados' })}
+    <p class="muted small" style="margin-top:12px">Importante: los roles controlan lo que la aplicación permite hacer. El acceso a los datos lo da SharePoint:
+    sólo quien tenga permiso de edición en el sitio puede guardar cambios.</p></div>`;
+  $('#f-def').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try { await api('/usuarios-config', { method: 'PUT', body: { rol_por_defecto: e.target.rol_por_defecto.value } }); toast('Guardado'); } catch (err) { toast(err.message, true); }
+  });
   $('#b-new').onclick = () => modal({
-    title: 'Nuevo usuario',
-    body: `<div class="form"><label>Usuario *<input name="usuario" required autocomplete="off"></label><label>Nombre *<input name="nombre" required></label>
-      <label>Contraseña * (mín. 8)<input name="password" type="password" minlength="8" required autocomplete="new-password"></label><label>Rol${rolSel('operador')}</label></div>`,
-    onSubmit: async (d) => { await api('/usuarios', { method: 'POST', body: d }); toast('Usuario creado'); ctx.rerender(); },
+    title: 'Agregar usuario',
+    body: `<div class="form"><label class="full">Correo Microsoft 365 *<input name="email" type="email" required autocomplete="off" placeholder="nombre@empresa.com"></label>
+      <label>Nombre<input name="nombre"></label><label>Rol${rolSel('operador')}</label></div>`,
+    onSubmit: async (d) => { await api('/usuarios', { method: 'POST', body: d }); toast('Usuario agregado'); ctx.rerender(); },
   });
   view.addEventListener('click', (e) => {
-    const id = e.target.closest('[data-u]')?.dataset.u;
-    if (!id) return;
-    const u = us.find((x) => x.id === Number(id));
+    const email = e.target.closest('[data-u]')?.dataset.u;
+    if (!email) return;
+    const u = usuarios.find((x) => x.email === email);
     modal({
-      title: `Editar ${u.usuario}`,
-      body: `<div class="form"><label>Nombre<input name="nombre" value="${esc(u.nombre)}"></label><label>Rol${rolSel(u.rol)}</label>
-        <label>Nueva contraseña (opcional)<input name="password" type="password" minlength="8" autocomplete="new-password"></label>
-        <label class="check"><input type="checkbox" name="activo" ${u.activo ? 'checked' : ''}> Activo</label></div>`,
-      onSubmit: async (d) => { if (!d.password) delete d.password; await api(`/usuarios/${u.id}`, { method: 'PUT', body: d }); toast('Usuario actualizado'); ctx.rerender(); },
+      title: `Editar ${u.email}`,
+      body: `<div class="form"><label>Nombre<input name="nombre" value="${esc(u.nombre || '')}"></label><label>Rol${rolSel(u.rol)}</label>
+        <label class="check"><input type="checkbox" name="activo" ${u.activo !== false ? 'checked' : ''}> Activo</label></div>`,
+      onSubmit: async (d) => { await api(`/usuarios/${encodeURIComponent(u.email)}`, { method: 'PUT', body: d }); toast('Usuario actualizado'); ctx.rerender(); },
     });
   });
 }

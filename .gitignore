@@ -1,8 +1,4 @@
 node_modules/
-data/
-*.db
-*.db-shm
-*.db-wal
 .env
 # Los libros Excel con datos reales (DNI, teléfonos) no se versionan
 *.xlsm

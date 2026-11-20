@@ -2,6 +2,8 @@ import { state, api, esc, toast, $, $$, modal, destruirGraficos, esAdmin } from 
 import { vTablero, vViajes, vRegistro } from './views-operacion.js';
 import { vReportes, vTransportistas, vUnidades, vResumenes, vPlanificacion } from './views-control.js';
 import { vOperaciones, vImportar, vUsuarios } from './views-admin.js';
+import * as G from './graph.js';
+import * as B from './backend.js';
 
 const I = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
 const ICON = {
@@ -40,27 +42,42 @@ const NAV = [
 // Tema claro/oscuro persistente por navegador
 try { const t = localStorage.getItem('tema'); if (t) document.documentElement.dataset.theme = t; } catch { /* sin storage */ }
 
-function vLogin(root) {
+function vLogin(root, error = '') {
+  const cfg = G.getCfg();
   root.innerHTML = `<div class="login"><div class="card">
     <div class="brand" style="color:var(--text);padding:0 0 6px"><div class="brand-logo">${ICON.viajes.replace('stroke="currentColor"', 'stroke="#fff"')}</div>
     <div>Control de Unidades<small style="color:var(--muted)">Despacho · Acopio · Embarque</small></div></div>
-    <form id="f-login">
-      <label>Usuario<input name="usuario" autocomplete="username" required></label>
-      <label>Contraseña<input name="password" type="password" autocomplete="current-password" required></label>
-      <button class="btn primary" type="submit" style="justify-content:center">Ingresar</button>
-      <p class="muted small" id="login-err" role="alert"></p>
-    </form></div></div>`;
-  $('#f-login').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const f = e.target; const btn = f.querySelector('button');
-    btn.disabled = true;
+    <p class="muted" style="margin:14px 0 0">Ingrese con su cuenta corporativa de Microsoft 365. Los datos se guardan en SharePoint.</p>
+    <div style="display:grid;gap:12px;margin-top:18px">
+      <button class="btn primary" id="b-ms" style="justify-content:center;min-height:42px">
+        <svg width="18" height="18" viewBox="0 0 21 21" aria-hidden="true"><rect x="1" y="1" width="9" height="9" fill="#f25022"/><rect x="11" y="1" width="9" height="9" fill="#7fba00"/><rect x="1" y="11" width="9" height="9" fill="#00a4ef"/><rect x="11" y="11" width="9" height="9" fill="#ffb900"/></svg>
+        Iniciar sesión con Microsoft</button>
+      <p class="small" id="login-err" role="alert" style="color:var(--bad);margin:0">${esc(error)}</p>
+      <details class="small"><summary class="muted">Configuración avanzada</summary>
+        <form id="f-cfg" class="form" style="grid-template-columns:1fr;margin-top:10px">
+          <label>Sitio de SharePoint<input name="spSite" value="${esc(cfg.spSite)}"></label>
+          <label>Carpeta en la biblioteca de documentos<input name="carpeta" value="${esc(cfg.carpeta)}"></label>
+          <label>Client ID (Entra ID)<input name="cid" value="${esc(cfg.cid)}"></label>
+          <label>Tenant ID<input name="tid" value="${esc(cfg.tid)}"></label>
+          <p class="muted" style="margin:0">Redirect URI a registrar (SPA): <code>${esc(G.appUrl())}</code></p>
+          <button class="btn">Guardar configuración</button>
+        </form></details>
+    </div></div></div>`;
+  $('#b-ms').addEventListener('click', async (e) => {
+    const btn = e.currentTarget; btn.disabled = true; $('#login-err').textContent = '';
     try {
-      state.user = await api('/login', { method: 'POST', body: { usuario: f.usuario.value, password: f.password.value } });
+      await G.login();
       await iniciar();
       location.hash = '#/tablero';
+      render();
     } catch (err) { $('#login-err').textContent = err.message; } finally { btn.disabled = false; }
   });
-  $('[name=usuario]', root).focus();
+  $('#f-cfg').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const d = Object.fromEntries(new FormData(e.target));
+    G.setCfg({ spSite: d.spSite.trim(), carpeta: d.carpeta.trim(), cid: d.cid.trim(), tid: d.tid.trim() });
+    toast('Configuración guardada. Inicie sesión.');
+  });
 }
 
 async function cargarOps() {
@@ -78,12 +95,15 @@ export async function refrescarOps(selectId) {
 }
 function setOp(id) {
   state.opId = id;
+  B.setOpActual(id);
   try { localStorage.setItem('opId', String(id)); } catch { /* */ }
 }
 
 async function iniciar() {
+  state.user = await B.iniciarSesion();
   state.catalogos = await api('/catalogos');
   await cargarOps();
+  B.setOpActual(state.opId);
 }
 
 function pintarSelector() {
@@ -117,18 +137,18 @@ function shell(root, ruta) {
   $('#op-sel').addEventListener('change', (e) => { setOp(Number(e.target.value)); render(); });
   $('#menu').addEventListener('click', () => $('#side').classList.toggle('open'));
   $('#side').addEventListener('click', (e) => { if (e.target.closest('a')) $('#side').classList.remove('open'); });
-  $('#salir').addEventListener('click', async () => { await api('/logout', { method: 'POST' }); state.user = null; location.hash = '#/login'; });
+  $('#salir').addEventListener('click', () => { B.cerrarSesion(); state.user = null; location.hash = '#/login'; });
   $('#tema').addEventListener('click', () => {
     const dark = document.documentElement.dataset.theme === 'dark' || (!document.documentElement.dataset.theme && matchMedia('(prefers-color-scheme: dark)').matches);
     document.documentElement.dataset.theme = dark ? 'light' : 'dark';
     try { localStorage.setItem('tema', document.documentElement.dataset.theme); } catch { /* */ }
     render();
   });
-  $('#perfil').addEventListener('click', () => modal({
-    title: 'Cambiar mi contraseña',
-    body: `<div class="form"><label class="full">Contraseña actual<input type="password" name="actual" required autocomplete="current-password"></label>
-      <label class="full">Nueva contraseña (mín. 8)<input type="password" name="nueva" minlength="8" required autocomplete="new-password"></label></div>`,
-    onSubmit: async (d) => { await api('/me/password', { method: 'POST', body: d }); toast('Contraseña actualizada'); },
+  $('#perfil').addEventListener('click', async () => modal({
+    title: 'Mi cuenta',
+    body: `<p><strong>${esc(state.user.nombre)}</strong><br><span class="muted">${esc(state.user.email)}</span></p>
+      <p>Rol en la aplicación: <span class="pill info">${esc(state.user.rol)}</span></p>
+      <p class="muted small">Los datos se guardan en SharePoint: <a href="${esc(await G.urlCarpeta())}" target="_blank" rel="noopener">abrir carpeta</a>.</p>`,
   }));
 }
 
@@ -137,12 +157,17 @@ async function render() {
   const root = $('#app');
   const ruta = (location.hash.replace(/^#\/?/, '').split('?')[0] || 'tablero');
   destruirGraficos();
+  if (G.esRetornoLogin()) { root.innerHTML = '<div class="login"><div class="card">Completando inicio de sesión…</div></div>'; return; }
+  let errorLogin = '';
   if (!state.user) {
-    try { state.user = await api('/me'); await iniciar(); } catch { state.user = null; }
+    try {
+      const redir = await G.completarRedireccion();
+      if (redir || G.haySesion()) await iniciar();
+    } catch (e) { state.user = null; errorLogin = e.message; }
   }
   if (!state.user || ruta === 'login') {
     if (state.user && ruta === 'login') { location.hash = '#/tablero'; return; }
-    return vLogin(root);
+    return vLogin(root, errorLogin);
   }
   const r = RUTAS[ruta] && (!RUTAS[ruta].admin || esAdmin()) ? ruta : 'tablero';
   shell(root, r);
