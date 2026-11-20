@@ -18,6 +18,12 @@ test('jornada por hora del día', () => {
   assert.strictEqual(C.jornadaDe('2026-10-21 03:00'), '23:00 - 07:00');
 });
 
+test('turno 23:00 - 07:00 se reporta al día siguiente', () => {
+  assert.deepStrictEqual(C.turnoDe('2026-10-20 23:15:00'), { fecha: '2026-10-21', jornada: '23:00 - 07:00' });
+  assert.deepStrictEqual(C.turnoDe('2026-10-21 02:00:00'), { fecha: '2026-10-21', jornada: '23:00 - 07:00' });
+  assert.deepStrictEqual(C.turnoDe('2026-10-21 22:59:00'), { fecha: '2026-10-21', jornada: '16:00 - 23:00' });
+});
+
 test('columnas calculadas de DETALLE TRANSPORTE', () => {
   const vs = C.enriquecerViajes([
     base({ id: 1, placa: 'A1', peso_origen: 40, ticket: 'X1', peso_destino: 40.1, ingreso_en: '2026-10-20 18:00:00', salida_en: '2026-10-20 18:25:00', despacho_en: '2026-10-20 10:00' }),
@@ -26,9 +32,9 @@ test('columnas calculadas de DETALLE TRANSPORTE', () => {
   ], op, [{ tipo: 'despacho', numero: 1, inicio: '2026-10-20 08:00', fin: '2026-10-20 13:00' }]);
   const [a, b, c] = vs;
   assert.deepStrictEqual([a.nro, a.vuelta, a.status, a.diferencia, a.rango, a.tiempo_min, a.rep_despacho_calc], [1, 1, 'DESCARGADO', 0.1, '<=30 MIN', 25, 1]);
-  assert.strictEqual(b.placa, 'B2'); // ordenado por hora de despacho
-  assert.deepStrictEqual([b.status, b.tipo, b.redondeo], ['TN DEVUELTAS', 'TN DEVUELTAS', 30]);
-  assert.deepStrictEqual([c.vuelta, c.status, c.peso_destino_calc, c.rep_despacho_calc], [2, 'FALTA DESCARGAR', 35, null]);
+  assert.strictEqual(b.placa, 'A1'); // orden de registro, como las filas del Excel
+  assert.deepStrictEqual([b.vuelta, b.status, b.peso_destino_calc, b.rep_despacho_calc], [2, 'FALTA DESCARGAR', 35, null]);
+  assert.deepStrictEqual([c.status, c.tipo, c.redondeo], ['TN DEVUELTAS', 'TN DEVUELTAS', 30]);
   assert.strictEqual(c.acumulado, 95.1);
   assert.strictEqual(c.restante, 4.9);
   const t = C.totales(vs, op, null);

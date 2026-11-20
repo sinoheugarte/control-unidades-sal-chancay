@@ -123,7 +123,8 @@ export async function vViajes(view, ctx) {
         <select id="ff" aria-label="Día de despacho"><option value="">Todos los días</option>${fechas.map((f) => `<option value="${f}">${fecha(f)}</option>`).join('')}</select>
       </div>
       <div class="btns">
-        <button class="btn" id="b-exp">Exportar Excel</button>
+        <button class="btn" id="b-exp">Excel</button>
+        <button class="btn" id="b-pdf">PDF</button>
         ${puedeEscribir() ? '<button class="btn primary" id="b-new">+ Nuevo viaje</button>' : ''}
       </div>
     </div>
@@ -136,19 +137,19 @@ export async function vViajes(view, ctx) {
       && (!filtros.t || String(v.transportista_id) === filtros.t) && (!filtros.s || v.status === filtros.s) && (!filtros.f || v.fecha_despacho === filtros.f));
     const sum = (k) => fil.reduce((s, v) => s + (Number(v[k]) || 0), 0);
     $('#tbl').innerHTML = tabla([
-      { t: 'N°', k: 'nro' }, { t: 'Día desp.', f: (v) => fecha(v.fecha_despacho) }, { t: 'Jornada', k: 'jornada_despacho' },
-      { t: 'Transporte', k: 'transportista_nombre' }, { t: 'Placa', f: (v) => `<strong>${esc(v.placa)}</strong>` }, { t: 'Guía', k: 'guia' },
-      { t: 'TN origen', k: 'peso_origen', n: 1 }, { t: 'Día recep.', f: (v) => fecha(v.fecha_recepcion) }, { t: 'Jornada recep.', k: 'jornada_recepcion' },
-      { t: 'Ticket', k: 'ticket' }, { t: 'TN destino', k: 'peso_destino_calc', n: 1 }, { t: 'Dif.', k: 'diferencia', n: 1 },
-      { t: 'Acum. TN', k: 'acumulado', n: 1 }, { t: 'Rest. TN', k: 'restante', n: 1 },
-      { t: 'Ingreso', f: (v) => fechaHora(v.ingreso_en) }, { t: 'Salida', f: (v) => fechaHora(v.salida_en) },
+      { t: 'Día despacho', f: (v) => fecha(v.fecha_despacho) }, { t: 'Jornada despacho', k: 'jornada_despacho' }, { t: 'Nro. viaje', k: 'nro' },
+      { t: 'Transporte', k: 'transportista_nombre' }, { t: 'Placa', f: (v) => `<strong>${esc(v.placa)}</strong>` }, { t: 'Guía R. Huacho', k: 'guia' },
+      { t: 'Peso TN x unid Huacho', k: 'peso_origen', n: 1 }, { t: 'Día recepción', f: (v) => fecha(v.fecha_recepcion) }, { t: 'Jornada recepción', k: 'jornada_recepcion' },
+      { t: 'Ticket CSPCP', k: 'ticket' }, { t: 'Peso TN x unid CSPCP', k: 'peso_destino_calc', n: 1 }, { t: 'Redondeo x TN dev', k: 'redondeo', n: 1 },
+      { t: 'Diferencia Huacho - CSPCP', k: 'diferencia', n: 1 }, { t: 'Cant. acum. TN', k: 'acumulado', n: 1 }, { t: 'Cant. rest. TN', k: 'restante', n: 1 },
+      { t: 'Tipo de viaje', k: 'tipo' }, { t: 'Hora ingreso CSPCP', f: (v) => fechaHora(v.ingreso_en) }, { t: 'Hora salida CSPCP', f: (v) => fechaHora(v.salida_en) },
       { t: 'Tiempo', f: (v) => minutos(v.tiempo_min) }, { t: 'Rango', f: (v) => rangoPill(v.rango) },
-      { t: 'Rep. D', k: 'rep_despacho_calc' }, { t: 'Rep. A', k: 'rep_acopio_calc' }, { t: 'Vuelta', k: 'vuelta' },
+      { t: '# Reporte despacho', k: 'rep_despacho_calc' }, { t: '# Reporte acopio', k: 'rep_acopio_calc' }, { t: 'Viaje x unidad', k: 'vuelta' },
       { t: 'Status', f: (v) => statusPill(v.status) },
       ...(puedeEscribir() ? [{ t: '', f: (v) => `<button class="btn sm" data-edit="${v.id}">Editar</button>` }] : []),
     ], fil, {
-      empty: viajes.length ? 'Ningún viaje coincide con el filtro' : 'Aún no hay viajes. Regístrelos o impórtelos.',
-      foot: ['', `${fil.length} viajes`, '', '', '', '', num(sum('peso_origen')), '', '', '', num(sum('peso_destino_calc')), num(sum('diferencia'))],
+      empty: viajes.length ? 'Ningún viaje coincide con el filtro' : 'Aún no hay viajes. Importe el REPORTE HUACHO o regístrelos.',
+      foot: [`${fil.length} viajes`, '', '', '', '', '', num(sum('peso_origen')), '', '', '', num(sum('peso_destino_calc')), num(sum('redondeo')), num(sum('diferencia'))],
     });
   };
   pintar();
@@ -157,6 +158,7 @@ export async function vViajes(view, ctx) {
   $('#fs').addEventListener('change', (e) => { filtros.s = e.target.value; pintar(); });
   $('#ff').addEventListener('change', (e) => { filtros.f = e.target.value; pintar(); });
   $('#b-exp').onclick = () => descargar(`/api/operaciones/${state.opId}/exportar/detalle`);
+  $('#b-pdf').onclick = () => descargar(`/api/operaciones/${state.opId}/exportar/detalle-pdf`);
   $('#b-new')?.addEventListener('click', () => viajeModal(null, transp, ctx.rerender));
   $('#tbl').addEventListener('click', (e) => {
     const id = e.target.closest('[data-edit]')?.dataset.edit;

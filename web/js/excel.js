@@ -63,8 +63,13 @@ function rowsByHeader(ws, required, maxScan = 15) {
   }
   return null;
 }
-function findSheet(wb, required) {
-  for (const ws of wb.worksheets) { const rows = rowsByHeader(ws, required); if (rows) return { ws, rows }; }
+/** Busca la hoja con esas columnas; primero en las hojas con nombre preferido (p. ej. "REPORTE HUACHO"). */
+function findSheet(wb, required, preferidas = [], excluir = []) {
+  const ex = excluir.map(normH);
+  const pref = preferidas.map(normH);
+  const hojas = wb.worksheets.filter((w) => !ex.includes(normH(w.name)));
+  const orden = [...hojas.filter((w) => pref.includes(normH(w.name))), ...hojas.filter((w) => !pref.includes(normH(w.name)))];
+  for (const ws of orden) { const rows = rowsByHeader(ws, required); if (rows) return { ws, rows }; }
   return null;
 }
 
@@ -109,48 +114,103 @@ export function asegurarParticipacion(D, tid) {
 const nuevoId = (D) => { D.seq = (D.seq || 0) + 1; return D.seq; };
 const ahora = () => C.fmtDT(Date.now() - new Date().getTimezoneOffset() * 60000, true);
 
-/** Asigna un ticket de balanza al viaje correspondiente (mismo ticket o viaje pendiente más antiguo de la placa). */
-export function asignarTicket(D, t) {
-  let v = t.ticket !== '-' ? D.viajes.find((x) => x.ticket === t.ticket) : null;
-  if (!v) {
-    v = D.viajes.filter((x) => x.placa === t.placa && !x.ticket)
-      .sort((a, b) => (a.fecha_despacho || '').localeCompare(b.fecha_despacho || '') || (a.despacho_en || '').localeCompare(b.despacho_en || '') || a.id - b.id)[0];
+/* ---------------- cruce planta (HUACHO) ↔ puerto (CSPCP) ----------------
+   Igual que el Excel (INDEX/MATCH por PLACA + VUELTA): el n-ésimo ticket de una placa,
+   en orden de ingreso al puerto, corresponde al n-ésimo viaje de esa placa. Los tickets
+   se guardan aparte (D.tickets), así que no importa en qué orden se importen los reportes. */
+
+function aplicarTicket(v, t, completar) {
+  const turno = C.turnoDe(t.ingreso);
+  Object.assign(v, { ticket: t.ticket, peso_destino: t.peso, ingreso_en: t.ingreso, salida_en: t.salida });
+  if (!completar || !v.fecha_recepcion) v.fecha_recepcion = turno.fecha || v.fecha_recepcion;
+  if (!completar || !v.jornada_recepcion) v.jornada_recepcion = turno.jornada || v.jornada_recepcion;
+}
+
+/** Vuelve a cruzar los tickets guardados con los viajes. Devuelve los tickets que siguen sin viaje. */
+export function conciliar(D) {
+  D.tickets = D.tickets || [];
+  const porTicket = new Map(D.viajes.filter((v) => v.ticket && v.ticket !== '-').map((v) => [v.ticket, v]));
+  let asignados = 0;
+  const sinViaje = [];
+  const pendientes = [...D.tickets].sort((a, b) => (C.toMs(a.ingreso) ?? 0) - (C.toMs(b.ingreso) ?? 0));
+  for (const t of pendientes) {
+    const v = porTicket.get(t.ticket);
+    if (v) { // ya cruzado: actualizar peso y horas si el reporte trae correcciones
+      if (v.peso_destino !== t.peso || v.ingreso_en !== t.ingreso || v.salida_en !== t.salida) aplicarTicket(v, t, true);
+      continue;
+    }
+    const libre = D.viajes.filter((x) => x.placa === t.placa && !x.ticket).sort((a, b) => a.id - b.id)[0];
+    if (libre) { aplicarTicket(libre, t, false); porTicket.set(t.ticket, libre); asignados++; } else sinViaje.push(t);
   }
-  if (!v) return null;
-  Object.assign(v, {
-    ticket: t.ticket, peso_destino: t.peso, ingreso_en: t.ingreso, salida_en: t.salida,
-    fecha_recepcion: t.ingreso ? t.ingreso.slice(0, 10) : v.fecha_recepcion,
-    jornada_recepcion: t.ingreso ? C.jornadaDe(t.ingreso) : v.jornada_recepcion,
-  });
+  return { asignados, sin_viaje: sinViaje };
+}
+
+function guardarTicket(D, t) {
+  D.tickets = D.tickets || [];
+  const e = D.tickets.find((x) => x.ticket === t.ticket);
+  if (!e) { D.tickets.push({ ...t }); return 'nuevo'; }
+  if (e.placa === t.placa && e.peso === t.peso && e.ingreso === t.ingreso && e.salida === t.salida) return 'igual';
+  Object.assign(e, t);
+  return 'actualizado';
+}
+
+/** Recepción manual (o devolución con ticket "-"). Devuelve el id del viaje o null. */
+export function asignarTicket(D, t) {
+  if (t.ticket !== '-') {
+    guardarTicket(D, t);
+    const antes = D.viajes.find((x) => x.ticket === t.ticket);
+    if (antes) { aplicarTicket(antes, t, false); return antes.id; }
+  }
+  const v = D.viajes.filter((x) => x.placa === t.placa && !x.ticket).sort((a, b) => a.id - b.id)[0];
+  if (!v) { if (t.ticket !== '-') D.tickets = D.tickets.filter((x) => x.ticket !== t.ticket); return null; }
+  aplicarTicket(v, t, false);
   return v.id;
 }
 
 /* ---------------- importadores ---------------- */
+
+/** REPORTE HUACHO (exportación SAP de despachos de planta). Acumulativo: las guías ya cargadas se actualizan. */
 export function importarDespachos(D, T, wb, usuario) {
-  const found = findSheet(wb, [['Referencia', 'GUIA', 'GUIA R. HUACHO', 'GUIA REMISION'], ['Placa', 'PLACA']]);
-  if (!found) throw new Error('No se encontró una hoja con columnas "Referencia" (guía) y "Placa".');
-  const res = { insertados: 0, duplicados: 0, sin_transportista: 0, omitidos: 0, errores: [] };
-  const guias = new Set(D.viajes.map((v) => v.guia).filter(Boolean));
+  const found = findSheet(wb, [['Referencia', 'GUIA R. HUACHO', 'GUIA REMISION', 'GUIA'], ['Placa', 'PLACA']], ['REPORTE HUACHO'], ['DETALLE TRANSPORTE']);
+  if (!found) throw new Error('No se encontró la tabla del reporte de planta: debe tener las columnas "Referencia" (guía) y "Placa" (hoja "REPORTE HUACHO" o exportación SAP).');
+  const res = { filas: 0, insertados: 0, actualizados: 0, sin_cambios: 0, sin_transportista: [], omitidos: 0, errores: [] };
+  const porGuia = new Map(D.viajes.filter((v) => v.guia).map((v) => [v.guia, v]));
   for (const r of found.rows) {
-    const guia = str(r.get('Referencia', 'GUIA R. HUACHO', 'GUIA', 'GUIA REMISION'));
+    const guia = str(r.get('Referencia', 'GUIA R. HUACHO', 'GUIA REMISION', 'GUIA'));
     const placa = C.normPlaca(r.get('Placa', 'PLACA'));
-    if (!guia || !placa) { if (guia || placa) res.omitidos++; continue; }
-    if (guias.has(guia)) { res.duplicados++; continue; }
-    const peso = toTn(r.get('P.Neto Ent. Ton', 'Peso TON', 'P.Neto Ton.', 'PESO TN X UNID HUACHO', 'P.Neto Ent.', 'Peso neto', 'PESO'));
+    if (!guia && !placa) continue;
+    res.filas++;
+    if (!guia || !placa) { res.omitidos++; res.errores.push(`Fila ${r._row}: falta ${!guia ? 'la guía' : 'la placa'}`); continue; }
+    const peso = toTn(r.get('Peso TON', 'P.Neto Ent. Ton', 'P.Neto Ton.', 'PESO TN X UNID HUACHO', 'P.Neto Ent.', 'Peso neto', 'PESO'));
     const salida = combinarFechaHora(r.get('FeActDpExp', 'FinActCarg', 'Fe.SM real', 'DIA DESPACHO', 'FECHA'), r.get('HrADpExp', 'HrAFCg', 'HORA'));
     const inicioCarga = combinarFechaHora(r.get('InActCarga', 'FeActDpExp', 'Fe.SM real', 'DIA DESPACHO', 'FECHA'), r.get('HrAICg', 'HrADpExp', 'HORA'));
-    if (!salida) { res.errores.push(`Fila ${r._row}: sin fecha de despacho`); continue; }
-    const tid = resolverTransportista(T, D, str(r.get('Número de transportista', 'TRANSPORTE', 'TRANSPORTISTA', 'Nombre transportista')), placa);
-    if (!tid) res.sin_transportista++;
+    if (!salida) { res.omitidos++; res.errores.push(`Fila ${r._row} (guía ${guia}): sin fecha de despacho`); continue; }
+    const e = porGuia.get(guia);
+    if (e) {
+      if (e.placa === placa && e.peso_origen === peso && e.despacho_en === salida) { res.sin_cambios++; continue; }
+      Object.assign(e, { placa, peso_origen: peso, despacho_en: salida });
+      res.actualizados++;
+      continue;
+    }
+    const nombreT = str(r.get('Número de transportista', 'TRANSPORTE', 'TRANSPORTISTA', 'Nombre transportista'));
+    const tid = resolverTransportista(T, D, nombreT, placa);
+    if (!tid) res.sin_transportista.push(`${placa} (${nombreT || 'sin nombre'})`);
     asegurarParticipacion(D, tid);
-    D.viajes.push(nuevoViaje(D, {
-      transportista_id: tid, placa, fecha_despacho: (inicioCarga || salida).slice(0, 10),
-      jornada_despacho: str(r.get('JORNADA DESPACHO', 'JORNADA')) || C.jornadaDe(inicioCarga || salida),
+    // Día y jornada según el inicio de carga; el turno de las 23:00 cuenta para el día siguiente (como en el Excel).
+    const turno = C.turnoDe(inicioCarga || salida);
+    const nv = nuevoViaje(D, {
+      transportista_id: tid, placa, fecha_despacho: C.normDate(r.get('DIA DESPACHO')) || turno.fecha,
+      jornada_despacho: str(r.get('JORNADA DESPACHO', 'JORNADA')) || turno.jornada,
       despacho_en: salida, guia, peso_origen: peso,
-    }, usuario));
-    guias.add(guia);
+    }, usuario);
+    D.viajes.push(nv);
+    porGuia.set(guia, nv);
     res.insertados++;
   }
+  const c = conciliar(D);
+  res.tickets_cruzados = c.asignados;
+  res.tickets_sin_viaje = c.sin_viaje.length;
+  res.sin_transportista = [...new Set(res.sin_transportista)];
   return res;
 }
 
@@ -162,23 +222,30 @@ export function nuevoViaje(D, v, usuario) {
   };
 }
 
-export function importarTickets(D, wb) {
-  const found = findSheet(wb, [['PLACA'], ['TICKET', 'TICKET CSPCP', 'NRO TICKET'], ['PESO NETO', 'PESO', 'PESO TN', 'NETO']]);
-  if (!found) throw new Error('No se encontró una hoja con columnas "PLACA", "TICKET" y "PESO NETO".');
-  const tickets = [];
+function leerTickets(wb) {
+  const found = findSheet(wb, [['PLACA'], ['TICKET', 'TICKET CSPCP', 'NRO TICKET'], ['PESO NETO', 'PESO', 'PESO TN', 'NETO']], ['REPORTE CSPCP'], ['DETALLE TRANSPORTE']);
+  if (!found) throw new Error('No se encontró la tabla del reporte del puerto: debe tener las columnas "PLACA", "TICKET" y "PESO NETO" (hoja "REPORTE CSPCP").');
+  const out = [];
   for (const r of found.rows) {
     const placa = C.normPlaca(r.get('PLACA'));
     const ticket = str(r.get('TICKET', 'TICKET CSPCP', 'NRO TICKET'));
     if (!placa || !ticket) continue;
-    tickets.push({
+    out.push({
       placa, ticket, peso: toTn(r.get('PESO NETO', 'PESO', 'PESO TN', 'NETO')),
       ingreso: C.normDT(str(r.get('TIEMPO INGRESO', 'HORA INGRESO', 'FECHA INGRESO', 'INGRESO'))),
       salida: C.normDT(str(r.get('TIEMPO SALIDA', 'HORA SALIDA', 'FECHA SALIDA', 'SALIDA'))),
     });
   }
-  tickets.sort((a, b) => (C.toMs(a.ingreso) ?? 0) - (C.toMs(b.ingreso) ?? 0));
-  const res = { procesados: tickets.length, asignados: 0, sin_viaje: [] };
-  for (const t of tickets) { if (asignarTicket(D, t)) res.asignados++; else res.sin_viaje.push(`${t.placa} / ticket ${t.ticket}`); }
+  return out;
+}
+
+/** REPORTE CSPCP (tickets de balanza del puerto). Acumulativo: los tickets ya cargados se actualizan. */
+export function importarTickets(D, wb) {
+  const res = { filas: 0, nuevos: 0, actualizados: 0, sin_cambios: 0 };
+  for (const t of leerTickets(wb)) { res.filas++; const k = guardarTicket(D, t); res[k === 'nuevo' ? 'nuevos' : k === 'actualizado' ? 'actualizados' : 'sin_cambios']++; }
+  const c = conciliar(D);
+  res.asignados = c.asignados;
+  res.sin_viaje = c.sin_viaje.map((t) => `${t.placa} · ticket ${t.ticket} · ${t.ingreso || ''}`);
   return res;
 }
 
@@ -288,6 +355,7 @@ export function importarLibro(wb, T, usuario) {
   const hua = sh('REPORTE HUACHO');
   if (hua) for (const r of rowsByHeader(hua, [['Referencia'], ['Placa']]) || []) { const gg = str(r.get('Referencia')); if (gg) salidaPorGuia.set(gg, combinarFechaHora(r.get('FeActDpExp', 'Fe.SM real'), r.get('HrADpExp'))); }
   const tiempos = new Map();
+  try { D.tickets = leerTickets(wb); } catch { D.tickets = []; }
   const csp = sh('REPORTE CSPCP');
   if (csp) for (const r of rowsByHeader(csp, [['PLACA'], ['TICKET']]) || []) { const t = str(r.get('TICKET')); if (t) tiempos.set(t, { ingreso: C.normDT(str(r.get('TIEMPO INGRESO'))), salida: C.normDT(str(r.get('TIEMPO SALIDA'))) }); }
 
@@ -339,71 +407,177 @@ export function importarLibro(wb, T, usuario) {
 }
 
 /* ---------------- exportación ---------------- */
-const AZUL = 'FF1F3A5F';
-const head = (row) => {
+// Columnas idénticas a la tabla de la hoja DETALLE TRANSPORTE del libro original.
+export const COLS_DETALLE = [
+  ['DIA DESPACHO', 'fecha_despacho', 12, 'f'], ['JORNADA DESPACHO', 'jornada_despacho', 14], ['NRO. VIAJE', 'nro', 8, 'i'],
+  ['TRANSPORTE', 'transportista_nombre', 17], ['PLACA', 'placa', 9], ['GUIA R. HUACHO', 'guia', 18],
+  ['PESO TN X UNID HUACHO', 'peso_origen', 11, 'n'], ['DIA RECEPCION', 'fecha_recepcion', 12, 'f'], ['JORNADA RECEPCION', 'jornada_recepcion', 14],
+  ['TICKET CSPCP', 'ticket', 14], ['PESO TN X UNID CSPCP', 'peso_destino_calc', 11, 'n'], ['REDONDEO X TN DEV', 'redondeo', 11, 'n'],
+  ['DIFERENCIA HUACHO - CSPCP', 'diferencia', 11, 'n'], ['CANT. ACUM.TN', 'acumulado', 11, 'n'], ['CANT. REST. TN', 'restante', 11, 'n'],
+  ['TIPO DE VIAJE', 'tipo', 13], ['HORA INGRESO CSPCP', 'ingreso_en', 17, 'dt'], ['HORA SALIDA CSPCP', 'salida_en', 17, 'dt'],
+  ['TIEMPO', 'tiempo_min', 9, 'h'], ['RANGO', 'rango', 15], ['# REPORTE DESPACHO', 'rep_despacho_calc', 10, 'i'],
+  ['# REPORTE ACOPIO', 'rep_acopio_calc', 10, 'i'], ['VIAJE X UNIDAD', 'vuelta', 9, 'i'], ['CONTEO', 'conteo', 8, 'i'], ['STATUS', 'status', 16],
+];
+// Columnas de las hojas por transportista (TOLVEROS, RIAR, ...)
+export const COLS_TRANSP = [
+  ['DIA DESPACHO', 'fecha_despacho', 12, 'f'], ['JORNADA DESPACHO', 'jornada_despacho', 14], ['NRO. VIAJE', 'nro', 8, 'i'],
+  ['TRANSPORTE', 'transportista_nombre', 16], ['PLACA', 'placa', 10], ['GUIA R.', 'guia', 19], ['PESO X UNID HUACHO', 'peso_origen', 11, 'n'],
+  ['DIA RECEPCION', 'fecha_recepcion', 12, 'f'], ['JORNADA RECEPCION', 'jornada_recepcion', 14], ['TICKET CSPCP', 'ticket', 15],
+  ['PESO X UNID CSPCP', 'peso_destino_calc', 11, 'n'],
+];
+
+/** Valor de celda: fechas como fecha de Excel, tiempos como h:mm:ss, números como número. */
+export function valorCelda(v, k, tipo) {
+  const x = k === 'conteo' ? 1 : v[k];
+  if (x === null || x === undefined || x === '') return null;
+  if (tipo === 'f' || tipo === 'dt') { const ms = C.toMs(x); return ms === null ? x : new Date(ms); }
+  if (tipo === 'h') return x / 1440;
+  return x;
+}
+const FMT = { f: 'dd/mm/yyyy', dt: 'dd/mm/yyyy hh:mm:ss', h: '[h]:mm:ss', n: '#,##0.00', i: '0' };
+
+const AZUL = 'FF1F4E79';
+const borde = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
+function cabecera(row) {
   row.eachCell((c) => {
-    c.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    c.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 9 };
     c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: AZUL } };
     c.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-    c.border = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
+    c.border = borde;
   });
-  row.height = 30;
-};
-const COLS = [
-  ['DIA DESPACHO', 'fecha_despacho', 13], ['JORNADA DESPACHO', 'jornada_despacho', 15], ['NRO. VIAJE', 'nro', 8],
-  ['TRANSPORTE', 'transportista_nombre', 18], ['PLACA', 'placa', 10], ['GUIA R.', 'guia', 19],
-  ['PESO TN ORIGEN', 'peso_origen', 11], ['DIA RECEPCION', 'fecha_recepcion', 13], ['JORNADA RECEPCION', 'jornada_recepcion', 15],
-  ['TICKET', 'ticket', 15], ['PESO TN DESTINO', 'peso_destino_calc', 11], ['REDONDEO X TN DEV', 'redondeo', 11],
-  ['DIFERENCIA', 'diferencia', 10], ['CANT. ACUM. TN', 'acumulado', 12], ['CANT. REST. TN', 'restante', 12],
-  ['TIPO DE VIAJE', 'tipo', 13], ['HORA INGRESO', 'ingreso_en', 18], ['HORA SALIDA', 'salida_en', 18],
-  ['TIEMPO (MIN)', 'tiempo_min', 9], ['RANGO', 'rango', 15], ['# REPORTE DESPACHO', 'rep_despacho_calc', 10],
-  ['# REPORTE ACOPIO', 'rep_acopio_calc', 10], ['VIAJE X UNIDAD', 'vuelta', 9], ['STATUS', 'status', 16],
-];
-function titulo(ws, op, texto, n) {
-  ws.mergeCells(1, 1, 1, n); ws.getCell(1, 1).value = op.empresa || 'PACIFICO DESPACHOS S.A.C.';
-  ws.getCell(1, 1).font = { bold: true, size: 14, color: { argb: AZUL } };
-  ws.mergeCells(2, 1, 2, n); ws.getCell(2, 1).value = `${texto} — ${op.nave} / ORDEN ${op.orden}`;
-  ws.getCell(2, 1).font = { bold: true, size: 12 };
+  row.height = 32;
 }
 const rd = (n) => Math.round(n * 1000) / 1000;
+const suma = (vs, k) => rd(vs.reduce((s, v) => s + (Number(v[k]) || 0), 0));
 const blob = async (wb) => new Blob([await wb.xlsx.writeBuffer()], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 
+let logoB64 = null;
+export async function logoBase64() {
+  if (logoB64 !== null) return logoB64;
+  try {
+    const b = await (await fetch('img/logo.png')).blob();
+    logoB64 = await new Promise((res) => { const r = new FileReader(); r.onload = () => res(r.result); r.readAsDataURL(b); });
+  } catch { logoB64 = ''; }
+  return logoB64;
+}
+
+function filasDatos(ws, cols, viajes, desdeCol) {
+  for (const v of viajes) {
+    const row = ws.addRow([...Array(desdeCol - 1).fill(null), ...cols.map(([, k, , t]) => valorCelda(v, k, t))]);
+    cols.forEach(([, , , t], i) => {
+      const c = row.getCell(desdeCol + i);
+      c.border = borde; c.font = { size: 9 };
+      if (FMT[t]) c.numFmt = FMT[t];
+      if (t && t !== 'f' && t !== 'dt') c.alignment = { horizontal: 'right' };
+    });
+  }
+}
+
+/** DETALLE TRANSPORTE (matriz completa). */
 export async function exportarDetalle(op, viajes, tot) {
   const wb = new (XL().Workbook)();
-  const ws = wb.addWorksheet('DETALLE TRANSPORTE', { views: [{ state: 'frozen', ySplit: 5 }] });
-  titulo(ws, op, 'DETALLE TRANSPORTE', COLS.length);
-  ws.getCell('A3').value = `TN programadas: ${tot.tn_programadas}  |  TN despacho: ${tot.tn_despacho}  |  TN acopio: ${tot.tn_acopio}  |  Viajes: ${tot.viajes}`;
-  ws.getRow(5).values = COLS.map((c) => c[0]); head(ws.getRow(5));
-  COLS.forEach((c, i) => { ws.getColumn(i + 1).width = c[2]; });
-  for (const v of viajes) ws.addRow(COLS.map((c) => v[c[1]] ?? ''));
-  ws.autoFilter = { from: { row: 5, column: 1 }, to: { row: 5, column: COLS.length } };
+  wb.creator = op.empresa || 'Control de Unidades';
+  const ws = wb.addWorksheet('DETALLE TRANSPORTE', { views: [{ state: 'frozen', ySplit: 6 }], pageSetup: { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, paperSize: 8 } });
+  const logo = await logoBase64();
+  if (logo) ws.addImage(wb.addImage({ base64: logo, extension: 'png' }), { tl: { col: 0.1, row: 0.1 }, ext: { width: 120, height: 66 } });
+  ws.getCell('C2').value = (op.empresa || 'PACIFICO DESPACHOS S.A.C.').trim();
+  ws.getCell('C2').font = { bold: true, size: 14, color: { argb: AZUL } };
+  ws.getCell('C3').value = `DETALLE TRANSPORTE — ${op.nave} / ORDEN ${op.orden}`;
+  ws.getCell('C3').font = { bold: true, size: 11 };
+  const res = [
+    ['K', '# VIAJES', tot.viajes, '0'], ['K', 'TN DESPACHO', tot.tn_despacho, FMT.n], ['K', 'PESO PROM.', tot.peso_prom_unidad, FMT.n],
+    ['N', 'TN PROG.', tot.tn_programadas, FMT.n], ['N', 'TN ACOPIO', tot.tn_acopio, FMT.n], ['N', 'TN DEVUELTAS', tot.tn_devueltas, FMT.n],
+    ['Q', 'TN TOTAL', tot.tn_total_transportadas, FMT.n], ['Q', 'TN EN TRÁNSITO', tot.tn_transito, FMT.n], ['Q', 'VIAJES PENDIENTES', tot.viajes_pendientes, '0'],
+  ];
+  res.forEach(([col, l, v, f], i) => {
+    const r = 1 + (i % 3) + 1;
+    const lc = ws.getCell(`${col}${r}`), vc = ws.getCell(`${String.fromCharCode(col.charCodeAt(0) + 1)}${r}`);
+    lc.value = l; lc.font = { bold: true, size: 9 }; vc.value = v ?? 0; vc.numFmt = f; vc.font = { size: 9 };
+  });
+  ws.getRow(6).values = COLS_DETALLE.map((c) => c[0]);
+  cabecera(ws.getRow(6));
+  COLS_DETALLE.forEach((c, i) => { ws.getColumn(i + 1).width = c[2]; });
+  filasDatos(ws, COLS_DETALLE, viajes, 1);
+  const t = ws.addRow(['TOTAL', null, viajes.length, null, null, null, suma(viajes, 'peso_origen'), null, null, viajes.filter((v) => v.ticket).length,
+    suma(viajes, 'peso_destino_calc'), suma(viajes, 'redondeo'), suma(viajes, 'diferencia')]);
+  t.font = { bold: true, size: 9 };
+  [7, 11, 12, 13].forEach((c) => { t.getCell(c).numFmt = FMT.n; });
+  ws.autoFilter = { from: { row: 6, column: 1 }, to: { row: 6 + viajes.length, column: COLS_DETALLE.length } };
   return blob(wb);
+}
+
+/** Agrega al libro la hoja de un transportista con el formato "REPORTE DE SERVICIO TRANSPORTE". */
+async function hojaTransportista(wb, op, t, viajes) {
+  const nombre = String(t.nombre_comercial || 'TRANSPORTISTA').replace(/[\\/?*[\]:]/g, ' ').slice(0, 31);
+  const ws = wb.addWorksheet(nombre, { views: [{ state: 'frozen', ySplit: 11 }], pageSetup: { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, paperSize: 9 } });
+  ws.getColumn(1).width = 2;
+  COLS_TRANSP.forEach((c, i) => { ws.getColumn(i + 2).width = c[2]; });
+  ws.getColumn(13).width = 3; ws.getColumn(14).width = 11; ws.getColumn(15).width = 30;
+  const logo = await logoBase64();
+  if (logo) ws.addImage(wb.addImage({ base64: logo, extension: 'png' }), { tl: { col: 1.1, row: 0.1 }, ext: { width: 110, height: 62 } });
+  ws.getCell('D1').value = (op.empresa || 'PACIFICO DESPACHOS S.A.C.').trim();
+  ws.getCell('D1').font = { bold: true, size: 14, color: { argb: AZUL } };
+  ws.mergeCells('B4:L4');
+  ws.getCell('B4').value = 'REPORTE DE SERVICIO TRANSPORTE';
+  ws.getCell('B4').font = { bold: true, size: 13, color: { argb: 'FFFFFFFF' } };
+  ws.getCell('B4').alignment = { horizontal: 'center' };
+  ws.getCell('B4').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: AZUL } };
+  const info = [
+    [5, 'VAPOR:', op.nave, 'CLIENTE:', op.cliente],
+    [6, 'PRODUCTO:', op.producto, 'DAM:', op.dam],
+    [7, 'FECHA INICIO:', op.fecha_inicio ? new Date(C.toMs(op.fecha_inicio)) : null, 'REFERENCIA:', op.referencia],
+    [8, 'PUNTO SALIDA:', op.punto_salida, 'TOTAL VIAJES:', viajes.length],
+    [9, 'PUNTO LLEGADA:', op.punto_llegada, 'TOTAL PESO TM HUACHO:', suma(viajes, 'peso_origen')],
+    [10, 'EMPRESA DE TRANSPORTE:', t.razon_social, 'RUC', t.ruc],
+  ];
+  for (const [r, l1, v1, l2, v2] of info) {
+    Object.assign(ws.getCell(`B${r}`), { value: l1 }); ws.getCell(`B${r}`).font = { bold: true, size: 9 };
+    ws.getCell(`D${r}`).value = v1 ?? ''; ws.getCell(`D${r}`).font = { size: 9 };
+    if (v1 instanceof Date) ws.getCell(`D${r}`).numFmt = FMT.f;
+    ws.getCell(`G${r}`).value = l2; ws.getCell(`G${r}`).font = { bold: true, size: 9 };
+    ws.getCell(`H${r}`).value = v2 ?? ''; ws.getCell(`H${r}`).font = { size: 9 };
+    if (typeof v2 === 'number' && r === 9) ws.getCell(`H${r}`).numFmt = FMT.n;
+  }
+  ws.getCell('K9').value = 'TOTAL PESO TM CSPCP:'; ws.getCell('K9').font = { bold: true, size: 9 };
+  ws.getCell('L9').value = suma(viajes, 'peso_destino_calc'); ws.getCell('L9').numFmt = FMT.n;
+  ws.getCell('K10').value = t.nombre_comercial; ws.getCell('K10').font = { bold: true, size: 9 };
+  // Contacto (columna N-O como en el libro)
+  const emails = String(t.emails || '').split(/[,;]\s*/).filter(Boolean);
+  ws.getCell('N2').value = 'EMAIL:';
+  emails.slice(0, 4).forEach((e, i) => { ws.getCell(`O${2 + i}`).value = e; });
+  ws.getCell('N7').value = 'CONTACTO:'; ws.getCell('O7').value = t.contacto || '';
+  ws.getCell('N8').value = 'TELEFONO:'; ws.getCell('O8').value = t.telefono || '';
+  ['N2', 'N7', 'N8'].forEach((a) => { ws.getCell(a).font = { bold: true, size: 9 }; });
+
+  ws.getRow(11).values = [null, ...COLS_TRANSP.map((c) => c[0])];
+  cabecera(ws.getRow(11));
+  const orden = [...viajes].sort((a, b) => a.nro - b.nro);
+  filasDatos(ws, COLS_TRANSP, orden, 2);
+  const tr = ws.addRow([null, 'Total', null, orden.length, null, null, null, suma(orden, 'peso_origen'), null, null, null, suma(orden, 'peso_destino_calc')]);
+  tr.font = { bold: true, size: 9 };
+  tr.getCell(8).numFmt = FMT.n; tr.getCell(12).numFmt = FMT.n;
+  for (let c = 2; c <= 12; c++) tr.getCell(c).border = { top: { style: 'thin' }, bottom: { style: 'double' } };
+  const f = tr.number + 2;
+  ws.getCell(`B${f}`).value = '** CONFORMIDAD ACEPTADA **'; ws.getCell(`B${f}`).font = { bold: true };
+  ws.getCell(`B${f + 1}`).value = 'FECHA:';
+  ws.getCell(`B${f + 2}`).value = `APROBADO: ${(op.coordinador || '').toUpperCase()}`;
+  ws.getCell(`J${f}`).value = op.coordinador || '';
+  ws.getCell(`J${f + 1}`).value = 'Coordinador de Transporte';
+  ws.getCell(`J${f + 2}`).value = (op.empresa || 'PACIFICO DESPACHOS S.A.C.').trim();
+  ws.getCell(`J${f}`).border = { top: { style: 'thin' } };
+  ws.getCell(`J${f}`).font = { bold: true };
+  ws.pageSetup.printTitlesRow = '11:11';
 }
 
 export async function exportarTransportista(op, t, viajes) {
   const wb = new (XL().Workbook)();
-  const ws = wb.addWorksheet(String(t.nombre_comercial).slice(0, 31));
-  const cols = COLS.slice(0, 11);
-  titulo(ws, op, 'REPORTE DE SERVICIO TRANSPORTE', cols.length);
-  const sum = (k) => rd(viajes.reduce((s, v) => s + (v[k] || 0), 0));
-  [
-    ['VAPOR:', op.nave, 'CLIENTE:', op.cliente], ['PRODUCTO:', op.producto, 'DAM:', op.dam],
-    ['FECHA INICIO:', op.fecha_inicio, 'REFERENCIA:', op.referencia], ['PUNTO SALIDA:', op.punto_salida, 'TOTAL VIAJES:', viajes.length],
-    ['PUNTO LLEGADA:', op.punto_llegada, 'TOTAL PESO TM ORIGEN:', sum('peso_origen')], ['EMPRESA DE TRANSPORTE:', t.razon_social, 'RUC:', t.ruc],
-    ['', '', 'TOTAL PESO TM DESTINO:', sum('peso_destino_calc')],
-  ].forEach((r, i) => {
-    const row = ws.getRow(4 + i);
-    row.getCell(1).value = r[0]; row.getCell(3).value = r[1] ?? ''; row.getCell(7).value = r[2]; row.getCell(9).value = r[3] ?? '';
-    row.getCell(1).font = row.getCell(7).font = { bold: true };
-  });
-  ws.getRow(12).values = cols.map((c) => c[0]); head(ws.getRow(12));
-  cols.forEach((c, i) => { ws.getColumn(i + 1).width = c[2]; });
-  const orden = [...viajes].sort((a, b) => a.nro - b.nro);
-  for (const v of orden) ws.addRow(cols.map((c) => v[c[1]] ?? ''));
-  ws.addRow(['Total', '', orden.length, '', '', '', sum('peso_origen'), '', '', '', sum('peso_destino_calc')]).font = { bold: true };
-  ws.addRow([]);
-  ws.addRow(['** CONFORMIDAD ACEPTADA **', '', '', '', '', '', '', '', '', op.coordinador || '']);
-  ws.addRow(['FECHA:', '', '', '', '', '', '', '', '', 'Coordinador de Transporte']);
-  ws.addRow([`APROBADO: ${op.coordinador || ''}`, '', '', '', '', '', '', '', '', op.empresa || '']);
+  await hojaTransportista(wb, op, t, viajes);
+  return blob(wb);
+}
+
+/** Un libro con una hoja por transportista (como el Excel original). */
+export async function exportarTransportistas(op, grupos) {
+  const wb = new (XL().Workbook)();
+  for (const { t, viajes } of grupos) await hojaTransportista(wb, op, t, viajes);
   return blob(wb);
 }

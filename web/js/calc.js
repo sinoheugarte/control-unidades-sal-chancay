@@ -52,6 +52,18 @@ function jornadaDe(v) {
   return JORNADAS[2];
 }
 
+/**
+ * Turno operativo de una fecha-hora: el turno 23:00 - 07:00 que empieza a las 23:00
+ * se reporta en el día siguiente (regla observada en el Excel).
+ */
+function turnoDe(v) {
+  const ms = toMs(v);
+  if (ms === null) return { fecha: null, jornada: null };
+  const h = new Date(ms).getUTCHours();
+  const fecha = fmtDT(h >= 23 ? ms + 86400000 : ms).slice(0, 10);
+  return { fecha, jornada: jornadaDe(v) };
+}
+
 function rangoDe(min) {
   if (min === null || min === undefined) return null;
   if (min >= 60) return RANGOS[2];
@@ -80,11 +92,8 @@ function enVentana(ms, reps) {
 function enriquecerViajes(viajes, op, reportes = []) {
   const repD = reportes.filter((r) => r.tipo === 'despacho');
   const repA = reportes.filter((r) => r.tipo === 'acopio');
-  const ordenados = [...viajes].sort((a, b) => {
-    const ka = toMs(a.despacho_en) ?? toMs(a.fecha_despacho) ?? 0;
-    const kb = toMs(b.despacho_en) ?? toMs(b.fecha_despacho) ?? 0;
-    return (a.fecha_despacho || '').localeCompare(b.fecha_despacho || '') || ka - kb || a.id - b.id;
-  });
+  // Igual que el Excel: el N° de viaje y la vuelta siguen el orden de registro (orden de filas del reporte de planta).
+  const ordenados = [...viajes].sort((a, b) => a.id - b.id);
   const vueltas = new Map();
   let acum = 0;
   const prog = op.tn_programadas || 0;
@@ -354,7 +363,7 @@ function preacopio(op) {
 
 export {
   JORNADAS, RANGOS, STATUS,
-  normPlaca, toMs, fmtDT, normDT, normDate, jornadaDe, rangoDe, r3,
+  normPlaca, toMs, fmtDT, normDT, normDate, jornadaDe, turnoDe, rangoDe, r3,
   enriquecerViajes, totales, tablaReportes, tablaEmbarque,
   resumenTransportistas, resumenJornadas, resumenUnidades, resumenTiempos, preacopio,
 };

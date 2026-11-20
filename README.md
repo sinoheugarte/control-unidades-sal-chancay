@@ -24,7 +24,16 @@ Funciona igual que **Pacifico TP Reporte**:
 - **Tablero** con indicadores, gráficos y el balance planta → puerto → embarque → draft SGS.
 - **Transportistas**, con el reporte de servicio de cada uno exportable a Excel.
 - **Lista de unidades**, **resúmenes** y **planificación** (pre-acopio).
-- **Importación** del libro `.xlsm` completo, del reporte SAP de planta, de los tickets de balanza y de la lista de unidades.
+- **Importación independiente y acumulativa de los dos reportes de origen**, igual que las pestañas del Excel:
+  - **REPORTE HUACHO** (SAP de planta): cada guía nueva crea un viaje; las ya cargadas se actualizan y no se duplican. El día y la jornada salen del inicio de carga, y el turno que empieza a las 23:00 cuenta para el día siguiente.
+  - **REPORTE CSPCP** (tickets del puerto): se cruzan con los viajes por **placa + vuelta**, como el `INDEX/MATCH` del Excel. Si un ticket llega antes que su despacho, queda guardado y se cruza solo después.
+  - Pantalla de **estado del cruce**: tickets sin viaje, viajes sin ticket e historial de cargas.
+  - Se puede subir el archivo que envían o el libro `.xlsm` completo: se toma la pestaña correspondiente.
+- **Detalle de viajes** (matriz DETALLE TRANSPORTE con las mismas columnas) exportable a **Excel y PDF**.
+- **Reporte de servicio por transportista** (como las pestañas TOLVEROS, RIAR, …), con cabecera, logo, totales y conformidad:
+  - Vista previa en la app.
+  - Exportación a **Excel y PDF**, por transportista o de todos juntos (un Excel con una hoja por transportista, o un solo PDF).
+- **Importación del libro completo** `.xlsm` (para crear una operación) y de la lista de unidades.
 - **Roles** por correo: *admin*, *operador* y *lector*.
 - **Varios usuarios a la vez:** cada guardado comprueba si otro usuario cambió el archivo antes y, si fue así, recarga y vuelve a aplicar el cambio sin perder datos.
 

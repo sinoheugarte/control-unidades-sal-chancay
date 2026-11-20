@@ -5,6 +5,7 @@
 import * as C from './calc.js?v=__V__';
 import * as G from './graph.js?v=__V__';
 import * as X from './excel.js?v=__V__';
+import * as P from './pdf.js?v=__V__';
 
 const INDICE = 'indice.json';
 const opFile = (id) => `op-${id}.json`;
@@ -213,6 +214,7 @@ ruta('POST', '/operaciones/:id/viajes', async ({ id }, b) => {
     const nv = X.nuevoViaje(D, v, yo.email);
     D.viajes.push(nv);
     X.asegurarParticipacion(D, v.transportista_id);
+    if (!nv.ticket) X.conciliar(D); // por si el ticket del puerto llegó antes que el despacho
     historial(D, 'crear_viaje', `${v.placa} ${v.guia || ''}`);
     return nv.id;
   });
@@ -226,6 +228,7 @@ ruta('PUT', '/viajes/:vid', async ({ vid }, b) => {
     const e = validarViaje(v, D, cur.id); if (e) throw err(400, e);
     Object.assign(cur, v, { actualizado_por: yo.email, actualizado_en: ahora() });
     X.asegurarParticipacion(D, v.transportista_id);
+    X.conciliar(D);
     historial(D, 'editar_viaje', cur.id);
   });
   return (await cargar(opActualId)).viajes.find((x) => x.id === Number(vid));
@@ -407,6 +410,9 @@ ruta('POST', '/operaciones/:id/importar/:tipo', async ({ id, tipo }, b, form) =>
   return mutarOp(id, (D) => {
     const r = tipo === 'despachos' ? X.importarDespachos(D, I.transportistas, wb, yo.email) : tipo === 'tickets' ? X.importarTickets(D, wb) : X.importarLista(D, I.transportistas, wb);
     historial(D, `importar_${tipo}`, archivo(form).name);
+    D.importaciones = [{ tipo, archivo: archivo(form).name, en: ahora(), por: yo.nombre || yo.email,
+      resumen: { ...r, sin_viaje: r.sin_viaje?.length, errores: r.errores?.length, sin_transportista: r.sin_transportista?.length } },
+    ...(D.importaciones || [])].slice(0, 50);
     return r;
   });
 });
@@ -421,6 +427,55 @@ ruta('GET', '/operaciones/:id/exportar/transportista/:tid', async ({ id, tid }) 
   const { op, viajes, I } = await cargar(id);
   const t = I.transportistas.find((x) => x.id === Number(tid)); if (!t) throw err(404, 'Transportista no encontrado');
   return { blob: await X.exportarTransportista(op, t, viajes.filter((v) => v.transportista_id === t.id)), nombre: `REPORTE_${slug(t.nombre_comercial)}_${slug(op.nave)}_${slug(op.orden)}.xlsx` };
+});
+
+/* estado del cruce HUACHO ↔ CSPCP */
+ruta('GET', '/operaciones/:id/cruce', async ({ id }) => {
+  const { D, viajes } = await cargar(id);
+  const asignados = new Set(D.viajes.map((v) => v.ticket).filter(Boolean));
+  const ult = (t) => (D.importaciones || []).find((x) => x.tipo === t) || null;
+  return {
+    viajes: D.viajes.length,
+    con_guia: D.viajes.filter((v) => v.guia).length,
+    tickets: (D.tickets || []).length,
+    tickets_sin_viaje: (D.tickets || []).filter((t) => !asignados.has(t.ticket)),
+    viajes_sin_ticket: viajes.filter((v) => v.status === 'FALTA DESCARGAR').map((v) => ({ nro: v.nro, placa: v.placa, guia: v.guia, peso_origen: v.peso_origen, despacho_en: v.despacho_en, transportista_nombre: v.transportista_nombre })),
+    ultima_huacho: ult('despachos'), ultima_cspcp: ult('tickets'),
+    importaciones: (D.importaciones || []).slice(0, 15),
+  };
+});
+
+/* reporte por transportista */
+async function grupoTransportista(id, tid) {
+  const { op, viajes, I } = await cargar(id);
+  const t = I.transportistas.find((x) => x.id === Number(tid));
+  if (!t) throw err(404, 'Transportista no encontrado');
+  return { op, t, viajes: viajes.filter((v) => v.transportista_id === t.id) };
+}
+async function todosTransportistas(id) {
+  const { D, I, op, viajes } = await cargar(id);
+  const grupos = participantes(D, I).map((p) => ({ t: I.transportistas.find((x) => x.id === p.transportista_id), viajes: viajes.filter((v) => v.transportista_id === p.transportista_id) }))
+    .filter((g) => g.t && g.viajes.length);
+  return { op, grupos };
+}
+ruta('GET', '/operaciones/:id/transportistas/:tid/reporte', async ({ id, tid }) => grupoTransportista(id, tid));
+ruta('GET', '/operaciones/:id/exportar/detalle-pdf', async ({ id }) => {
+  const { op, viajes, embarque } = await cargar(id);
+  return { blob: await P.pdfDetalle(op, viajes, C.totales(viajes, op, embarque)), nombre: `DETALLE_${slug(op.nave)}_ORDEN_${slug(op.orden)}.pdf` };
+});
+ruta('GET', '/operaciones/:id/exportar/transportista-pdf/:tid', async ({ id, tid }) => {
+  const { op, t, viajes } = await grupoTransportista(id, tid);
+  return { blob: await P.pdfTransportista(op, t, viajes), nombre: `REPORTE_${slug(t.nombre_comercial)}_${slug(op.nave)}_${slug(op.orden)}.pdf` };
+});
+ruta('GET', '/operaciones/:id/exportar/transportistas', async ({ id }) => {
+  const { op, grupos } = await todosTransportistas(id);
+  if (!grupos.length) throw err(400, 'No hay transportistas con viajes');
+  return { blob: await X.exportarTransportistas(op, grupos), nombre: `REPORTES_TRANSPORTISTAS_${slug(op.nave)}_${slug(op.orden)}.xlsx` };
+});
+ruta('GET', '/operaciones/:id/exportar/transportistas-pdf', async ({ id }) => {
+  const { op, grupos } = await todosTransportistas(id);
+  if (!grupos.length) throw err(400, 'No hay transportistas con viajes');
+  return { blob: await P.pdfTransportistas(op, grupos), nombre: `REPORTES_TRANSPORTISTAS_${slug(op.nave)}_${slug(op.orden)}.pdf` };
 });
 
 /* usuarios (roles dentro de la app; el acceso real lo da SharePoint) */

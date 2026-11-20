@@ -1,6 +1,6 @@
 import { state, api, esc, toast, $, $$, modal, destruirGraficos, esAdmin } from './core.js?v=__V__';
 import { vTablero, vViajes, vRegistro } from './views-operacion.js?v=__V__';
-import { vReportes, vTransportistas, vUnidades, vResumenes, vPlanificacion } from './views-control.js?v=__V__';
+import { vReportes, vTransportistas, vUnidades, vResumenes, vPlanificacion, vReporteTransportista } from './views-control.js?v=__V__';
 import { vOperaciones, vImportar, vUsuarios } from './views-admin.js?v=__V__';
 import * as G from './graph.js?v=__V__';
 import * as B from './backend.js?v=__V__';
@@ -26,6 +26,7 @@ const RUTAS = {
   viajes: { t: 'Detalle de viajes', v: vViajes },
   reportes: { t: 'Reportes por turno', v: vReportes },
   transportistas: { t: 'Transportistas', v: vTransportistas },
+  'reporte-transportista': { t: 'Reporte por transportista', v: vReporteTransportista, nav: 'transportistas' },
   unidades: { t: 'Lista de unidades', v: vUnidades },
   resumenes: { t: 'Resúmenes', v: vResumenes },
   planificacion: { t: 'Planificación', v: vPlanificacion },
@@ -119,7 +120,7 @@ function shell(root, ruta) {
     <aside class="side" id="side">
       <div class="brand"><div class="brand-logo">${ICON.viajes}</div><div>Control de Unidades<small>Despacho · Acopio · Embarque</small></div></div>
       <nav class="nav">${NAV.map(([sec, items]) => `<div class="sep">${sec}</div>${items.filter((k) => !RUTAS[k].admin || esAdmin())
-        .map((k) => `<a href="#/${k}" class="${k === ruta ? 'active' : ''}" ${k === ruta ? 'aria-current="page"' : ''}>${ICON[k]}${RUTAS[k].t}</a>`).join('')}`).join('')}</nav>
+        .map((k) => { const on = k === (RUTAS[ruta].nav || ruta); return `<a href="#/${k}" class="${on ? 'active' : ''}" ${on ? 'aria-current="page"' : ''}>${ICON[k]}${RUTAS[k].t}</a>`; }).join('')}`).join('')}</nav>
     </aside>
     <div class="main">
       <header class="top">

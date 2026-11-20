@@ -53,44 +53,80 @@ function opModal(o) {
 }
 
 /* =================== IMPORTAR =================== */
-export async function vImportar(view) {
+let ultimoResultado = null; // { tipo, html } para mostrarlo tras recargar la pantalla
+export async function vImportar(view, ctx) {
   if (!puedeEscribir()) { view.innerHTML = '<div class="alert">Su usuario es de sólo lectura.</div>'; return; }
   const op = opActual();
-  const bloque = (id, titulo, desc, necesitaOp = true) => `<div class="card"><h3>${titulo}</h3><p class="muted">${desc}</p>
-    ${necesitaOp && !op ? '<div class="alert">Seleccione una operación primero.</div>' : `<form class="btns" data-imp="${id}">
-      <input type="file" name="archivo" accept=".xlsx,.xlsm,.csv" required style="max-width:340px" aria-label="Archivo">
-      <button class="btn primary">Importar</button></form><div class="small" data-res="${id}" style="margin-top:10px"></div>`}</div>`;
-  view.innerHTML = `
-    ${op ? `<div class="alert ok">Operación activa: <strong>${esc(op.nave)} · Orden ${esc(op.orden)}</strong></div>` : ''}
+  const cr = op ? await api(`/operaciones/${state.opId}/cruce`) : null;
+  const ultima = (u) => (u ? `<p class="muted small" style="margin:6px 0 0">Última carga: <strong>${esc(fechaHora(u.en))}</strong> por ${esc(u.por)} · ${esc(u.archivo)}</p>` : '<p class="muted small" style="margin:6px 0 0">Aún no se ha cargado.</p>');
+  const form = (id) => `<form class="btns" data-imp="${id}" style="margin-top:12px">
+      <input type="file" name="archivo" accept=".xlsx,.xlsm,.xls,.csv" required style="max-width:340px" aria-label="Archivo">
+      <button class="btn primary">Importar</button></form><div class="small" data-res="${id}" style="margin-top:10px"></div>`;
+  view.innerHTML = !op ? `<div class="alert">Seleccione o cree una operación primero. También puede crearla importando el libro completo (abajo).</div>` : `
+    <div class="alert ok">Operación activa: <strong>${esc(op.nave)} · Orden ${esc(op.orden)}</strong></div>
     <div class="grid g2">
-      ${bloque('despachos', '1. Despachos de planta (reporte SAP)', 'Archivo exportado de SAP con las columnas <em>Referencia</em> (guía), <em>Placa</em>, <em>P.Neto Ent.</em>/<em>Peso TON</em>, <em>FeActDpExp</em>/<em>HrADpExp</em> y <em>Número de transportista</em> (hoja "REPORTE HUACHO"). Las guías ya registradas se omiten.')}
-      ${bloque('tickets', '2. Tickets de balanza del puerto', 'Reporte con <em>PLACA</em>, <em>TICKET</em>, <em>PESO NETO</em>, <em>TIEMPO INGRESO</em> y <em>TIEMPO SALIDA</em> (hoja "REPORTE CSPCP"). Cada ticket se asigna al viaje pendiente más antiguo de la misma placa (equivalente al cruce por placa + vuelta del Excel).')}
-      ${bloque('lista', '3. Lista de unidades (Lista SIO)', 'Hoja con <em>RUC</em>, <em>AP. PATERNO</em>, <em>AP. MATERNO</em>, <em>1ER NOMBRE</em>, <em>DNI</em>, <em>BREVETE</em>, <em>TRACTO</em> y <em>PLATAFORMA</em>. Las placas se normalizan (sin guiones ni espacios).')}
-      ${bloque('libro', 'Libro completo (migración)', 'Suba el archivo <em>REPORTE DE CONTROL UNIDADES SAL … .xlsm</em> para crear una operación nueva con todos sus datos: nave, transportistas, lista de unidades, viajes, reportes por turno, embarque y planificación.', false)}
-    </div>`;
-  view.querySelectorAll('[data-imp]').forEach((form) => form.addEventListener('submit', async (e) => {
+      <div class="card"><div class="card-h"><h2>REPORTE HUACHO</h2><span class="pill info">${num(cr.con_guia, 0)} guías</span></div>
+        <p class="muted" style="margin:0">Despachos de planta (exportación SAP). Suba el archivo que le envían cada vez, completo o sólo las filas nuevas: las guías nuevas se agregan, las ya cargadas se actualizan si cambiaron y no se duplica nada.</p>
+        ${ultima(cr.ultima_huacho)}${form('despachos')}</div>
+      <div class="card"><div class="card-h"><h2>REPORTE CSPCP</h2><span class="pill info">${num(cr.tickets, 0)} tickets</span></div>
+        <p class="muted" style="margin:0">Tickets de balanza del puerto (PLACA, TICKET, PESO NETO, TIEMPO INGRESO, TIEMPO SALIDA). Cada ticket se cruza con el viaje por <strong>placa + vuelta</strong>, igual que en el Excel. Si un ticket llega antes que su despacho, queda guardado y se cruza solo al importar el siguiente reporte de Huacho.</p>
+        ${ultima(cr.ultima_cspcp)}${form('tickets')}</div>
+    </div>
+    <div class="card"><div class="card-h"><h2>Estado del cruce Huacho ↔ CSPCP</h2><a class="btn sm" href="#/viajes">Ver detalle de viajes</a></div>
+      <div class="kpis">
+        <div class="kpi"><div class="l">Viajes (Huacho)</div><div class="v">${num(cr.viajes, 0)}</div></div>
+        <div class="kpi"><div class="l">Tickets (CSPCP)</div><div class="v">${num(cr.tickets, 0)}</div></div>
+        <div class="kpi"><div class="l">Falta descargar</div><div class="v">${num(cr.viajes_sin_ticket.length, 0)}</div><div class="s">viajes sin ticket del puerto</div></div>
+        <div class="kpi"><div class="l">Tickets sin viaje</div><div class="v" style="color:${cr.tickets_sin_viaje.length ? 'var(--bad)' : 'inherit'}">${num(cr.tickets_sin_viaje.length, 0)}</div><div class="s">falta su despacho en Huacho</div></div>
+      </div>
+      ${cr.tickets_sin_viaje.length ? `<h3 style="margin:16px 0 8px">Tickets del puerto sin viaje en Huacho</h3>${tabla([
+        { t: 'Placa', k: 'placa' }, { t: 'Ticket', k: 'ticket' }, { t: 'Peso neto', k: 'peso', n: 1 }, { t: 'Ingreso', f: (x) => fechaHora(x.ingreso) },
+      ], cr.tickets_sin_viaje)}` : ''}
+      ${cr.viajes_sin_ticket.length ? `<details style="margin-top:14px"><summary><strong>${cr.viajes_sin_ticket.length} viajes despachados aún sin ticket del puerto</strong></summary>${tabla([
+        { t: 'N°', k: 'nro' }, { t: 'Placa', k: 'placa' }, { t: 'Transporte', k: 'transportista_nombre' }, { t: 'Guía', k: 'guia' },
+        { t: 'TN Huacho', k: 'peso_origen', n: 1 }, { t: 'Salida planta', f: (x) => fechaHora(x.despacho_en) },
+      ], cr.viajes_sin_ticket)}</details>` : ''}
+    </div>
+    ${cr.importaciones.length ? `<div class="card"><div class="card-h"><h3>Historial de importaciones</h3></div>${tabla([
+      { t: 'Fecha', f: (x) => fechaHora(x.en) }, { t: 'Reporte', f: (x) => ({ despachos: 'REPORTE HUACHO', tickets: 'REPORTE CSPCP', lista: 'LISTA' }[x.tipo] || x.tipo) },
+      { t: 'Archivo', k: 'archivo' }, { t: 'Usuario', k: 'por' },
+      { t: 'Resultado', f: (x) => esc(x.tipo === 'despachos' ? `${x.resumen.insertados} nuevos · ${x.resumen.actualizados} actualizados · ${x.resumen.sin_cambios} sin cambios`
+        : x.tipo === 'tickets' ? `${x.resumen.nuevos} nuevos · ${x.resumen.actualizados} actualizados · ${x.resumen.asignados} cruzados · ${x.resumen.sin_viaje || 0} sin viaje`
+          : `${x.resumen.insertados} nuevas · ${x.resumen.actualizados} actualizadas`) },
+    ], cr.importaciones)}</div>` : ''}`;
+  view.insertAdjacentHTML('beforeend', `<div class="grid g2">
+      ${op ? `<div class="card"><h3>Lista de unidades (Lista SIO)</h3><p class="muted">Hoja con <em>RUC</em>, <em>AP. PATERNO</em>, <em>AP. MATERNO</em>, <em>1ER NOMBRE</em>, <em>DNI</em>, <em>BREVETE</em>, <em>TRACTO</em> y <em>PLATAFORMA</em> (hoja "LISTA").</p>${form('lista')}</div>` : ''}
+      <div class="card"><h3>Libro completo (nueva operación)</h3><p class="muted">Suba el archivo <em>REPORTE DE CONTROL UNIDADES SAL … .xlsm</em> para crear una operación nueva con todos sus datos.</p>${form('libro')}</div>
+    </div>`);
+  if (ultimoResultado) { const o = view.querySelector(`[data-res="${ultimoResultado.tipo}"]`); if (o) o.innerHTML = ultimoResultado.html; ultimoResultado = null; }
+  view.querySelectorAll('[data-imp]').forEach((f) => f.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const tipo = form.dataset.imp;
+    const tipo = f.dataset.imp;
     const out = view.querySelector(`[data-res="${tipo}"]`);
-    const btn = form.querySelector('button'); btn.disabled = true;
-    out.innerHTML = '<span class="muted">Procesando…</span>';
+    const btn = f.querySelector('button'); btn.disabled = true;
+    out.innerHTML = '<span class="muted">Procesando… (un archivo grande puede tardar unos segundos)</span>';
     try {
-      const fd = new FormData(form);
+      const fd = new FormData(f);
       const r = tipo === 'libro'
         ? await api('/importar/libro', { method: 'POST', form: fd })
         : await api(`/operaciones/${state.opId}/importar/${tipo}`, { method: 'POST', form: fd });
-      out.innerHTML = resumenImport(tipo, r);
-      if (tipo === 'libro') refrescar(r.operacion_id, false);
-      form.reset();
+      if (tipo === 'libro') { out.innerHTML = resumenImport(tipo, r); refrescar(r.operacion_id, false); f.reset(); return; }
+      toast(resumenTexto(tipo, r));
+      const obs = [...(r.errores || []), ...(r.sin_transportista || []).map((x) => `Placa sin transportista identificado: ${x}`), ...(r.sin_viaje || []).map((x) => `Ticket sin viaje: ${x}`)];
+      ultimoResultado = { tipo, html: `<div class="alert ok">${esc(resumenTexto(tipo, r))}</div>${obs.length ? `<details style="margin-top:6px"><summary>${obs.length} observaciones</summary><ul>${obs.slice(0, 300).map((x) => `<li>${esc(x)}</li>`).join('')}</ul></details>` : ''}` };
+      ctx.rerender();
     } catch (err) { out.innerHTML = `<div class="alert bad">${esc(err.message)}</div>`; } finally { btn.disabled = false; }
   }));
 }
 
+function resumenTexto(tipo, r) {
+  if (tipo === 'despachos') return `REPORTE HUACHO: ${r.insertados} viajes nuevos, ${r.actualizados} actualizados, ${r.sin_cambios} sin cambios. ${r.tickets_cruzados} tickets cruzados.${r.sin_transportista.length ? ` ${r.sin_transportista.length} placas sin transportista.` : ''}`;
+  if (tipo === 'tickets') return `REPORTE CSPCP: ${r.nuevos} tickets nuevos, ${r.actualizados} actualizados. ${r.asignados} cruzados con su viaje; ${r.sin_viaje.length} sin viaje.`;
+  return `LISTA: ${r.insertados} unidades nuevas, ${r.actualizados} actualizadas.`;
+}
+
 function resumenImport(tipo, r) {
   const lista = (arr) => (arr?.length ? `<details style="margin-top:6px"><summary>${arr.length} observaciones</summary><ul>${arr.slice(0, 200).map((x) => `<li>${esc(x)}</li>`).join('')}</ul></details>` : '');
-  if (tipo === 'despachos') return `<div class="alert ok">${r.insertados} viajes nuevos · ${r.duplicados} guías ya existentes · ${r.sin_transportista} sin transportista identificado</div>${lista(r.errores)}`;
-  if (tipo === 'tickets') return `<div class="alert ${r.sin_viaje.length ? '' : 'ok'}">${r.asignados} de ${r.procesados} tickets asignados a viajes</div>${lista(r.sin_viaje)}`;
-  if (tipo === 'lista') return `<div class="alert ok">${r.insertados} unidades nuevas · ${r.actualizados} actualizadas · ${r.sin_transportista} sin transportista</div>`;
   return `<div class="alert ok">Operación creada: ${num(r.viajes, 0)} viajes y ${num(r.unidades || 0, 0)} unidades importadas. Ya está seleccionada.</div>${lista(r.avisos)}`;
 }
 

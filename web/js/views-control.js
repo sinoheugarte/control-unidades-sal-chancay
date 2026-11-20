@@ -136,7 +136,8 @@ export async function vTransportistas(view, ctx) {
   const tot = (k) => res.reduce((s, x) => s + (Number(x[k]) || 0), 0);
   view.innerHTML = `
   ${tab ? `<div class="card"><div class="card-h"><h2>Participación en la operación</h2>
-      ${edit ? '<button class="btn" id="b-part">+ Agregar transportista</button>' : ''}</div>
+      <div class="btns"><button class="btn" id="b-all-xls">Todos los reportes (Excel)</button><button class="btn" id="b-all-pdf">Todos los reportes (PDF)</button>
+      ${edit ? '<button class="btn" id="b-part">+ Agregar transportista</button>' : ''}</div></div>
     ${tabla([
       { t: 'Transporte', f: (x) => `<strong>${esc(x.nombre_comercial)}</strong><div class="muted small">${esc(x.razon_social)} · RUC ${esc(x.ruc)}</div>` },
       { t: 'Unid. solicitadas', k: 'unidades_solicitadas', n: 1, d: 0 }, { t: 'Unid. en lista', k: 'unidades_en_lista', n: 1, d: 0 },
@@ -146,8 +147,9 @@ export async function vTransportistas(view, ctx) {
       { t: 'TN final', k: 'tn_final', n: 1 }, { t: 'Avance', f: (x) => (x.avance === null ? '—' : pct(x.avance)) },
       { t: 'Observación', f: (x) => esc(x.observacion || x.observacion_calc || '') },
       { t: 'Confirmado', f: (x) => (x.reporte_confirmado ? '<span class="pill ok">Sí</span>' : '<span class="pill warn">No</span>') },
-      { t: '', f: (x) => `<div class="btns"><button class="btn sm" data-xls="${x.transportista_id}" ${x.viajes_realizados ? '' : 'disabled'}>Reporte</button>
-          ${edit ? `<button class="btn sm" data-part="${x.transportista_id}">Editar</button>` : ''}</div>` },
+      { t: 'Reporte', f: (x) => (x.viajes_realizados ? `<div class="btns"><a class="btn sm" href="#/reporte-transportista?t=${x.transportista_id}">Ver</a>
+          <button class="btn sm" data-xls="${x.transportista_id}">Excel</button><button class="btn sm" data-pdf="${x.transportista_id}">PDF</button></div>` : '<span class="muted">—</span>') },
+      { t: '', f: (x) => (edit ? `<button class="btn sm" data-part="${x.transportista_id}">Editar</button>` : '') },
     ], res, {
       empty: 'Ningún transportista asignado a la operación',
       foot: ['Total', num(tot('unidades_solicitadas'), 0), num(tot('unidades_en_lista'), 0), '', num(tot('viajes_aprox'), 0), num(tot('tn_aprox')),
@@ -168,8 +170,12 @@ export async function vTransportistas(view, ctx) {
     const p = e.target.closest('[data-part]')?.dataset.part;
     if (p) return partModal(res.find((x) => x.transportista_id === Number(p)), [], ctx.rerender);
     const x = e.target.closest('[data-xls]')?.dataset.xls;
-    if (x) descargar(`/api/operaciones/${state.opId}/exportar/transportista/${x}`);
+    if (x) return descargar(`/api/operaciones/${state.opId}/exportar/transportista/${x}`);
+    const pd = e.target.closest('[data-pdf]')?.dataset.pdf;
+    if (pd) descargar(`/api/operaciones/${state.opId}/exportar/transportista-pdf/${pd}`);
   });
+  $('#b-all-xls')?.addEventListener('click', () => descargar(`/api/operaciones/${state.opId}/exportar/transportistas`));
+  $('#b-all-pdf')?.addEventListener('click', () => descargar(`/api/operaciones/${state.opId}/exportar/transportistas-pdf`));
 }
 
 function transpModal(t, done) {
@@ -365,4 +371,49 @@ export async function vPlanificacion(view, ctx) {
     };
     try { await api(`/operaciones/${state.opId}`, { method: 'PUT', body: { params } }); toast('Parámetros guardados'); ctx.rerender(); } catch (err) { toast(err.message, true); }
   });
+}
+
+/* =================== REPORTE DE SERVICIO POR TRANSPORTISTA =================== */
+export async function vReporteTransportista(view) {
+  if (!state.opId) { view.innerHTML = sinOperacion(); return; }
+  const parts = await api(`/operaciones/${state.opId}/transportistas`);
+  const tid = Number(new URLSearchParams(location.hash.split('?')[1] || '').get('t')) || parts[0]?.transportista_id;
+  if (!tid) { view.innerHTML = '<div class="empty card">No hay transportistas en esta operación.</div>'; return; }
+  const { op, t, viajes } = await api(`/operaciones/${state.opId}/transportistas/${tid}/reporte`);
+  const vs = [...viajes].sort((a, b) => a.nro - b.nro);
+  const sum = (k) => vs.reduce((s, v) => s + (Number(v[k]) || 0), 0);
+  const fila = (l1, v1, l2, v2) => `<tr><th style="position:static">${l1}</th><td>${v1 ?? '—'}</td><th style="position:static">${l2}</th><td>${v2 ?? '—'}</td></tr>`;
+  view.innerHTML = `
+    <div class="card no-print"><div class="card-h">
+      <label style="min-width:260px">Transportista<select id="sel-t">${parts.map((p) => `<option value="${p.transportista_id}" ${p.transportista_id === tid ? 'selected' : ''}>${esc(p.nombre_comercial)}</option>`).join('')}</select></label>
+      <div class="btns"><a class="btn" href="#/transportistas">← Transportistas</a><button class="btn" id="b-xls">Excel</button><button class="btn primary" id="b-pdf">PDF</button></div>
+    </div></div>
+    <div class="card">
+      <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;border-bottom:2px solid var(--primary);padding-bottom:10px;margin-bottom:12px">
+        <img src="img/logo.png" alt="" width="90" height="51" style="border-radius:4px">
+        <div><div style="font-weight:800;font-size:17px;color:var(--primary)">${esc((op.empresa || '').trim())}</div><div style="font-weight:700">REPORTE DE SERVICIO TRANSPORTE</div></div>
+      </div>
+      <div class="table-wrap" style="max-height:none"><table class="info"><tbody>
+        ${fila('Vapor', esc(op.nave), 'Cliente', esc(op.cliente))}
+        ${fila('Producto', esc(op.producto), 'DAM', esc(op.dam))}
+        ${fila('Fecha inicio', fecha(op.fecha_inicio), 'Referencia', esc(op.referencia))}
+        ${fila('Punto salida', esc(op.punto_salida), 'Total viajes', num(vs.length, 0))}
+        ${fila('Punto llegada', esc(op.punto_llegada), 'Total peso TM Huacho', num(sum('peso_origen')))}
+        ${fila('Empresa de transporte', esc(t.razon_social), 'RUC', esc(t.ruc))}
+        ${fila(esc(t.nombre_comercial), `Contacto: ${esc(t.contacto || '—')} · Tel.: ${esc(t.telefono || '—')}${t.emails ? ` · ${esc(t.emails)}` : ''}`, 'Total peso TM CSPCP', `<strong>${num(sum('peso_destino_calc'))}</strong>`)}
+      </tbody></table></div>
+      <div style="margin-top:14px">${tabla([
+        { t: 'Día despacho', f: (v) => fecha(v.fecha_despacho) }, { t: 'Jornada despacho', k: 'jornada_despacho' }, { t: 'Nro. viaje', k: 'nro' },
+        { t: 'Transporte', k: 'transportista_nombre' }, { t: 'Placa', k: 'placa' }, { t: 'Guía R.', k: 'guia' }, { t: 'Peso x unid Huacho', k: 'peso_origen', n: 1 },
+        { t: 'Día recepción', f: (v) => fecha(v.fecha_recepcion) }, { t: 'Jornada recepción', k: 'jornada_recepcion' }, { t: 'Ticket CSPCP', k: 'ticket' },
+        { t: 'Peso x unid CSPCP', k: 'peso_destino_calc', n: 1 },
+      ], vs, { empty: 'Sin viajes', foot: ['Total', '', num(vs.length, 0), '', '', '', num(sum('peso_origen')), '', '', '', num(sum('peso_destino_calc'))] })}</div>
+      <div class="grid g2" style="margin-top:28px">
+        <div><strong>** CONFORMIDAD ACEPTADA **</strong><br>FECHA:<br>APROBADO: ${esc((op.coordinador || '').toUpperCase())}</div>
+        <div style="text-align:center;border-top:1px solid var(--text);padding-top:6px;max-width:300px;justify-self:end;width:100%"><strong>${esc(op.coordinador || '')}</strong><br>Coordinador de Transporte<br>${esc((op.empresa || '').trim())}</div>
+      </div>
+    </div>`;
+  $('#sel-t').addEventListener('change', (e) => { location.hash = `#/reporte-transportista?t=${e.target.value}`; });
+  $('#b-xls').onclick = () => descargar(`/api/operaciones/${state.opId}/exportar/transportista/${tid}`);
+  $('#b-pdf').onclick = () => descargar(`/api/operaciones/${state.opId}/exportar/transportista-pdf/${tid}`);
 }
