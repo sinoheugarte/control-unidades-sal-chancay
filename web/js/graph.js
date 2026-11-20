@@ -148,14 +148,22 @@ const rutaItem = async (nombre) => `drives/${await drive()}/root:/${enc(`${getCf
 
 /** Lee un JSON. Devuelve { data, etag } o { data: null, etag: null } si no existe. */
 export async function leerJSON(nombre) {
-  const r = await g(`${await rutaItem(nombre)}?$select=eTag,@microsoft.graph.downloadUrl`, { raw: true });
+  const ruta = await rutaItem(nombre);
+  const r = await g(ruta, { raw: true });
   if (r.status === 404) return { data: null, etag: null };
   if (!r.ok) throw Object.assign(new Error(`No se pudo leer ${nombre} en SharePoint (${r.status})`), { status: r.status });
   const meta = await r.json();
+  if (meta.folder) throw new Error(`"${nombre}" es una carpeta en SharePoint, no un archivo`);
   const url = meta['@microsoft.graph.downloadUrl'];
-  const d = await fetch(url + (url.includes('?') ? '&' : '?') + 't=' + Date.now());
+  // Con URL de descarga pre-autenticada (lo normal); si no viene, se descarga por Graph.
+  const d = url
+    ? await fetch(url + (url.includes('?') ? '&' : '?') + 't=' + Date.now())
+    : await g(`${ruta}:/content`, { raw: true });
   if (!d.ok) throw new Error(`No se pudo descargar ${nombre} (${d.status})`);
-  return { data: await d.json(), etag: meta.eTag };
+  const texto = await d.text();
+  let data;
+  try { data = texto.trim() ? JSON.parse(texto) : null; } catch { throw new Error(`El archivo ${nombre} en SharePoint está dañado (no es JSON válido)`); }
+  return { data, etag: meta.eTag };
 }
 
 /** Guarda un JSON. Con etag, falla con status 412 si otro usuario lo modificó antes. */

@@ -25,7 +25,7 @@ async function leer(nombre, forzar = false) {
   const c = cache.get(nombre);
   if (c && !forzar && Date.now() - c.at < FRESCO_MS) return c.data;
   const { data, etag } = await G.leerJSON(nombre);
-  const d = data ?? (nombre === INDICE ? indiceVacio() : null);
+  const d = nombre === INDICE ? { ...indiceVacio(), ...(data || {}) } : data;
   cache.set(nombre, { data: d, etag, at: Date.now() });
   return d;
 }
