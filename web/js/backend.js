@@ -612,7 +612,15 @@ ruta('POST', '/importar/resumen', async (p, b, form) => {
   const anio = N(form.get('anio'));
   if (!anio) throw err(400, 'Indique el año de las operaciones del resumen');
   const hojas = X.leerResumenHistorico(wb);
-  if (!hojas.length) throw err(400, 'No se encontraron hojas con el cuadro de transportistas (RAZON SOCIAL, RUC, VIAJES REALIZADOS, TOTAL FINAL TN HUACHO/CSPCP).');
+  const tabla = X.leerTablaResumen(wb);
+  if (!hojas.length && !tabla.length) throw err(400, 'No se encontró la tabla RESUMEN ni hojas con el cuadro de transportistas (RAZON SOCIAL, RUC, VIAJES REALIZADOS, TOTAL FINAL TN HUACHO/CSPCP).');
+  // Naves que sólo están en la tabla RESUMEN (sin hoja propia): se crean con sus fechas y TN
+  for (const t of tabla) {
+    const h = hojas.find((x) => x.nave === t.nave);
+    if (h) { h.resumen.inicio_acopio = t.inicio; h.resumen.fin_acopio = t.fin; continue; }
+    hojas.push({ nave: t.nave, anio: Number(String(t.inicio || '').slice(0, 4)) || null,
+      resumen: { viajes: null, unidades: null, tn_despacho: null, tn_acopio: t.tn, tn_aprox_total: 0, inicio_acopio: t.inicio, fin_acopio: t.fin, transportistas: [], importado: true } });
+  }
   const I = await leer(INDICE, true);
   const res = { creadas: [], omitidas: [] };
   for (const h of hojas) {
@@ -620,7 +628,8 @@ ruta('POST', '/importar/resumen', async (p, b, form) => {
     if (yaExiste) { res.omitidas.push(`${h.nave}: ya existe en la app (${yaExiste.nombre || yaExiste.orden}); se mantiene el detalle de la app`); continue; }
     const D = opVacia();
     D.resumen_manual = h.resumen;
-    await crearOperacion({ nave: h.nave, orden: h.orden || `RESUMEN ${anio}`, anio, estado: 'FINALIZADA', origen: 'resumen', tn_programadas: h.resumen.tn_aprox_total || 0, params: '{}' }, D);
+    const a = h.anio || Number(String(h.resumen.inicio_acopio || '').slice(0, 4)) || anio;
+    await crearOperacion({ nave: h.nave, orden: h.orden || `RESUMEN ${a}`, anio: a, estado: 'FINALIZADA', origen: 'resumen', tn_programadas: h.resumen.tn_aprox_total || 0, params: '{}' }, D);
     res.creadas.push(h.nave);
   }
   return res;

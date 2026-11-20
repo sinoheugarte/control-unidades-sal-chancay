@@ -32,7 +32,7 @@ const RUTAS = {
   unidades: { t: 'Lista de unidades', v: vUnidades },
   resumenes: { t: 'Resúmenes', v: vResumenes },
   planificacion: { t: 'Planificación', v: vPlanificacion },
-  'resumen-anual': { t: 'Resumen anual', v: vResumenAnual },
+  'resumen-anual': { t: 'Resumen para Exportaciones', v: vResumenAnual },
   operaciones: { t: 'Operaciones', v: vOperaciones },
   importar: { t: 'Importar datos', v: vImportar },
   usuarios: { t: 'Usuarios', v: vUsuarios, admin: true },

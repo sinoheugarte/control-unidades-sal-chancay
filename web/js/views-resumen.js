@@ -33,10 +33,11 @@ export async function vResumenAnual(view, ctx) {
 
   view.innerHTML = `
     <div class="card"><div class="card-h">
-      <div><h2>Resumen de operaciones · acopio de sal</h2><div class="muted small">Todas las naves del año. Haga clic en una nave o en los gráficos para ver el detalle.</div></div>
+      <div><h2>Resumen de operaciones acopio de sal · Chancay</h2><div class="muted small">Todas las naves del año. Haga clic en una nave o en los gráficos para ver el detalle.</div></div>
       <div class="btns">
         ${puedeEscribir() ? '<button class="btn" id="b-imp">Importar resumen (Excel)</button>' : ''}
-        <button class="btn" id="b-xls">Excel</button><button class="btn primary" id="b-pdf">PDF</button>
+        <span class="muted small">Completo (resumen + cuadro por nave):</span>
+        <button class="btn" id="b-xls">Excel</button><button class="btn" id="b-pdf">PDF</button>
       </div></div>
       <div class="tabs" role="tablist" style="margin-bottom:12px">${anios.map((a) => `<button role="tab" data-anio="${a}" class="${a === f.anio ? 'active' : ''}" aria-selected="${a === f.anio}">${a}</button>`).join('')}</div>
       <div class="btns">
@@ -74,12 +75,14 @@ export async function vResumenAnual(view, ctx) {
         <div class="card"><div class="card-h"><h3>Participación por transportista</h3><span class="muted small">clic para filtrar</span></div><div class="chart-box"><canvas id="c-tra"></canvas></div></div>
         <div class="card"><div class="card-h"><h3>Transportistas por nave</h3><span class="muted small">TN final CSPCP</span></div><div class="chart-box"><canvas id="c-mat"></canvas></div></div>
       </div>
-      <div class="card"><div class="card-h"><h3>Resumen ${f.anio}${f.transp ? ` · ${esc(transps.get(f.transp) || '')}` : ''}</h3>
-        <div class="btns"><button class="btn sm" id="r-exp">Expandir todo</button><button class="btn sm" id="r-col">Contraer todo</button></div></div>
+      <div class="card"><div class="card-h"><div><h3>RESUMEN ${f.anio}${f.transp ? ` · ${esc(transps.get(f.transp) || '')}` : ''}</h3>
+        <div class="muted small">Tabla resumen como en el libro. Despliegue una nave (▸) para ver su cuadro de transportistas.</div></div>
+        <div class="btns"><span class="muted small">Tabla resumen:</span><button class="btn sm primary" id="t-xls">Excel</button><button class="btn sm primary" id="t-pdf">PDF</button>
+          <button class="btn sm" id="r-exp">Expandir todo</button><button class="btn sm" id="r-col">Contraer todo</button></div></div>
         <div class="table-wrap" style="max-height:none"><table>
-          <thead><tr><th></th><th>N°</th><th>Nave</th><th>Orden</th><th>Fecha inicio acopio</th><th>Fecha final acopio</th><th class="num">TN sal acopiada</th><th class="num">Viajes</th><th>Estado</th><th></th></tr></thead>
-          <tbody>${ops.map((o, i) => filaOp(o, i, tot[i])).join('') || '<tr><td colspan="10" class="empty">Ninguna operación coincide con los filtros</td></tr>'}</tbody>
-          <tfoot><tr><td></td><td></td><td>TOTAL</td><td></td><td></td><td></td><td class="num">${num(sum('tn_acopio'))}</td><td class="num">${num(sum('viajes'), 0)}</td><td></td><td></td></tr></tfoot>
+          <thead><tr><th class="no-print"></th><th>N°</th><th>NAVE</th><th>FECHA INICIO ACOPIO</th><th>FECHA FINAL ACOPIO</th><th class="num">TN SAL ACOPIADA</th><th class="no-print"></th></tr></thead>
+          <tbody>${ops.map((o, i) => filaOp(o, i, tot[i])).join('') || '<tr><td colspan="7" class="empty">Ninguna operación coincide con los filtros</td></tr>'}</tbody>
+          <tfoot><tr><td class="no-print"></td><td></td><td>TOTAL</td><td></td><td></td><td class="num">${num(sum('tn_acopio'))}</td><td class="no-print"></td></tr></tfoot>
         </table></div></div>`;
     graficos(ops, tot);
     $('#r-exp').onclick = () => { ops.forEach((o) => f.abiertas.add(o.id)); pintar(); };
@@ -98,14 +101,14 @@ export async function vResumenAnual(view, ctx) {
     const ab = f.abiertas.has(o.id);
     const ts = filasT(o);
     const s = (k) => ts.reduce((a, x) => a + (Number(x[k]) || 0), 0);
-    return `<tr data-fila="${o.id}" style="cursor:pointer">
-        <td><button class="btn sm" data-tog="${o.id}" aria-expanded="${ab}" aria-label="Ver transportistas de ${esc(o.nave)}">${ab ? '▾' : '▸'}</button></td>
-        <td>${i + 1}</td><td><strong>${esc(o.nave)}</strong></td><td>${esc(o.orden)}</td>
+    return `<tr data-fila="${o.id}" style="cursor:pointer" title="${esc(`Orden ${o.orden} · ${estadoDe(o)} · ${t.viajes} viajes`)}">
+        <td class="no-print"><button class="btn sm" data-tog="${o.id}" aria-expanded="${ab}" aria-label="Ver transportistas de ${esc(o.nave)}">${ab ? '▾' : '▸'}</button></td>
+        <td>${i + 1}</td><td><strong>${esc(o.nave)}</strong></td>
         <td>${fecha(o.resumen?.inicio_acopio)}</td><td>${fecha(o.resumen?.fin_acopio)}</td>
-        <td class="num"><strong>${num(t.tn_acopio)}</strong></td><td class="num">${num(t.viajes, 0)}</td>
-        <td><span class="pill ${estadoDe(o) === 'FINALIZADA' ? 'ok' : 'info'}">${esc(estadoDe(o))}</span>${o.origen === 'resumen' ? ' <span class="pill warn" title="Importada de un libro de resumen: sin detalle de viajes">resumen</span>' : ''}</td>
-        <td>${o.origen === 'resumen' ? '' : `<button class="btn sm" data-abrir="${o.id}">Abrir</button>`}</td></tr>
-      ${ab ? `<tr><td></td><td colspan="9" style="white-space:normal;background:var(--surface-2)">
+        <td class="num"><strong>${num(t.tn_acopio)}</strong></td>
+        <td class="no-print">${o.origen === 'resumen' ? '' : `<button class="btn sm" data-abrir="${o.id}">Abrir</button>`}</td></tr>
+      ${ab ? `<tr><td></td><td colspan="6" style="white-space:normal;background:var(--surface-2)">
+        <div class="muted small" style="margin-bottom:6px">Orden ${esc(o.orden)} · ${esc(estadoDe(o))} · ${num(t.viajes, 0)} viajes${o.origen === 'resumen' ? ' · importada de libro de resumen (sin detalle de viajes)' : ''}</div>
         ${tabla(colsT, ts, { empty: 'Sin cuadro de transportistas', foot: ['TOTAL', String(ts.filter((x) => x.ruc).length), num(s('unidades_solicitadas'), 0), '-', num(s('viajes_aprox'), 0), num(s('tn_aprox'), 0), num(s('viajes_realizados'), 0), num(s('tn_huacho')), num(s('tn_cspcp')), ''] })}
       </td></tr>` : ''}`;
   }
@@ -166,8 +169,14 @@ export async function vResumenAnual(view, ctx) {
   });
   const opsVisibles = () => $('#r-body')._ops || [];
   const datosExport = () => opsVisibles().map((o) => ({ ...o, tot: totalesOp(o), filas: filasT(o) }));
-  $('#b-xls').onclick = async () => { toast('Generando Excel…'); descargarBlob(await exportarResumenAnual(f.anio, datosExport()), `RESUMEN DE OPERACIONES ACOPIO DE SAL CHANCAY ${f.anio}.xlsx`); };
-  $('#b-pdf').onclick = async () => { toast('Generando PDF…'); descargarBlob(await pdfResumenAnual(f.anio, datosExport(), state.ops[0]?.empresa), `RESUMEN DE OPERACIONES ACOPIO DE SAL CHANCAY ${f.anio}.pdf`); };
+  const nombreArch = (sufijo, ext) => `RESUMEN DE OPERACIONES ACOPIO DE SAL CHANCAY ${f.anio}${sufijo}.${ext}`;
+  const empresa = () => state.ops[0]?.empresa;
+  $('#b-xls').onclick = async () => { toast('Generando Excel…'); descargarBlob(await exportarResumenAnual(f.anio, datosExport()), nombreArch('', 'xlsx')); };
+  $('#b-pdf').onclick = async () => { toast('Generando PDF…'); descargarBlob(await pdfResumenAnual(f.anio, datosExport(), empresa()), nombreArch('', 'pdf')); };
+  view.addEventListener('click', async (e) => {
+    if (e.target.id === 't-xls') { toast('Generando Excel…'); descargarBlob(await exportarResumenAnual(f.anio, datosExport(), { soloTabla: true }), nombreArch(' - TABLA RESUMEN', 'xlsx')); }
+    if (e.target.id === 't-pdf') { toast('Generando PDF…'); descargarBlob(await pdfResumenAnual(f.anio, datosExport(), empresa(), { soloTabla: true }), nombreArch(' - TABLA RESUMEN', 'pdf')); }
+  });
   $('#b-imp')?.addEventListener('click', () => importarModal(ctx));
 }
 const filasTodas = (o) => o.resumen?.transportistas || [];

@@ -40,7 +40,8 @@ Funciona igual que **Pacifico TP Reporte**:
   - Exportación a **Excel y PDF**, por transportista o de todos juntos (un Excel con una hoja por transportista, o un solo PDF).
 - **Importación del libro completo** `.xlsm` (para crear una operación) y de la lista de unidades.
 - **Roles** por correo: *admin*, *operador* y *lector*.
-- **Resumen anual** de todas las operaciones, como el libro *RESUMEN DE OPERACIONES ACOPIO DE SAL*:
+- **Resumen para Exportaciones**: todas las operaciones por año, como el libro *RESUMEN DE OPERACIONES ACOPIO DE SAL*:
+  - Tabla RESUMEN igual a la del libro (N°, NAVE, FECHA INICIO ACOPIO, FECHA FINAL ACOPIO, TN SAL ACOPIADA, TOTAL), descargable sola en Excel y PDF.
   - Pestañas por año, filtros, indicadores y gráficos interactivos.
   - Cuadro de naves que se despliega con el cuadro de cada transportista.
   - Exporta a Excel (una hoja por nave) y PDF, e importa el libro de resumen histórico.

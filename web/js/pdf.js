@@ -30,7 +30,7 @@ function piePaginas(doc, op) {
   for (let i = 1; i <= n; i++) {
     doc.setPage(i);
     doc.setFontSize(7); doc.setTextColor(120);
-    doc.text(`${(op.empresa || '').trim()} · ${op.nave} / Orden ${op.orden} · Generado ${new Date().toLocaleString('es-PE')}`, 10, h - 6);
+    doc.text(`${(op.empresa || '').trim()} · ${op.nave}${op.orden && op.orden !== '-' ? ` / Orden ${op.orden}` : ''} · Generado ${new Date().toLocaleString('es-PE')}`, 10, h - 6);
     doc.text(`Página ${i} de ${n}`, w - 10, h - 6, { align: 'right' });
   }
   doc.setTextColor(0);
@@ -186,20 +186,22 @@ export async function pdfUnidades(op, t, unidades) {
 }
 
 /** RESUMEN ANUAL: cuadro de naves y el cuadro de transportistas de cada nave. */
-export async function pdfResumenAnual(anio, ops, empresa) {
+export async function pdfResumenAnual(anio, ops, empresa, { soloTabla = false } = {}) {
   const doc = nuevoDoc('a4');
   const op = { empresa: empresa || 'PACIFICO DESPACHOS S.A.C.', nave: `Resumen ${anio}`, orden: '-' };
   let y = await encabezado(doc, op, `RESUMEN DE OPERACIONES ACOPIO DE SAL CHANCAY ${anio}`);
   const tn = ops.reduce((s, o) => s + o.tot.tn_acopio, 0);
   doc.autoTable({
     startY: y,
-    head: [['N°', 'NAVE', 'ORDEN', 'FECHA INICIO ACOPIO', 'FECHA FINAL ACOPIO', 'TN SAL ACOPIADA', 'VIAJES']],
-    body: ops.map((o, i) => [i + 1, o.nave, o.orden, fecha(o.resumen?.inicio_acopio), fecha(o.resumen?.fin_acopio), n2(o.tot.tn_acopio), String(o.tot.viajes)]),
-    foot: [['', 'TOTAL', '', '', '', n2(tn), String(ops.reduce((s, o) => s + o.tot.viajes, 0))]],
-    styles: { fontSize: 9, cellPadding: 1.4 }, headStyles: { fillColor: AZUL, textColor: 255, halign: 'center' },
-    footStyles: { fillColor: [235, 240, 246], textColor: 0, fontStyle: 'bold' }, columnStyles: { 5: { halign: 'right' }, 6: { halign: 'right' } },
-    margin: { left: 10, right: 10, bottom: 14 },
+    head: [['N°', 'NAVE', 'FECHA INICIO ACOPIO', 'FECHA FINAL ACOPIO', 'TN SAL ACOPIADA']],
+    body: ops.map((o, i) => [i + 1, o.nave, fecha(o.resumen?.inicio_acopio), fecha(o.resumen?.fin_acopio), n2(o.tot.tn_acopio)]),
+    foot: [['', 'TOTAL', '', '', n2(tn)]],
+    styles: { fontSize: 10, cellPadding: 1.8 }, headStyles: { fillColor: AZUL, textColor: 255, halign: 'center' },
+    footStyles: { fillColor: [235, 240, 246], textColor: 0, fontStyle: 'bold' },
+    columnStyles: { 0: { halign: 'center', cellWidth: 14 }, 2: { halign: 'center' }, 3: { halign: 'center' }, 4: { halign: 'right' } },
+    margin: { left: 30, right: 30, bottom: 14 },
   });
+  if (soloTabla) { piePaginas(doc, op); return blob(doc); }
   for (const o of ops) {
     doc.addPage();
     y = await encabezado(doc, op, `${o.nave} · ORDEN ${o.orden}`);

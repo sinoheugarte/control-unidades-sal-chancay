@@ -621,6 +621,20 @@ export async function exportarUnidades(op, t, unidades) {
  * Libro "RESUMEN DE OPERACIONES ACOPIO DE SAL …": una hoja visible por nave con el cuadro de
  * transportistas. Las hojas ocultas (p. ej. RESUMEN) no se importan.
  */
+/** Hoja RESUMEN (N°, NAVE, FECHA INICIO ACOPIO, FECHA FINAL ACOPIO, TN SAL ACOPIADA). */
+export function leerTablaResumen(wb) {
+  const f = findSheet(wb, [['NAVE'], ['FECHA INICIO ACOPIO'], ['TN SAL ACOPIADA']], ['RESUMEN']);
+  if (!f) return [];
+  const out = [];
+  for (const r of f.rows) {
+    const nave = str(r.get('NAVE'));
+    if (!nave || /^TOTAL/i.test(nave)) { if (nave) break; continue; }
+    out.push({ nave: nave.toUpperCase().replace(/\s+/g, ' ').trim(), inicio: C.normDate(r.get('FECHA INICIO ACOPIO')),
+      fin: C.normDate(r.get('FECHA FINAL ACOPIO')), tn: toNum(r.get('TN SAL ACOPIADA')) || 0 });
+  }
+  return out;
+}
+
 export function leerResumenHistorico(wb) {
   const out = [];
   for (const ws of wb.worksheets) {
@@ -661,24 +675,26 @@ export const COLS_RESUMEN_T = [
   ['TOTAL FINAL TN HUACHO', 'tn_huacho', 13, 'n'], ['TOTAL FINAL TN CSPCP', 'tn_cspcp', 13, 'n'], ['OBSERVACION', 'observacion', 26],
 ];
 /** Libro como "RESUMEN DE OPERACIONES ACOPIO DE SAL … <AÑO>": hoja RESUMEN + una hoja por nave. */
-export async function exportarResumenAnual(anio, ops) {
+export async function exportarResumenAnual(anio, ops, { soloTabla = false } = {}) {
   const wb = new (XL().Workbook)();
-  const logo = await logoBase64();
-  const ws = wb.addWorksheet(`RESUMEN ${anio}`, { pageSetup: { orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 0, paperSize: 9 } });
-  ws.getColumn(1).width = 2; [6, 30, 12, 16, 16, 16, 10].forEach((w, i) => { ws.getColumn(i + 2).width = w; });
-  if (logo) ws.addImage(wb.addImage({ base64: logo, extension: 'png' }), { tl: { col: 1.1, row: 0.1 }, ext: { width: 90, height: 50 } });
-  ws.getCell('D1').value = `RESUMEN DE OPERACIONES ACOPIO DE SAL CHANCAY ${anio}`;
-  ws.getCell('D1').font = { bold: true, size: 13, color: { argb: AZUL } };
-  ws.getRow(4).values = [null, 'N°', 'NAVE', 'ORDEN', 'FECHA INICIO ACOPIO', 'FECHA FINAL ACOPIO', 'TN SAL ACOPIADA', 'VIAJES'];
+  // Hoja RESUMEN igual al libro: desde B4, columnas N° · NAVE · FECHA INICIO ACOPIO · FECHA FINAL ACOPIO · TN SAL ACOPIADA
+  const ws = wb.addWorksheet('RESUMEN', { pageSetup: { orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 0, paperSize: 9 } });
+  ws.getColumn(1).width = 3; [6, 34, 20, 20, 18].forEach((w, i) => { ws.getColumn(i + 2).width = w; });
+  ws.getCell('B2').value = `RESUMEN DE OPERACIONES ACOPIO DE SAL CHANCAY ${anio}`;
+  ws.getCell('B2').font = { bold: true, size: 12, color: { argb: AZUL } };
+  ws.getRow(4).values = [null, 'N°', 'NAVE', 'FECHA INICIO ACOPIO', 'FECHA FINAL ACOPIO', 'TN SAL ACOPIADA'];
   cabecera(ws.getRow(4));
   ops.forEach((o, i) => {
-    const row = ws.addRow([null, i + 1, o.nave, o.orden, o.resumen?.inicio_acopio ? new Date(C.toMs(o.resumen.inicio_acopio)) : null,
-      o.resumen?.fin_acopio ? new Date(C.toMs(o.resumen.fin_acopio)) : null, o.tot.tn_acopio, o.tot.viajes]);
-    for (let c = 2; c <= 8; c++) { row.getCell(c).border = borde; row.getCell(c).font = { size: 10 }; }
-    row.getCell(5).numFmt = FMT.f; row.getCell(6).numFmt = FMT.f; row.getCell(7).numFmt = FMT.n;
+    const row = ws.addRow([null, i + 1, o.nave, o.resumen?.inicio_acopio ? new Date(C.toMs(o.resumen.inicio_acopio)) : null,
+      o.resumen?.fin_acopio ? new Date(C.toMs(o.resumen.fin_acopio)) : null, o.tot.tn_acopio]);
+    for (let c = 2; c <= 6; c++) { row.getCell(c).border = borde; row.getCell(c).font = { size: 10 }; }
+    row.getCell(2).alignment = { horizontal: 'center' };
+    row.getCell(4).numFmt = FMT.f; row.getCell(5).numFmt = FMT.f; row.getCell(6).numFmt = FMT.n;
   });
-  const t = ws.addRow([null, null, 'TOTAL', null, null, null, rd(ops.reduce((s, o) => s + o.tot.tn_acopio, 0)), ops.reduce((s, o) => s + o.tot.viajes, 0)]);
-  t.font = { bold: true }; t.getCell(7).numFmt = FMT.n;
+  const t = ws.addRow([null, null, 'TOTAL', null, null, rd(ops.reduce((s, o) => s + o.tot.tn_acopio, 0))]);
+  t.font = { bold: true }; t.getCell(6).numFmt = FMT.n;
+  for (let c = 2; c <= 6; c++) t.getCell(c).border = borde;
+  if (soloTabla) return blob(wb);
   const usados = new Set([ws.name]);
   for (const o of ops) {
     let nombre = String(o.nave).replace(/[\\/?*[\]:]/g, ' ').slice(0, 31);
