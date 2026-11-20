@@ -222,18 +222,29 @@ export function nuevoViaje(D, v, usuario) {
   };
 }
 
+/* Columnas del reporte del puerto (CSPCP). Acepta la hoja REPORTE CSPCP del libro de control y la
+   exportación del sistema del puerto en inglés (NZ-BTOS: License plate number, Ticket number, Net Weight,
+   Entry time, Exit time). */
+const CSP = {
+  placa: ['PLACA', 'License plate number', 'License plate', 'Plate number', 'Plate', 'Truck plate'],
+  ticket: ['TICKET', 'TICKET CSPCP', 'NRO TICKET', 'Ticket number', 'Ticket No', 'Ticket'],
+  peso: ['PESO NETO', 'PESO', 'PESO TN', 'NETO', 'Net Weight', 'Net weight (t)', 'Net'],
+  ingreso: ['TIEMPO INGRESO', 'HORA INGRESO', 'FECHA INGRESO', 'INGRESO', 'Entry time', 'Ingate time', 'In time'],
+  salida: ['TIEMPO SALIDA', 'HORA SALIDA', 'FECHA SALIDA', 'SALIDA', 'Exit time', 'Outgate time', 'Out time'],
+};
 function leerTickets(wb) {
-  const found = findSheet(wb, [['PLACA'], ['TICKET', 'TICKET CSPCP', 'NRO TICKET'], ['PESO NETO', 'PESO', 'PESO TN', 'NETO']], ['REPORTE CSPCP'], ['DETALLE TRANSPORTE']);
-  if (!found) throw new Error('No se encontró la tabla del reporte del puerto: debe tener las columnas "PLACA", "TICKET" y "PESO NETO" (hoja "REPORTE CSPCP").');
+  const found = findSheet(wb, [CSP.placa, CSP.ticket, CSP.peso], ['REPORTE CSPCP'], ['DETALLE TRANSPORTE']);
+  if (!found) throw new Error('No se encontró la tabla del reporte del puerto: debe tener la placa (PLACA / License plate number), el ticket (TICKET / Ticket number) y el peso neto (PESO NETO / Net Weight).');
   const out = [];
   for (const r of found.rows) {
-    const placa = C.normPlaca(r.get('PLACA'));
-    const ticket = str(r.get('TICKET', 'TICKET CSPCP', 'NRO TICKET'));
+    const placa = C.normPlaca(r.get(...CSP.placa));
+    const ticket = str(r.get(...CSP.ticket));
     if (!placa || !ticket) continue;
+    const fh = (v) => (v instanceof Date ? C.normDT(v) : C.normDT(str(v)));
     out.push({
-      placa, ticket, peso: toTn(r.get('PESO NETO', 'PESO', 'PESO TN', 'NETO')),
-      ingreso: C.normDT(str(r.get('TIEMPO INGRESO', 'HORA INGRESO', 'FECHA INGRESO', 'INGRESO'))),
-      salida: C.normDT(str(r.get('TIEMPO SALIDA', 'HORA SALIDA', 'FECHA SALIDA', 'SALIDA'))),
+      placa, ticket, peso: toTn(r.get(...CSP.peso)),
+      ingreso: fh(r.get(...CSP.ingreso)),
+      salida: fh(r.get(...CSP.salida)),
     });
   }
   return out;
@@ -383,7 +394,7 @@ export function importarLibro(wb, T, usuario) {
   const emb = sh('RESUMEN EMBARQUE'), det = sh('DETALLE TRANSPORTE'), pre = sh('PREACOPIO');
   if (!det) {
     const pista = findSheet(wb, [['Referencia'], ['Placa']]) ? 'Este archivo parece un REPORTE HUACHO (despachos de planta).'
-      : findSheet(wb, [['PLACA'], ['TICKET']]) ? 'Este archivo parece un REPORTE CSPCP (tickets del puerto).'
+      : findSheet(wb, [CSP.placa, CSP.ticket]) ? 'Este archivo parece un REPORTE CSPCP (tickets del puerto).'
         : findSheet(wb, [AL.tracto, [...AL.dni, ...AL.brevete]]) ? 'Este archivo parece una LISTA de conductores y unidades.' : null;
     throw new Error(pista
       ? `${pista} "Libro completo" es sólo para migrar un libro de control (.xlsm con la hoja DETALLE TRANSPORTE). Primero cree la operación en Operaciones → + Nueva operación y luego impórtelo en su tarjeta de Importar datos.`
