@@ -97,11 +97,23 @@ function historial(D, accion, detalle) {
 /* ---------------- sesión y roles ---------------- */
 export async function iniciarSesion() {
   const u = await G.yo();
-  const I = await leer(INDICE, true);
+  // ¿Es un usuario transportista? Tiene su propia carpeta del portal con perfil.json
+  let perfil = null;
+  try { perfil = (await G.leerJSON(`${portalDir(u.email)}/perfil.json`)).data; } catch { perfil = null; }
+  let I;
+  try { I = await leer(INDICE, true); } catch (e) {
+    if (!perfil) throw err(e.status || 403, 'Su cuenta no tiene acceso a Control de Unidades. Contacte al administrador.');
+  }
+  if (perfil && (!I || (I.usuarios || []).some((x) => x.email === u.email && x.rol === 'transportista'))) {
+    if (perfil.activo === false) throw err(403, 'Su usuario está desactivado. Contacte a Pacífico Despachos.');
+    yo = { id: u.email, usuario: u.email, nombre: perfil.nombre || u.nombre, email: u.email, rol: 'transportista', transportista: perfil.transportista };
+    return yo;
+  }
   const reg = (I.usuarios || []).find((x) => x.email === u.email);
   // Mientras no haya usuarios configurados, todos son administradores (arranque).
   const rol = !I.usuarios?.length ? 'admin' : reg ? (reg.activo === false ? null : reg.rol) : (I.rol_por_defecto || 'lector');
   if (!rol) throw err(403, 'Su usuario está desactivado en Control de Unidades. Contacte al administrador.');
+  if (rol === 'transportista') throw err(403, 'Su acceso de transportista aún no está listo. Pida al administrador que use "Republicar portal".');
   yo = { id: u.email, usuario: u.email, nombre: reg?.nombre || u.nombre, email: u.email, rol };
   if (rol !== 'lector') await migrarNombres();
   return yo;
@@ -151,6 +163,7 @@ async function mutarOp(id, fn) {
   let D2;
   const r = await mutar(await opFile(id), async (D) => { const x = await fn(D); D2 = D; return x; });
   await syncIndice(D2);
+  try { await publicarPortalOp(D2); } catch (e) { console.warn('Portal transportistas:', e.message); }
   return r;
 }
 
@@ -549,24 +562,37 @@ ruta('POST', '/usuarios', async (p, b) => {
   ADMIN();
   const email = S(b.email)?.toLowerCase();
   if (!email || !email.includes('@')) throw err(400, 'Ingrese el correo de Microsoft 365 del usuario');
-  if (!['admin', 'operador', 'lector'].includes(b.rol)) throw err(400, 'Rol inválido');
+  if (!['admin', 'operador', 'lector', 'transportista'].includes(b.rol)) throw err(400, 'Rol inválido');
+  const tid = b.rol === 'transportista' ? N(b.transportista_id) : null;
+  if (b.rol === 'transportista' && !(await leer(INDICE)).transportistas.some((t) => t.id === tid)) throw err(400, 'Seleccione la empresa de transporte del usuario');
   await mutar(INDICE, (I) => {
     I.usuarios = I.usuarios || [];
     // Al registrar el primer usuario, el administrador actual queda registrado también para no perder el acceso.
     if (!I.usuarios.length && email !== yo.email) I.usuarios.push({ email: yo.email, nombre: yo.nombre, rol: 'admin', activo: true });
     if (I.usuarios.some((u) => u.email === email)) throw err(409, 'Ese usuario ya está registrado');
-    I.usuarios.push({ email, nombre: S(b.nombre) || email, rol: b.rol, activo: true });
+    I.usuarios.push({ email, nombre: S(b.nombre) || email, rol: b.rol, transportista_id: tid, activo: true });
   });
+  if (b.rol === 'transportista') return activarPortal(email);
   return { ok: true };
 });
 ruta('PUT', '/usuarios/:email', async ({ email }, b) => {
   ADMIN();
   email = decodeURIComponent(email);
   if (email === yo.email && (b.rol !== 'admin' || b.activo === false)) throw err(400, 'No puede quitarse a sí mismo el rol de administrador ni desactivarse');
+  if (b.rol && !['admin', 'operador', 'lector', 'transportista'].includes(b.rol)) throw err(400, 'Rol inválido');
+  const antes = ((await leer(INDICE, true)).usuarios || []).find((x) => x.email === email);
+  if (!antes) throw err(404, 'No encontrado');
   await mutar(INDICE, (I) => {
     const u = (I.usuarios || []).find((x) => x.email === email); if (!u) throw err(404, 'No encontrado');
-    Object.assign(u, { nombre: S(b.nombre) || u.nombre, rol: b.rol || u.rol, activo: b.activo !== false });
+    const rol = b.rol || u.rol;
+    Object.assign(u, { nombre: S(b.nombre) || u.nombre, rol, activo: b.activo !== false,
+      transportista_id: rol === 'transportista' ? (N(b.transportista_id) ?? u.transportista_id) : null });
   });
+  const ahoraU = ((await leer(INDICE)).usuarios || []).find((x) => x.email === email);
+  const eraPortal = antes.rol === 'transportista' && antes.activo !== false;
+  const esPortal = ahoraU.rol === 'transportista' && ahoraU.activo !== false;
+  if (eraPortal && (!esPortal || antes.transportista_id !== ahoraU.transportista_id)) await desactivarPortal(email);
+  if (esPortal) return activarPortal(email);
   return { ok: true };
 });
 ruta('PUT', '/usuarios-config', async (p, b) => {
@@ -576,9 +602,140 @@ ruta('PUT', '/usuarios-config', async (p, b) => {
   return { ok: true };
 });
 
+/* ================= PORTAL DE TRANSPORTISTAS =================
+   Cada usuario transportista tiene su carpeta "Portal/<correo>/" con permiso de SÓLO LECTURA
+   para él. La app publica ahí únicamente sus viajes y unidades, así no puede ver datos de otros
+   transportistas ni siquiera entrando directamente a SharePoint.
+     Portal/<correo>/perfil.json            datos del usuario y su empresa
+     Portal/<correo>/operaciones.json       operaciones en las que participa
+     Portal/<correo>/<nombre reporte>.json  sus viajes y unidades de esa operación  */
+function portalDir(email) { return `Portal/${String(email).toLowerCase()}`; }
+const publicado = new Map(); // archivo -> JSON publicado en esta sesión (evita reescrituras)
+
+const CAMPOS_OP_PORTAL = ['id', 'nave', 'orden', 'cliente', 'producto', 'dam', 'referencia', 'fecha_inicio', 'punto_salida', 'punto_llegada', 'empresa', 'coordinador', 'estado', 'eta'];
+const CAMPOS_VIAJE_PORTAL = ['nro', 'fecha_despacho', 'jornada_despacho', 'transportista_nombre', 'placa', 'guia', 'peso_origen', 'ticket', 'peso_destino_calc', 'status', 'vuelta'];
+
+function vistaTransportista(D, I, tid) {
+  const op = D.operacion;
+  const t = I.transportistas.find((x) => x.id === tid);
+  const raw = D.viajes.map((v) => ({ ...v, transportista_nombre: nombreT(I.transportistas, v.transportista_id) }));
+  const todos = C.enriquecerViajes(raw, op, D.reportes);
+  const viajes = todos.filter((v) => v.transportista_id === tid).map((v) => Object.fromEntries(CAMPOS_VIAJE_PORTAL.map((k) => [k, v[k] ?? null])));
+  const unidades = D.unidades.filter((u) => u.transportista_id === tid)
+    .map(({ ap_paterno, ap_materno, nombre1, nombre2, dni, brevete, tracto, plataforma }) => ({ ap_paterno, ap_materno, nombre1, nombre2, dni, brevete, tracto, plataforma }));
+  return {
+    operacion: { ...Object.fromEntries(CAMPOS_OP_PORTAL.map((k) => [k, op[k] ?? null])), nombre: nombreReporte(op) },
+    transportista: t ? { id: t.id, ruc: t.ruc, razon_social: t.razon_social, nombre_comercial: t.nombre_comercial, contacto: t.contacto, telefono: t.telefono, emails: t.emails } : null,
+    viajes, unidades,
+  };
+}
+async function escribirSiCambia(archivo, data) {
+  const json = JSON.stringify(data);
+  if (publicado.get(archivo) === json) return false;
+  await G.guardarJSON(archivo, data, null);
+  publicado.set(archivo, json);
+  return true;
+}
+async function leerPortal(archivo) {
+  if (publicado.has(archivo)) return JSON.parse(publicado.get(archivo));
+  const { data } = await G.leerJSON(archivo);
+  if (data) publicado.set(archivo, JSON.stringify(data));
+  return data;
+}
+/** Publica la operación D en la carpeta de cada usuario transportista que participa en ella. */
+async function publicarPortalOp(D, soloEmail = null) {
+  const I = await leer(INDICE);
+  const usuarios = (I.usuarios || []).filter((u) => u.rol === 'transportista' && u.activo !== false && u.transportista_id && (!soloEmail || u.email === soloEmail));
+  for (const u of usuarios) {
+    const v = vistaTransportista(D, I, u.transportista_id);
+    const participa = v.viajes.length || v.unidades.length || D.op_transportistas.some((p) => p.transportista_id === u.transportista_id);
+    const dir = portalDir(u.email);
+    const archivo = `${dir}/${nombreReporte(D.operacion)}.json`;
+    const lista = (await leerPortal(`${dir}/operaciones.json`)) || [];
+    const resto = lista.filter((x) => x.id !== D.operacion.id);
+    if (!participa) {
+      if (resto.length !== lista.length) await escribirSiCambia(`${dir}/operaciones.json`, resto);
+      continue;
+    }
+    await escribirSiCambia(archivo, { ...v, generado_en: ahora() });
+    const suma = (k) => C.r3(v.viajes.reduce((s, x) => s + (Number(x[k]) || 0), 0));
+    resto.push({ id: D.operacion.id, nombre: v.operacion.nombre, archivo: archivo.split('/').pop(), nave: D.operacion.nave, orden: D.operacion.orden,
+      cliente: D.operacion.cliente, estado: D.operacion.estado, viajes: v.viajes.length, pendientes: v.viajes.filter((x) => x.status === C.STATUS.PENDIENTE).length,
+      tn_huacho: suma('peso_origen'), tn_cspcp: suma('peso_destino_calc'), unidades: v.unidades.length, ultimo_viaje: v.viajes.map((x) => x.fecha_despacho).sort().pop() || null });
+    resto.sort((a, b) => b.id - a.id);
+    await escribirSiCambia(`${dir}/operaciones.json`, resto);
+  }
+}
+/** Crea/actualiza la carpeta del usuario, publica sus datos y le da acceso de lectura. */
+async function activarPortal(email) {
+  const I = await leer(INDICE, true);
+  const u = (I.usuarios || []).find((x) => x.email === email);
+  const t = I.transportistas.find((x) => x.id === u.transportista_id);
+  const dir = portalDir(email);
+  await escribirSiCambia(`${dir}/perfil.json`, { email, nombre: u.nombre, activo: true,
+    transportista: { id: t.id, ruc: t.ruc, razon_social: t.razon_social, nombre_comercial: t.nombre_comercial } });
+  publicado.delete(`${dir}/operaciones.json`);
+  await escribirSiCambia(`${dir}/operaciones.json`, []);
+  for (const o of I.operaciones) {
+    const D = await leer(await opFile(o.id));
+    if (D?.operacion) await publicarPortalOp(D, email);
+  }
+  let aviso = null;
+  try {
+    await G.compartirCarpeta(dir, email, `Pacífico Despachos le dio acceso al portal de transportistas de Control de Unidades (${t.nombre_comercial}). Ingrese en ${G.appUrl()}`);
+  } catch (e) { aviso = `Los datos se publicaron, pero no se pudo dar el permiso en SharePoint: ${e.message}. Compártale la carpeta "${G.getCfg().carpeta}/${dir}" (sólo lectura) manualmente.`; }
+  return { ok: true, aviso };
+}
+/** Quita el acceso del usuario a su carpeta y marca el perfil como inactivo. */
+async function desactivarPortal(email) {
+  const dir = portalDir(email);
+  try { await G.dejarDeCompartir(dir, email); } catch (e) { console.warn('dejarDeCompartir', e.message); }
+  try { publicado.delete(`${dir}/perfil.json`); await G.guardarJSON(`${dir}/perfil.json`, { email, activo: false }, null); } catch { /* */ }
+}
+ruta('POST', '/portal/republicar', async () => {
+  ADMIN();
+  publicado.clear();
+  const I = await leer(INDICE, true);
+  const us = (I.usuarios || []).filter((u) => u.rol === 'transportista' && u.activo !== false);
+  const avisos = [];
+  for (const u of us) { const r = await activarPortal(u.email); if (r.aviso) avisos.push(`${u.email}: ${r.aviso}`); }
+  return { usuarios: us.length, avisos };
+});
+
+/* rutas del propio transportista */
+const exigeTransp = () => { if (yo?.rol !== 'transportista') throw err(403, 'Sólo para usuarios transportistas'); };
+ruta('GET', '/portal/operaciones', async () => { exigeTransp(); return (await G.leerJSON(`${portalDir(yo.email)}/operaciones.json`)).data || []; });
+async function vistaPortal(id) {
+  exigeTransp();
+  const lista = (await G.leerJSON(`${portalDir(yo.email)}/operaciones.json`)).data || [];
+  const e = lista.find((x) => x.id === Number(id));
+  if (!e) throw err(404, 'Operación no disponible');
+  const { data } = await G.leerJSON(`${portalDir(yo.email)}/${e.archivo}`);
+  if (!data) throw err(404, 'Operación no disponible');
+  return data;
+}
+ruta('GET', '/portal/op/:id', async ({ id }) => vistaPortal(id));
+ruta('GET', '/portal/op/:id/exportar/reporte-xlsx', async ({ id }) => {
+  const v = await vistaPortal(id);
+  return { blob: await X.exportarTransportista(v.operacion, v.transportista, v.viajes), nombre: `${v.operacion.nombre} - ${v.transportista.nombre_comercial}.xlsx` };
+});
+ruta('GET', '/portal/op/:id/exportar/reporte-pdf', async ({ id }) => {
+  const v = await vistaPortal(id);
+  return { blob: await P.pdfTransportista(v.operacion, v.transportista, v.viajes), nombre: `${v.operacion.nombre} - ${v.transportista.nombre_comercial}.pdf` };
+});
+ruta('GET', '/portal/op/:id/exportar/unidades-xlsx', async ({ id }) => {
+  const v = await vistaPortal(id);
+  return { blob: await X.exportarUnidades(v.operacion, v.transportista, v.unidades), nombre: `${v.operacion.nombre} - UNIDADES ${v.transportista.nombre_comercial}.xlsx` };
+});
+ruta('GET', '/portal/op/:id/exportar/unidades-pdf', async ({ id }) => {
+  const v = await vistaPortal(id);
+  return { blob: await P.pdfUnidades(v.operacion, v.transportista, v.unidades), nombre: `${v.operacion.nombre} - UNIDADES ${v.transportista.nombre_comercial}.pdf` };
+});
+
 /** Punto de entrada: igual a fetch('/api' + path). */
 export async function request(path, { method = 'GET', body, form } = {}) {
   const p = path.split('?')[0];
+  if (yo?.rol === 'transportista' && !/^\/(me|catalogos|portal)(\/|$)/.test(p)) throw err(403, 'No tiene permisos para esta acción');
   for (const r of rutas) {
     if (r.m !== method) continue;
     const m = p.match(r.re);

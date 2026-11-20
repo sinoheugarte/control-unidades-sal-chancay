@@ -588,3 +588,31 @@ export async function exportarTransportistas(op, grupos) {
   for (const { t, viajes } of grupos) await hojaTransportista(wb, op, t, viajes);
   return blob(wb);
 }
+
+/** Lista de unidades / conductores de un transportista (columnas de la hoja LISTA). */
+export const COLS_UNIDADES = [
+  ['AP. PATERNO', 'ap_paterno', 16], ['AP. MATERNO', 'ap_materno', 16], ['1ER NOMBRE', 'nombre1', 14], ['2DO NOMBRE', 'nombre2', 14],
+  ['DNI', 'dni', 11], ['BREVETE', 'brevete', 12], ['TRACTO', 'tracto', 10], ['PLATAFORMA', 'plataforma', 11],
+];
+export async function exportarUnidades(op, t, unidades) {
+  const wb = new (XL().Workbook)();
+  const ws = wb.addWorksheet('UNIDADES', { pageSetup: { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, paperSize: 9 } });
+  ws.getColumn(1).width = 2;
+  COLS_UNIDADES.forEach((c, i) => { ws.getColumn(i + 2).width = c[2]; });
+  const logo = await logoBase64();
+  if (logo) ws.addImage(wb.addImage({ base64: logo, extension: 'png' }), { tl: { col: 1.1, row: 0.1 }, ext: { width: 110, height: 62 } });
+  ws.getCell('D1').value = (op.empresa || 'PACIFICO DESPACHOS S.A.C.').trim();
+  ws.getCell('D1').font = { bold: true, size: 14, color: { argb: AZUL } };
+  ws.getCell('D2').value = `LISTA DE UNIDADES — ${op.nave} / ORDEN ${op.orden}`;
+  ws.getCell('D2').font = { bold: true, size: 11 };
+  ws.getCell('B5').value = 'EMPRESA DE TRANSPORTE:'; ws.getCell('B5').font = { bold: true, size: 9 };
+  ws.getCell('D5').value = `${t.razon_social} · RUC ${t.ruc}`;
+  ws.getRow(7).values = [null, ...COLS_UNIDADES.map((c) => c[0])];
+  cabecera(ws.getRow(7));
+  for (const u of unidades) {
+    const row = ws.addRow([null, ...COLS_UNIDADES.map(([, k]) => u[k] ?? '')]);
+    for (let c = 2; c <= COLS_UNIDADES.length + 1; c++) { row.getCell(c).border = borde; row.getCell(c).font = { size: 9 }; }
+  }
+  ws.addRow([null, `Total: ${unidades.length} unidades`]).font = { bold: true, size: 9 };
+  return blob(wb);
+}

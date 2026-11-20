@@ -40,6 +40,11 @@ Funciona igual que **Pacifico TP Reporte**:
   - Exportación a **Excel y PDF**, por transportista o de todos juntos (un Excel con una hoja por transportista, o un solo PDF).
 - **Importación del libro completo** `.xlsm` (para crear una operación) y de la lista de unidades.
 - **Roles** por correo: *admin*, *operador* y *lector*.
+- **Portal de transportistas**: usuarios de cada empresa de transporte que sólo **ven y descargan sus propios viajes y unidades**:
+  - Muestra el reporte de servicio, con descarga en Excel y PDF, y la lista de unidades, también en Excel y PDF.
+  - La app publica sus datos en `Control Unidades Sal/Portal/<correo>/`, una carpeta compartida sólo con ese correo y con permiso de lectura. Aunque entre directamente a SharePoint, no tiene acceso al resto.
+  - La carpeta se actualiza sola en cada registro o importación. El botón *Republicar portal* la regenera completa.
+  - Requisito: el correo debe poder iniciar sesión en el Microsoft 365 de la empresa, como usuario invitado (guest).
 - **Varios usuarios a la vez:** cada guardado comprueba si otro usuario cambió el archivo antes y, si fue así, recarga y vuelve a aplicar el cambio sin perder datos.
 
 ## Configuración (una sola vez)
@@ -98,5 +103,6 @@ docs/                  Análisis del libro Excel original
 ```
 Control Unidades Sal/
   indice.json      operaciones, transportistas y roles de usuario
+  Portal/<correo>/ datos publicados para cada usuario transportista (sólo lectura para él)
   REPORTE DE CONTROL UNIDADES SAL - MV TURBO S - ORDEN 2052.json   datos de cada operación (viajes, tickets, unidades, reportes, embarque, historial)
 ```

@@ -190,6 +190,46 @@ export async function renombrarArchivo(nombre, nuevo) {
   if (!r.ok) throw Object.assign(new Error(`No se pudo renombrar ${nombre} (${r.status})`), { status: r.status });
 }
 
+/* ---------------- permisos de carpetas (portal de transportistas) ---------------- */
+
+/** Crea la carpeta (dentro de la carpeta de la app) si no existe y devuelve su id. */
+export async function asegurarCarpeta(ruta) {
+  const r = await g(await rutaItem(ruta), { raw: true });
+  if (r.ok) return (await r.json()).id;
+  if (r.status !== 404) throw new Error(`No se pudo acceder a la carpeta ${ruta} (${r.status})`);
+  const partes = ruta.split('/');
+  const nombre = partes.pop();
+  const padre = partes.length ? await asegurarCarpeta(partes.join('/')) : (await g(`${(await rutaItem('')).replace(/\/$/, '')}?$select=id`)).id;
+  const c = await g(`drives/${await drive()}/items/${padre}/children`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: nombre, folder: {}, '@microsoft.graph.conflictBehavior': 'replace' }),
+  });
+  return c.id;
+}
+
+/** Da permiso de sólo lectura sobre la carpeta a un correo (envía la invitación de SharePoint). */
+export async function compartirCarpeta(ruta, email, mensaje) {
+  const id = await asegurarCarpeta(ruta);
+  await g(`drives/${await drive()}/items/${id}/invite`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ recipients: [{ email }], roles: ['read'], requireSignIn: true, sendInvitation: true, message: mensaje }),
+  });
+}
+
+/** Quita todos los permisos que la carpeta tenga otorgados a ese correo. */
+export async function dejarDeCompartir(ruta, email) {
+  const r = await g(await rutaItem(ruta), { raw: true });
+  if (r.status === 404) return 0;
+  const id = (await r.json()).id;
+  const perms = (await g(`drives/${await drive()}/items/${id}/permissions`)).value || [];
+  const mail = email.toLowerCase();
+  const suyos = perms.filter((p) => !p.inheritedFrom && [p.grantedToV2?.user?.email, p.grantedTo?.user?.email, p.invitation?.email,
+    ...(p.grantedToIdentitiesV2 || []).map((x) => x.user?.email), ...(p.grantedToIdentities || []).map((x) => x.user?.email)]
+    .some((e) => String(e || '').toLowerCase() === mail));
+  for (const p of suyos) await g(`drives/${await drive()}/items/${id}/permissions/${p.id}`, { method: 'DELETE', raw: true });
+  return suyos.length;
+}
+
 export async function eliminarArchivo(nombre) {
   const r = await g(await rutaItem(nombre), { method: 'DELETE', raw: true });
   if (!r.ok && r.status !== 404) throw new Error(`No se pudo eliminar ${nombre} (${r.status})`);

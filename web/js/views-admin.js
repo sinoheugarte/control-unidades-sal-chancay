@@ -163,42 +163,80 @@ function resumenImport(tipo, r) {
 }
 
 /* =================== USUARIOS =================== */
+const ROLES = [['operador', 'Operador'], ['lector', 'Lector'], ['admin', 'Administrador'], ['transportista', 'Transportista (portal)']];
 export async function vUsuarios(view, ctx) {
   if (!esAdmin()) { view.innerHTML = sinOperacion(); return; }
-  const { usuarios, rol_por_defecto: def } = await api('/usuarios');
-  const rolSel = (r, name = 'rol') => `<select name="${name}">${['operador', 'lector', 'admin'].map((x) => `<option ${x === r ? 'selected' : ''}>${x}</option>`).join('')}</select>`;
-  view.innerHTML = `<div class="card"><div class="card-h"><div><h2>Usuarios y roles</h2>
-      <p class="muted small" style="margin:4px 0 0">Todos ingresan con su cuenta de Microsoft 365. <strong>Admin</strong>: todo · <strong>Operador</strong>: registra e importa · <strong>Lector</strong>: sólo consulta.
+  const [{ usuarios, rol_por_defecto: def }, transp] = await Promise.all([api('/usuarios'), api('/transportistas')]);
+  const nombreT = (id) => transp.find((t) => t.id === id)?.razon_social || '—';
+  const rolSel = (r) => `<select name="rol" data-rol>${ROLES.map(([k, l]) => `<option value="${k}" ${k === r ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
+  const empSel = (id) => `<label class="full" data-emp>Empresa de transporte *<select name="transportista_id"><option value="">— Seleccione —</option>${transp.map((t) => `<option value="${t.id}" ${t.id === id ? 'selected' : ''}>${esc(t.razon_social)} (${esc(t.nombre_comercial)})</option>`).join('')}</select></label>`;
+  const internos = usuarios.filter((u) => u.rol !== 'transportista');
+  const portal = usuarios.filter((u) => u.rol === 'transportista');
+  const cols = (conEmpresa) => [
+    { t: 'Correo', f: (u) => `<strong>${esc(u.email)}</strong>` }, { t: 'Nombre', k: 'nombre' },
+    ...(conEmpresa ? [{ t: 'Empresa de transporte', f: (u) => esc(nombreT(u.transportista_id)) }] : [{ t: 'Rol', k: 'rol' }]),
+    { t: 'Estado', f: (u) => (u.activo !== false ? '<span class="pill ok">Activo</span>' : '<span class="pill bad">Inactivo</span>') },
+    { t: '', f: (u) => `<button class="btn sm" data-u="${esc(u.email)}">Editar</button>` },
+  ];
+  view.innerHTML = `<div class="card"><div class="card-h"><div><h2>Usuarios internos</h2>
+      <p class="muted small" style="margin:4px 0 0">Ingresan con su cuenta de Microsoft 365. <strong>Admin</strong>: todo · <strong>Operador</strong>: registra e importa · <strong>Lector</strong>: sólo consulta.
       ${usuarios.length ? '' : '<br><strong>Aún no hay usuarios registrados: por ahora todos los que ingresan son administradores.</strong>'}</p></div>
       <button class="btn primary" id="b-new">+ Agregar usuario</button></div>
-    <form id="f-def" class="btns" style="margin-bottom:12px"><label style="display:flex;gap:8px;align-items:center">Rol para usuarios no registrados ${rolSel(def === 'operador' ? 'operador' : 'lector', 'rol_por_defecto').replace('<option>admin</option>', '').replace('<option selected>admin</option>', '')}</label>
+    <form id="f-def" class="btns" style="margin-bottom:12px"><label style="display:flex;gap:8px;align-items:center">Rol para usuarios no registrados
+      <select name="rol_por_defecto"><option value="lector" ${def !== 'operador' ? 'selected' : ''}>lector</option><option value="operador" ${def === 'operador' ? 'selected' : ''}>operador</option></select></label>
       <button class="btn sm">Guardar</button></form>
-    ${tabla([
-      { t: 'Correo', f: (u) => `<strong>${esc(u.email)}</strong>` }, { t: 'Nombre', k: 'nombre' }, { t: 'Rol', k: 'rol' },
-      { t: 'Estado', f: (u) => (u.activo !== false ? '<span class="pill ok">Activo</span>' : '<span class="pill bad">Inactivo</span>') },
-      { t: '', f: (u) => `<button class="btn sm" data-u="${esc(u.email)}">Editar</button>` },
-    ], usuarios, { empty: 'Sin usuarios registrados' })}
-    <p class="muted small" style="margin-top:12px">Importante: los roles controlan lo que la aplicación permite hacer. El acceso a los datos lo da SharePoint:
-    sólo quien tenga permiso de edición en el sitio puede guardar cambios.</p></div>`;
+    ${tabla(cols(false), internos, { empty: 'Sin usuarios internos registrados' })}</div>
+
+    <div class="card"><div class="card-h"><div><h2>Usuarios transportistas (portal)</h2>
+      <p class="muted small" style="margin:4px 0 0">Sólo ven y descargan los viajes y unidades de <strong>su</strong> empresa. La app les publica sus datos en una carpeta propia de SharePoint
+      con permiso de sólo lectura (no tienen acceso a la información de otros transportistas). Se actualiza sola cada vez que se registran o importan viajes.</p></div>
+      <div class="btns"><button class="btn" id="b-repub">Republicar portal</button><button class="btn primary" id="b-new-t">+ Agregar usuario transportista</button></div></div>
+    ${tabla(cols(true), portal, { empty: 'Sin usuarios transportistas' })}
+    <p class="muted small" style="margin-top:12px">Requisito: el correo del transportista debe poder iniciar sesión en el Microsoft 365 de la empresa (usuario invitado/guest).
+    Si TI aún no lo ha invitado, la app igual publica sus datos y le envía la invitación de SharePoint; avísele a TI para habilitar su ingreso.</p></div>
+
+    <p class="muted small">Importante: los roles controlan lo que la aplicación permite hacer. El acceso a los datos lo da SharePoint:
+    sólo quien tenga permiso de edición en el sitio puede guardar cambios.</p>`;
+
+  const formUsuario = (u = {}, transportista = false) => `<div class="form">
+      ${u.email ? '' : '<label class="full">Correo *<input name="email" type="email" required autocomplete="off" placeholder="nombre@empresa.com"></label>'}
+      <label>Nombre<input name="nombre" value="${esc(u.nombre || '')}"></label>
+      ${transportista ? '<input type="hidden" name="rol" value="transportista">' : `<label>Rol${rolSel(u.rol || 'operador')}</label>`}
+      ${empSel(u.transportista_id)}
+      ${u.email ? `<label class="check"><input type="checkbox" name="activo" ${u.activo !== false ? 'checked' : ''}> Activo</label>` : ''}
+    </div>`;
+  const alAbrir = (dlg) => {
+    const sel = dlg.querySelector('[data-rol]');
+    const emp = dlg.querySelector('[data-emp]');
+    const ver = () => { emp.style.display = !sel || sel.value === 'transportista' ? '' : 'none'; };
+    sel?.addEventListener('change', ver); ver();
+  };
+  const resultado = (r) => { if (r?.aviso) toast(r.aviso, true); else toast('Usuario guardado'); };
+
   $('#f-def').addEventListener('submit', async (e) => {
     e.preventDefault();
     try { await api('/usuarios-config', { method: 'PUT', body: { rol_por_defecto: e.target.rol_por_defecto.value } }); toast('Guardado'); } catch (err) { toast(err.message, true); }
   });
-  $('#b-new').onclick = () => modal({
-    title: 'Agregar usuario',
-    body: `<div class="form"><label class="full">Correo Microsoft 365 *<input name="email" type="email" required autocomplete="off" placeholder="nombre@empresa.com"></label>
-      <label>Nombre<input name="nombre"></label><label>Rol${rolSel('operador')}</label></div>`,
-    onSubmit: async (d) => { await api('/usuarios', { method: 'POST', body: d }); toast('Usuario agregado'); ctx.rerender(); },
-  });
+  $('#b-new').onclick = () => modal({ title: 'Agregar usuario', body: formUsuario({}, false), onOpen: alAbrir,
+    onSubmit: async (d) => { resultado(await api('/usuarios', { method: 'POST', body: d })); ctx.rerender(); } });
+  $('#b-new-t').onclick = () => modal({ title: 'Agregar usuario transportista', body: formUsuario({}, true), submitText: 'Crear y dar acceso', onOpen: alAbrir,
+    onSubmit: async (d) => { toast('Publicando sus datos en SharePoint…'); resultado(await api('/usuarios', { method: 'POST', body: d })); ctx.rerender(); } });
+  $('#b-repub').onclick = async (e) => {
+    e.target.disabled = true;
+    try {
+      toast('Republicando el portal de transportistas…');
+      const r = await api('/portal/republicar', { method: 'POST' });
+      toast(`Portal actualizado para ${r.usuarios} usuario(s).`);
+      r.avisos.forEach((a) => toast(a, true));
+    } catch (err) { toast(err.message, true); } finally { e.target.disabled = false; }
+  };
   view.addEventListener('click', (e) => {
     const email = e.target.closest('[data-u]')?.dataset.u;
     if (!email) return;
     const u = usuarios.find((x) => x.email === email);
     modal({
-      title: `Editar ${u.email}`,
-      body: `<div class="form"><label>Nombre<input name="nombre" value="${esc(u.nombre || '')}"></label><label>Rol${rolSel(u.rol)}</label>
-        <label class="check"><input type="checkbox" name="activo" ${u.activo !== false ? 'checked' : ''}> Activo</label></div>`,
-      onSubmit: async (d) => { await api(`/usuarios/${encodeURIComponent(u.email)}`, { method: 'PUT', body: d }); toast('Usuario actualizado'); ctx.rerender(); },
+      title: `Editar ${u.email}`, body: formUsuario(u, u.rol === 'transportista'), onOpen: alAbrir,
+      onSubmit: async (d) => { resultado(await api(`/usuarios/${encodeURIComponent(u.email)}`, { method: 'PUT', body: d })); ctx.rerender(); },
     });
   });
 }

@@ -1,5 +1,5 @@
 // Exportación a PDF (jsPDF + AutoTable): detalle de viajes y reporte de servicio por transportista.
-import { COLS_DETALLE, COLS_TRANSP, logoBase64 } from './excel.js?v=__V__';
+import { COLS_DETALLE, COLS_TRANSP, COLS_UNIDADES, logoBase64 } from './excel.js?v=__V__';
 
 const AZUL = [31, 78, 121];
 const nf = new Intl.NumberFormat('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -163,3 +163,24 @@ export async function pdfTransportistas(op, grupos) {
   return blob(doc);
 }
 
+
+/** Lista de unidades de un transportista. */
+export async function pdfUnidades(op, t, unidades) {
+  const doc = nuevoDoc('a4');
+  const y = await encabezado(doc, op, `LISTA DE UNIDADES — ${op.nave} / ORDEN ${op.orden}`);
+  doc.setFontSize(9); doc.setFont('helvetica', 'bold'); doc.text('EMPRESA DE TRANSPORTE:', 10, y);
+  doc.setFont('helvetica', 'normal'); doc.text(`${t.razon_social} · RUC ${t.ruc}`, 10 + doc.getTextWidth('EMPRESA DE TRANSPORTE: '), y);
+  doc.autoTable({
+    startY: y + 4,
+    head: [COLS_UNIDADES.map((c) => c[0])],
+    body: unidades.map((u) => COLS_UNIDADES.map(([, k]) => u[k] ?? '')),
+    foot: [[`Total: ${unidades.length} unidades`, '', '', '', '', '', '', '']],
+    styles: { fontSize: 8, cellPadding: 1.2, lineColor: [200, 200, 200], lineWidth: 0.1 },
+    headStyles: { fillColor: AZUL, textColor: 255, fontStyle: 'bold', halign: 'center' },
+    footStyles: { fillColor: [235, 240, 246], textColor: 0, fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: [247, 249, 252] },
+    margin: { left: 10, right: 10, bottom: 14 }, showFoot: 'lastPage',
+  });
+  piePaginas(doc, op);
+  return blob(doc);
+}

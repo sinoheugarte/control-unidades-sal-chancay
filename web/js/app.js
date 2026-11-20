@@ -3,6 +3,7 @@ import { vTablero, vViajes, vRegistro } from './views-operacion.js?v=__V__';
 import { vReportes, vTransportistas, vUnidades, vResumenes, vPlanificacion, vReporteTransportista } from './views-control.js?v=__V__';
 import { vOperaciones, vImportar, vUsuarios } from './views-admin.js?v=__V__';
 import * as G from './graph.js?v=__V__';
+import { vPortal, vPortalUnidades } from './views-portal.js?v=__V__';
 import * as B from './backend.js?v=__V__';
 
 const I = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
@@ -33,12 +34,19 @@ const RUTAS = {
   operaciones: { t: 'Operaciones', v: vOperaciones },
   importar: { t: 'Importar datos', v: vImportar },
   usuarios: { t: 'Usuarios', v: vUsuarios, admin: true },
+  // Portal del transportista (sólo sus viajes y unidades)
+  portal: { t: 'Mis viajes', v: vPortal, portal: true },
+  'portal-unidades': { t: 'Mis unidades', v: vPortalUnidades, portal: true },
 };
 const NAV = [
   ['Operación', ['tablero', 'registro', 'viajes', 'reportes']],
   ['Control', ['transportistas', 'unidades', 'resumenes', 'planificacion']],
   ['Administración', ['operaciones', 'importar', 'usuarios']],
 ];
+const NAV_PORTAL = [['Mi empresa', ['portal', 'portal-unidades']]];
+const esTransp = () => state.user?.rol === 'transportista';
+ICON.portal = ICON.viajes;
+ICON['portal-unidades'] = ICON.unidades;
 
 // Tema claro/oscuro persistente por navegador
 try { const t = localStorage.getItem('tema'); if (t) document.documentElement.dataset.theme = t; } catch { /* sin storage */ }
@@ -103,6 +111,7 @@ function setOp(id) {
 async function iniciar() {
   state.user = await B.iniciarSesion();
   state.catalogos = await api('/catalogos');
+  if (state.user.rol === 'transportista') { state.ops = []; state.opId = null; return; }
   await cargarOps();
   B.setOpActual(state.opId);
 }
@@ -120,7 +129,7 @@ function shell(root, ruta) {
   root.innerHTML = `<div class="layout">
     <aside class="side" id="side">
       <div class="brand"><div class="brand-logo">${ICON.viajes}</div><div>Control de Unidades<small>Despacho · Acopio · Embarque</small></div></div>
-      <nav class="nav">${NAV.map(([sec, items]) => `<div class="sep">${sec}</div>${items.filter((k) => !RUTAS[k].admin || esAdmin())
+      <nav class="nav">${(esTransp() ? NAV_PORTAL : NAV).map(([sec, items]) => `<div class="sep">${sec}</div>${items.filter((k) => !RUTAS[k].admin || esAdmin())
         .map((k) => { const on = k === (RUTAS[ruta].nav || ruta); return `<a href="#/${k}" class="${on ? 'active' : ''}" ${on ? 'aria-current="page"' : ''}>${ICON[k]}${RUTAS[k].t}</a>`; }).join('')}`).join('')}</nav>
     </aside>
     <div class="main">
@@ -128,7 +137,7 @@ function shell(root, ruta) {
         <button class="btn sm menu-btn" id="menu" aria-label="Abrir menú">☰</button>
         <h1>${esc(RUTAS[ruta].t)}</h1>
         <div class="grow"></div>
-        <label style="min-width:220px" class="no-print"><span class="hidden">Operación</span><select id="op-sel" aria-label="Operación activa"></select></label>
+        ${esTransp() ? '' : '<label style="min-width:220px" class="no-print"><span class="hidden">Operación</span><select id="op-sel" aria-label="Operación activa"></select></label>'}
         <button class="btn sm" id="tema" title="Cambiar tema claro/oscuro">Tema</button>
         <button class="btn sm" id="perfil" title="Mi cuenta: cambiar contraseña"><span class="who">${esc(state.user.nombre)} · </span>${esc(state.user.rol)}</button>
         <button class="btn sm" id="salir">Salir</button>
@@ -136,7 +145,7 @@ function shell(root, ruta) {
       <main class="content" id="view"></main>
     </div></div>`;
   pintarSelector();
-  $('#op-sel').addEventListener('change', (e) => {
+  $('#op-sel')?.addEventListener('change', (e) => {
     if (e.target.value === '__buscar') { e.target.value = String(state.opId ?? ''); location.hash = '#/operaciones'; return; }
     setOp(Number(e.target.value)); render();
   });
@@ -153,7 +162,9 @@ function shell(root, ruta) {
     title: 'Mi cuenta',
     body: `<p><strong>${esc(state.user.nombre)}</strong><br><span class="muted">${esc(state.user.email)}</span></p>
       <p>Rol en la aplicación: <span class="pill info">${esc(state.user.rol)}</span></p>
-      <p class="muted small">Los datos se guardan en SharePoint: <a href="${esc(await G.urlCarpeta())}" target="_blank" rel="noopener">abrir carpeta</a>.</p>`,
+      ${state.user.transportista ? `<p>Empresa: <strong>${esc(state.user.transportista.razon_social)}</strong> · RUC ${esc(state.user.transportista.ruc)}</p>
+        <p class="muted small">Usted sólo ve los viajes y unidades de su empresa.</p>`
+        : `<p class="muted small">Los datos se guardan en SharePoint: <a href="${esc(await G.urlCarpeta())}" target="_blank" rel="noopener">abrir carpeta</a>.</p>`}`,
   }));
 }
 
@@ -174,7 +185,8 @@ async function render() {
     if (state.user && ruta === 'login') { location.hash = '#/tablero'; return; }
     return vLogin(root, errorLogin);
   }
-  const r = RUTAS[ruta] && (!RUTAS[ruta].admin || esAdmin()) ? ruta : 'tablero';
+  const permitida = (k) => RUTAS[k] && (esTransp() ? RUTAS[k].portal : !RUTAS[k].portal && (!RUTAS[k].admin || esAdmin()));
+  const r = permitida(ruta) ? ruta : esTransp() ? 'portal' : 'tablero';
   shell(root, r);
   document.title = `${RUTAS[r].t} · Control de Unidades`;
   const id = ++renderId;
