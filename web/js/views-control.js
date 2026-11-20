@@ -140,10 +140,12 @@ export async function vTransportistas(view, ctx) {
       <div class="btns"><button class="btn" id="b-all-xls">Todos los reportes (Excel)</button><button class="btn" id="b-all-pdf">Todos los reportes (PDF)</button>
       ${edit ? '<button class="btn" id="b-part">+ Agregar transportista</button>' : ''}</div></div>
     ${tabla([
-      // Mismas columnas visibles que la hoja TRANSPORTISTAS del Excel (TRANSPORTE, UNIDADES EN LISTA y UNIDADES ACTIVAS están ocultas)
+      // Columnas de la hoja TRANSPORTISTAS del Excel (C a N; TRANSPORTE, columna B, sigue oculta)
       { t: 'Razón social', f: (x) => `<strong>${esc(x.razon_social)}</strong>` }, { t: 'RUC', k: 'ruc' },
-      { t: 'Unidades solicitadas', k: 'unidades_solicitadas', n: 1, d: 0 }, { t: 'TN prom. x unidad', k: 'tn_prom_unidad', n: 1 },
+      { t: 'Unidades solicitadas', k: 'unidades_solicitadas', n: 1, d: 0 }, { t: 'Unidades en lista', k: 'unidades_en_lista', n: 1, d: 0 },
+      { t: 'TN prom. x unidad', k: 'tn_prom_unidad', n: 1 },
       { t: 'Viajes aprox.', k: 'viajes_aprox', n: 1, d: 0 }, { t: 'Total aprox. TN', k: 'tn_aprox', n: 1 },
+      { t: 'Unidades activas', k: 'unidades_activas', n: 1, d: 0 },
       { t: 'Viajes realizados', k: 'viajes_realizados', n: 1, d: 0 }, { t: 'Total final TN', k: 'tn_final', n: 1 },
       { t: 'Observación', f: (x) => esc(x.observacion || x.observacion_calc || '') },
       { t: 'Reporte confirmado', f: (x) => (x.reporte_confirmado ? '<span class="pill ok">Sí</span>' : '<span class="pill warn">No</span>') },
@@ -152,8 +154,8 @@ export async function vTransportistas(view, ctx) {
       { t: '', f: (x) => (edit ? `<button class="btn sm" data-part="${x.transportista_id}">Editar</button>` : '') },
     ], res, {
       empty: 'Ningún transportista asignado a la operación',
-      foot: ['Total', `${res.length}`, num(tot('unidades_solicitadas'), 0), '', num(tot('viajes_aprox'), 0), num(tot('tn_aprox')),
-        num(tot('viajes_realizados'), 0), num(tot('tn_final'))],
+      foot: ['Total', `${res.length}`, num(tot('unidades_solicitadas'), 0), num(tot('unidades_en_lista'), 0), '', num(tot('viajes_aprox'), 0), num(tot('tn_aprox')),
+        num(tot('unidades_activas'), 0), num(tot('viajes_realizados'), 0), num(tot('tn_final'))],
     })}</div>
   <div class="card"><div class="card-h"><div><h2>Detallado por vueltas (TN)</h2>
       <p class="muted small" style="margin:4px 0 0">1ª vuelta = unidades solicitadas × TN prom. por unidad · vueltas 2-10 = 1ª vuelta × n · las vueltas en <strong>negrita</strong> fueron ingresadas a mano · TOTAL TN = mayor valor (es el "Total aprox. TN").</p></div></div>
