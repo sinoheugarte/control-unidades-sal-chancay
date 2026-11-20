@@ -1,0 +1,56 @@
+'use strict';
+const test = require('node:test');
+const assert = require('node:assert');
+const C = require('../src/calc');
+
+const op = { tn_programadas: 100, params: '{}' };
+const base = (o) => ({ transportista_id: 1, transportista_nombre: 'T1', fecha_despacho: '2026-10-20', ...o });
+
+test('normaliza placas como la macro LimpiarPlacas', () => {
+  assert.strictEqual(C.normPlaca(' akc-731 '), 'AKC731');
+  assert.strictEqual(C.normPlaca('AKC 731'), 'AKC731');
+});
+
+test('jornada por hora del día', () => {
+  assert.strictEqual(C.jornadaDe('2026-10-20 07:00'), '07:00 - 16:00');
+  assert.strictEqual(C.jornadaDe('2026-10-20 16:30'), '16:00 - 23:00');
+  assert.strictEqual(C.jornadaDe('2026-10-20 23:10'), '23:00 - 07:00');
+  assert.strictEqual(C.jornadaDe('2026-10-21 03:00'), '23:00 - 07:00');
+});
+
+test('columnas calculadas de DETALLE TRANSPORTE', () => {
+  const vs = C.enriquecerViajes([
+    base({ id: 1, placa: 'A1', peso_origen: 40, ticket: 'X1', peso_destino: 40.1, ingreso_en: '2026-10-20 18:00:00', salida_en: '2026-10-20 18:25:00', despacho_en: '2026-10-20 10:00' }),
+    base({ id: 2, placa: 'A1', peso_origen: 35, ticket: null, despacho_en: '2026-10-20 14:00' }),
+    base({ id: 3, placa: 'B2', peso_origen: 20, ticket: '-', peso_destino: 20, despacho_en: '2026-10-20 12:00' }),
+  ], op, [{ tipo: 'despacho', numero: 1, inicio: '2026-10-20 08:00', fin: '2026-10-20 13:00' }]);
+  const [a, b, c] = vs;
+  assert.deepStrictEqual([a.nro, a.vuelta, a.status, a.diferencia, a.rango, a.tiempo_min, a.rep_despacho_calc], [1, 1, 'DESCARGADO', 0.1, '<=30 MIN', 25, 1]);
+  assert.strictEqual(b.placa, 'B2'); // ordenado por hora de despacho
+  assert.deepStrictEqual([b.status, b.tipo, b.redondeo], ['TN DEVUELTAS', 'TN DEVUELTAS', 30]);
+  assert.deepStrictEqual([c.vuelta, c.status, c.peso_destino_calc, c.rep_despacho_calc], [2, 'FALTA DESCARGAR', 35, null]);
+  assert.strictEqual(c.acumulado, 95.1);
+  assert.strictEqual(c.restante, 4.9);
+  const t = C.totales(vs, op, null);
+  assert.deepStrictEqual([t.tn_acopio, t.tn_transito, t.tn_devueltas, t.viajes_pendientes], [40.1, 35, 20, 1]);
+});
+
+test('reportes por turno y estimación de término', () => {
+  const vs = C.enriquecerViajes([
+    base({ id: 1, placa: 'A', peso_origen: 25, despacho_en: '2026-10-20 09:00' }),
+    base({ id: 2, placa: 'B', peso_origen: 25, despacho_en: '2026-10-20 10:00' }),
+  ], op, []);
+  const reps = [{ id: 1, tipo: 'despacho', numero: 1, inicio: '2026-10-20 08:00', fin: '2026-10-20 12:00' }];
+  const [r] = C.tablaReportes(C.enriquecerViajes(vs, op, reps), op, reps, 'despacho');
+  assert.deepStrictEqual([r.tn_parcial, r.viajes, r.horas, r.tn_restantes, r.viajes_est_rest, r.horas_est_rest, r.fecha_est_termino],
+    [50, 2, 4, 50, 2, 4, '2026-10-20 16:00']);
+});
+
+test('planificación PREACOPIO', () => {
+  const p = C.preacopio({ tn_programadas: 20060, params: JSON.stringify({ tn_x_unidad: 36, viajes_x_hora: 8, jornadas_x_dia: 3, inicio_acopio: '2026-10-20 11:00' }) });
+  assert.strictEqual(p.acopio.viajes_total, 558);
+  assert.strictEqual(p.acopio.horas, 69.75);
+  assert.strictEqual(p.acopio.termino, '2026-10-23 08:45');
+  assert.strictEqual(p.unidades_min, 24);
+  assert.strictEqual(p.unidades_necesarias, 36);
+});
