@@ -225,9 +225,10 @@ function viajeDesdeBody(b, D) {
   let transportista_id = N(b.transportista_id);
   if (!transportista_id && placa) transportista_id = D.unidades.find((u) => u.tracto === placa || u.plataforma === placa)?.transportista_id || null;
   return {
-    transportista_id, placa, fecha_despacho: C.normDate(b.fecha_despacho) || (despacho_en ? despacho_en.slice(0, 10) : null),
+    // Día y jornada por turno: desde las 23:00 cuenta para el turno 23:00 - 07:00 del día siguiente
+    transportista_id, placa, fecha_despacho: C.normDate(b.fecha_despacho) || C.turnoDe(despacho_en).fecha,
     jornada_despacho: S(b.jornada_despacho) || C.jornadaDe(despacho_en), despacho_en, guia: S(b.guia), peso_origen: N(b.peso_origen),
-    fecha_recepcion: C.normDate(b.fecha_recepcion) || (ingreso_en ? ingreso_en.slice(0, 10) : null),
+    fecha_recepcion: C.normDate(b.fecha_recepcion) || C.turnoDe(ingreso_en).fecha,
     jornada_recepcion: S(b.jornada_recepcion) || C.jornadaDe(ingreso_en), ticket: S(b.ticket), peso_destino: N(b.peso_destino),
     ingreso_en, salida_en: C.normDT(b.salida_en), rep_despacho: N(b.rep_despacho), rep_acopio: N(b.rep_acopio), observacion: S(b.observacion),
   };

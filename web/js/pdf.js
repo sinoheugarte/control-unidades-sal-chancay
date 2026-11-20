@@ -30,7 +30,7 @@ function piePaginas(doc, op) {
   for (let i = 1; i <= n; i++) {
     doc.setPage(i);
     doc.setFontSize(7); doc.setTextColor(120);
-    doc.text(`${(op.empresa || '').trim()} · ${op.nave}${op.orden && op.orden !== '-' ? ` / Orden ${op.orden}` : ''} · Generado ${new Date().toLocaleString('es-PE')}`, 10, h - 6);
+    doc.text(`${(op.empresa || '').trim()} · ${op.nave}${op.orden && op.orden !== '-' ? ` / Orden ${op.orden}` : ''} · Generado ${new Date().toLocaleString('es-PE', { hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}`, 10, h - 6);
     doc.text(`Página ${i} de ${n}`, w - 10, h - 6, { align: 'right' });
   }
   doc.setTextColor(0);

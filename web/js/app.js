@@ -1,4 +1,4 @@
-import { state, api, esc, toast, $, $$, modal, destruirGraficos, esAdmin } from './core.js?v=__V__';
+import { state, api, esc, toast, $, $$, modal, destruirGraficos, esAdmin, activarFechaHora24 } from './core.js?v=__V__';
 import { vTablero, vViajes, vRegistro } from './views-operacion.js?v=__V__';
 import { vReportes, vTransportistas, vUnidades, vResumenes, vPlanificacion, vReporteTransportista } from './views-control.js?v=__V__';
 import { vOperaciones, vImportar, vUsuarios } from './views-admin.js?v=__V__';
@@ -204,6 +204,7 @@ async function render() {
   }
 }
 
+activarFechaHora24(document.body);
 window.addEventListener('hashchange', render);
 window.addEventListener('app:ops', (e) => {
   const { id, render: rerender = true, luego } = e.detail || {};

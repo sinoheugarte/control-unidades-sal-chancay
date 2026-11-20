@@ -89,6 +89,7 @@ export function modal({ title, body, submitText = 'Guardar', onSubmit, wide = fa
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!onSubmit) return close();
+    if (!horasValidas(form)) return;
     const btn = form.querySelector('[type=submit]');
     btn.disabled = true;
     try { await onSubmit(formData(form), form); close(); } catch (err) { toast(err.message, true); } finally { btn.disabled = false; }
@@ -174,3 +175,63 @@ export function chart(canvas, config) {
   return ch;
 }
 export function destruirGraficos() { charts.forEach((c) => c.destroy()); charts.clear(); }
+
+/* ---------- Fecha y hora en formato 24 h ----------
+   Los <input type="datetime-local"> muestran AM/PM según la configuración regional de Windows.
+   Se reemplazan por fecha + hora "HH:MM" (00:00 a 23:59). El valor se sigue enviando con el mismo
+   nombre de campo y el mismo formato ("YYYY-MM-DDTHH:MM"). */
+const NATIVO = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+export const HORA_24 = /^([01]\d|2[0-3]):[0-5]\d$/;
+function convertirFechaHora(el) {
+  if (el.dataset.dt24) return;
+  const requerido = el.required;
+  const caja = document.createElement('span');
+  caja.className = 'dt24';
+  const d = document.createElement('input'); d.type = 'date'; d.className = 'dt24-d'; d.setAttribute('aria-label', 'Fecha');
+  const h = document.createElement('input'); h.type = 'text'; h.className = 'dt24-h'; h.inputMode = 'numeric'; h.maxLength = 5;
+  h.placeholder = 'HH:MM'; h.pattern = '([01][0-9]|2[0-3]):[0-5][0-9]'; h.title = 'Hora en formato de 24 horas (00:00 a 23:59)'; h.setAttribute('aria-label', 'Hora (24 h)');
+  d.required = h.required = requerido;
+  el.required = false;
+  el.dataset.dt24 = '1';
+  el.type = 'hidden';
+  el.parentNode.insertBefore(caja, el);
+  caja.append(d, h, el);
+  const pintar = (v) => { const m = String(v || '').match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/); d.value = m ? m[1] : ''; h.value = m ? m[2] : ''; };
+  const leer = () => {
+    if (d.value && HORA_24.test(h.value)) return `${d.value}T${h.value}`;
+    if (d.value && !h.value && !requerido) return `${d.value}T00:00`;
+    return '';
+  };
+  Object.defineProperty(el, 'value', {
+    configurable: true,
+    get() { return NATIVO.get.call(el); },
+    set(v) { NATIVO.set.call(el, v ?? ''); pintar(v); },
+  });
+  pintar(NATIVO.get.call(el));
+  d.defaultValue = d.value; h.defaultValue = h.value;
+  const sync = () => { NATIVO.set.call(el, leer()); el.dispatchEvent(new Event('change', { bubbles: true })); };
+  d.addEventListener('change', sync);
+  h.addEventListener('input', () => {
+    let t = h.value.replace(/[^\d]/g, '').slice(0, 4);
+    if (t.length > 2) t = `${t.slice(0, 2)}:${t.slice(2)}`;
+    h.value = t;
+    h.setCustomValidity(t && !HORA_24.test(t) ? 'Hora en formato de 24 horas: 00:00 a 23:59' : '');
+    sync();
+  });
+  h.addEventListener('blur', () => { const m = h.value.match(/^(\d{1,2}):?(\d{0,2})$/); if (m && h.value && !HORA_24.test(h.value)) { h.value = `${m[1].padStart(2, '0')}:${(m[2] || '00').padEnd(2, '0')}`; h.dispatchEvent(new Event('input')); } });
+}
+/** Convierte los campos de fecha-hora que haya en el elemento (y los que se agreguen después). */
+export function activarFechaHora24(root = document.body) {
+  root.querySelectorAll('input[type="datetime-local"]').forEach(convertirFechaHora);
+  new MutationObserver((ms) => ms.forEach((m) => m.addedNodes.forEach((n) => {
+    if (n.nodeType !== 1) return;
+    if (n.matches?.('input[type="datetime-local"]')) convertirFechaHora(n);
+    n.querySelectorAll?.('input[type="datetime-local"]').forEach(convertirFechaHora);
+  }))).observe(root, { childList: true, subtree: true });
+}
+/** true si todas las horas del formulario están en formato 24 h válido. */
+export function horasValidas(form) {
+  const mal = [...form.querySelectorAll('.dt24-h')].find((h) => (h.value ? !HORA_24.test(h.value) : h.required));
+  if (mal) { mal.focus(); toast('Ingrese la hora en formato de 24 horas (HH:MM, de 00:00 a 23:59).', true); return false; }
+  return true;
+}

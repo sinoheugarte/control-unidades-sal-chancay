@@ -176,3 +176,9 @@ dialog .df { padding: 12px 18px; border-top: 1px solid var(--border); display: f
 /* Tabla de cabecera de reportes: celdas que pueden partirse en varias líneas */
 table.info td, table.info th { white-space: normal; }
 table.info th { width: 1%; white-space: nowrap; }
+
+/* Fecha + hora 24 h */
+.dt24 { display: flex; gap: 6px; min-width: 0; }
+.dt24 .dt24-d { flex: 1 1 auto; min-width: 0; }
+.dt24 .dt24-h { flex: 0 0 82px; text-align: center; font-variant-numeric: tabular-nums; }
+.dt24 .dt24-h:invalid { border-color: var(--bad); }
