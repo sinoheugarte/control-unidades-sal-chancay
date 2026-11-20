@@ -407,12 +407,13 @@ export function importarLibro(wb, T, usuario) {
 }
 
 /* ---------------- exportación ---------------- */
-// Columnas idénticas a la tabla de la hoja DETALLE TRANSPORTE del libro original.
+// Columnas VISIBLES de la hoja DETALLE TRANSPORTE del libro original (la columna oculta REDONDEO X TN DEV
+// no se muestra: la app la calcula internamente para el TN final por transportista).
 export const COLS_DETALLE = [
   ['DIA DESPACHO', 'fecha_despacho', 12, 'f'], ['JORNADA DESPACHO', 'jornada_despacho', 14], ['NRO. VIAJE', 'nro', 8, 'i'],
   ['TRANSPORTE', 'transportista_nombre', 17], ['PLACA', 'placa', 9], ['GUIA R. HUACHO', 'guia', 18],
   ['PESO TN X UNID HUACHO', 'peso_origen', 11, 'n'], ['DIA RECEPCION', 'fecha_recepcion', 12, 'f'], ['JORNADA RECEPCION', 'jornada_recepcion', 14],
-  ['TICKET CSPCP', 'ticket', 14], ['PESO TN X UNID CSPCP', 'peso_destino_calc', 11, 'n'], ['REDONDEO X TN DEV', 'redondeo', 11, 'n'],
+  ['TICKET CSPCP', 'ticket', 14], ['PESO TN X UNID CSPCP', 'peso_destino_calc', 11, 'n'],
   ['DIFERENCIA HUACHO - CSPCP', 'diferencia', 11, 'n'], ['CANT. ACUM.TN', 'acumulado', 11, 'n'], ['CANT. REST. TN', 'restante', 11, 'n'],
   ['TIPO DE VIAJE', 'tipo', 13], ['HORA INGRESO CSPCP', 'ingreso_en', 17, 'dt'], ['HORA SALIDA CSPCP', 'salida_en', 17, 'dt'],
   ['TIEMPO', 'tiempo_min', 9, 'h'], ['RANGO', 'rango', 15], ['# REPORTE DESPACHO', 'rep_despacho_calc', 10, 'i'],
@@ -499,9 +500,9 @@ export async function exportarDetalle(op, viajes, tot) {
   COLS_DETALLE.forEach((c, i) => { ws.getColumn(i + 1).width = c[2]; });
   filasDatos(ws, COLS_DETALLE, viajes, 1);
   const t = ws.addRow(['TOTAL', null, viajes.length, null, null, null, suma(viajes, 'peso_origen'), null, null, viajes.filter((v) => v.ticket).length,
-    suma(viajes, 'peso_destino_calc'), suma(viajes, 'redondeo'), suma(viajes, 'diferencia')]);
+    suma(viajes, 'peso_destino_calc'), suma(viajes, 'diferencia')]);
   t.font = { bold: true, size: 9 };
-  [7, 11, 12, 13].forEach((c) => { t.getCell(c).numFmt = FMT.n; });
+  [7, 11, 12].forEach((c) => { t.getCell(c).numFmt = FMT.n; });
   ws.autoFilter = { from: { row: 6, column: 1 }, to: { row: 6 + viajes.length, column: COLS_DETALLE.length } };
   return blob(wb);
 }

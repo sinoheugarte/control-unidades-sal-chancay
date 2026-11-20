@@ -66,7 +66,7 @@ export async function pdfDetalle(op, viajes, tot) {
     head: [COLS_DETALLE.map((c) => c[0])],
     body: viajes.map((v) => COLS_DETALLE.map(([, k, , t]) => texto(v, k, t))),
     foot: [['TOTAL', '', String(viajes.length), '', '', '', n2(suma(viajes, 'peso_origen')), '', '', String(viajes.filter((v) => v.ticket).length),
-      n2(suma(viajes, 'peso_destino_calc')), n2(suma(viajes, 'redondeo')), n2(suma(viajes, 'diferencia')), '', '', '', '', '', '', '', '', '', '', '', '']],
+      n2(suma(viajes, 'peso_destino_calc')), n2(suma(viajes, 'diferencia')), '', '', '', '', '', '', '', '', '', '', '', '']],
     styles: { fontSize: 6, cellPadding: 0.8, overflow: 'linebreak', lineColor: [200, 200, 200], lineWidth: 0.1 },
     headStyles: { fillColor: AZUL, textColor: 255, fontStyle: 'bold', halign: 'center', valign: 'middle', fontSize: 6 },
     footStyles: { fillColor: [235, 240, 246], textColor: 0, fontStyle: 'bold' },

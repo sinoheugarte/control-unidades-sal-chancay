@@ -1,5 +1,5 @@
 import {
-  state, api, esc, num, pct, fecha, fechaHora, horas, toInputDT, normPlaca, toast, $, modal, confirmar,
+  state, api, esc, num, fecha, fechaHora, horas, toInputDT, normPlaca, toast, $, modal, confirmar,
   tabla, sinOperacion, puedeEscribir, esAdmin, chart, colores, descargar,
 } from './core.js?v=__V__';
 
@@ -139,21 +139,20 @@ export async function vTransportistas(view, ctx) {
       <div class="btns"><button class="btn" id="b-all-xls">Todos los reportes (Excel)</button><button class="btn" id="b-all-pdf">Todos los reportes (PDF)</button>
       ${edit ? '<button class="btn" id="b-part">+ Agregar transportista</button>' : ''}</div></div>
     ${tabla([
-      { t: 'Transporte', f: (x) => `<strong>${esc(x.nombre_comercial)}</strong><div class="muted small">${esc(x.razon_social)} · RUC ${esc(x.ruc)}</div>` },
-      { t: 'Unid. solicitadas', k: 'unidades_solicitadas', n: 1, d: 0 }, { t: 'Unid. en lista', k: 'unidades_en_lista', n: 1, d: 0 },
-      { t: 'TN prom. x unid.', k: 'tn_prom_unidad', n: 1 }, { t: 'Viajes aprox.', k: 'viajes_aprox', n: 1, d: 0 },
-      { t: 'Total aprox. TN', k: 'tn_aprox', n: 1 }, { t: 'Unid. activas', k: 'unidades_activas', n: 1, d: 0 },
-      { t: 'Viajes realizados', k: 'viajes_realizados', n: 1, d: 0 }, { t: 'Máx. vueltas', k: 'vueltas_max', n: 1, d: 0 },
-      { t: 'TN final', k: 'tn_final', n: 1 }, { t: 'Avance', f: (x) => (x.avance === null ? '—' : pct(x.avance)) },
+      // Mismas columnas visibles que la hoja TRANSPORTISTAS del Excel (TRANSPORTE, UNIDADES EN LISTA y UNIDADES ACTIVAS están ocultas)
+      { t: 'Razón social', f: (x) => `<strong>${esc(x.razon_social)}</strong>` }, { t: 'RUC', k: 'ruc' },
+      { t: 'Unidades solicitadas', k: 'unidades_solicitadas', n: 1, d: 0 }, { t: 'TN prom. x unidad', k: 'tn_prom_unidad', n: 1 },
+      { t: 'Viajes aprox.', k: 'viajes_aprox', n: 1, d: 0 }, { t: 'Total aprox. TN', k: 'tn_aprox', n: 1 },
+      { t: 'Viajes realizados', k: 'viajes_realizados', n: 1, d: 0 }, { t: 'Total final TN', k: 'tn_final', n: 1 },
       { t: 'Observación', f: (x) => esc(x.observacion || x.observacion_calc || '') },
-      { t: 'Confirmado', f: (x) => (x.reporte_confirmado ? '<span class="pill ok">Sí</span>' : '<span class="pill warn">No</span>') },
-      { t: 'Reporte', f: (x) => (x.viajes_realizados ? `<div class="btns"><a class="btn sm" href="#/reporte-transportista?t=${x.transportista_id}">Ver</a>
+      { t: 'Reporte confirmado', f: (x) => (x.reporte_confirmado ? '<span class="pill ok">Sí</span>' : '<span class="pill warn">No</span>') },
+      { t: 'Reporte', f: (x) => (x.viajes_realizados ? `<div class="btns" style="flex-wrap:nowrap"><a class="btn sm" href="#/reporte-transportista?t=${x.transportista_id}">Ver</a>
           <button class="btn sm" data-xls="${x.transportista_id}">Excel</button><button class="btn sm" data-pdf="${x.transportista_id}">PDF</button></div>` : '<span class="muted">—</span>') },
       { t: '', f: (x) => (edit ? `<button class="btn sm" data-part="${x.transportista_id}">Editar</button>` : '') },
     ], res, {
       empty: 'Ningún transportista asignado a la operación',
-      foot: ['Total', num(tot('unidades_solicitadas'), 0), num(tot('unidades_en_lista'), 0), '', num(tot('viajes_aprox'), 0), num(tot('tn_aprox')),
-        num(tot('unidades_activas'), 0), num(tot('viajes_realizados'), 0), '', num(tot('tn_final'))],
+      foot: ['Total', `${res.length}`, num(tot('unidades_solicitadas'), 0), '', num(tot('viajes_aprox'), 0), num(tot('tn_aprox')),
+        num(tot('viajes_realizados'), 0), num(tot('tn_final'))],
     })}</div>` : sinOperacion()}
   <div class="card"><div class="card-h"><h2>Maestro de transportistas</h2>${edit ? '<button class="btn primary" id="b-new">+ Nuevo transportista</button>' : ''}</div>
     ${tabla([

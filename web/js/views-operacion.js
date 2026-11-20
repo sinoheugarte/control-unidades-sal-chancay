@@ -140,7 +140,7 @@ export async function vViajes(view, ctx) {
       { t: 'Día despacho', f: (v) => fecha(v.fecha_despacho) }, { t: 'Jornada despacho', k: 'jornada_despacho' }, { t: 'Nro. viaje', k: 'nro' },
       { t: 'Transporte', k: 'transportista_nombre' }, { t: 'Placa', f: (v) => `<strong>${esc(v.placa)}</strong>` }, { t: 'Guía R. Huacho', k: 'guia' },
       { t: 'Peso TN x unid Huacho', k: 'peso_origen', n: 1 }, { t: 'Día recepción', f: (v) => fecha(v.fecha_recepcion) }, { t: 'Jornada recepción', k: 'jornada_recepcion' },
-      { t: 'Ticket CSPCP', k: 'ticket' }, { t: 'Peso TN x unid CSPCP', k: 'peso_destino_calc', n: 1 }, { t: 'Redondeo x TN dev', k: 'redondeo', n: 1 },
+      { t: 'Ticket CSPCP', k: 'ticket' }, { t: 'Peso TN x unid CSPCP', k: 'peso_destino_calc', n: 1 },
       { t: 'Diferencia Huacho - CSPCP', k: 'diferencia', n: 1 }, { t: 'Cant. acum. TN', k: 'acumulado', n: 1 }, { t: 'Cant. rest. TN', k: 'restante', n: 1 },
       { t: 'Tipo de viaje', k: 'tipo' }, { t: 'Hora ingreso CSPCP', f: (v) => fechaHora(v.ingreso_en) }, { t: 'Hora salida CSPCP', f: (v) => fechaHora(v.salida_en) },
       { t: 'Tiempo', f: (v) => minutos(v.tiempo_min) }, { t: 'Rango', f: (v) => rangoPill(v.rango) },
@@ -149,7 +149,7 @@ export async function vViajes(view, ctx) {
       ...(puedeEscribir() ? [{ t: '', f: (v) => `<button class="btn sm" data-edit="${v.id}">Editar</button>` }] : []),
     ], fil, {
       empty: viajes.length ? 'Ningún viaje coincide con el filtro' : 'Aún no hay viajes. Importe el REPORTE HUACHO o regístrelos.',
-      foot: [`${fil.length} viajes`, '', '', '', '', '', num(sum('peso_origen')), '', '', '', num(sum('peso_destino_calc')), num(sum('redondeo')), num(sum('diferencia'))],
+      foot: [`${fil.length} viajes`, '', '', '', '', '', num(sum('peso_origen')), '', '', '', num(sum('peso_destino_calc')), num(sum('diferencia'))],
     });
   };
   pintar();
