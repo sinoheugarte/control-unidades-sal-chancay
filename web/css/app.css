@@ -180,5 +180,16 @@ table.info th { width: 1%; white-space: nowrap; }
 /* Fecha + hora 24 h */
 .dt24 { display: flex; gap: 6px; min-width: 0; }
 .dt24 .dt24-d { flex: 1 1 auto; min-width: 0; }
-.dt24 .dt24-h { flex: 0 0 82px; text-align: center; font-variant-numeric: tabular-nums; }
+.dt24 .dt24-h { flex: 0 0 76px; text-align: center; font-variant-numeric: tabular-nums; }
+.dt24 .dt24-r { flex: 0 0 auto; padding: 0 9px; min-height: 36px; }
+.reloj24 { width: 190px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 12px 32px rgba(0,0,0,.28); padding: 8px; z-index: 300; inset: auto; }
+.reloj24-t { font-size: 12px; font-weight: 700; color: var(--muted); padding: 2px 4px 6px; }
+.reloj24-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.reloj24-col { height: 210px; overflow-y: auto; display: grid; align-content: start; gap: 2px; padding-right: 2px; scrollbar-width: thin; }
+.reloj24-col button { font: inherit; font-variant-numeric: tabular-nums; border: 0; background: transparent; color: var(--text); padding: 6px 0; border-radius: 6px; cursor: pointer; }
+.reloj24-col button:hover { background: var(--surface-2); }
+.reloj24-col button.on { background: var(--primary); color: var(--primary-ink); font-weight: 700; }
+.reloj24-col button:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+.reloj24-pie { display: flex; justify-content: space-between; gap: 6px; margin-top: 8px; }
 .dt24 .dt24-h:invalid { border-color: var(--bad); }
+.reloj24-cab { text-align: center; font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }

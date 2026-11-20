@@ -195,7 +195,11 @@ function convertirFechaHora(el) {
   el.dataset.dt24 = '1';
   el.type = 'hidden';
   el.parentNode.insertBefore(caja, el);
-  caja.append(d, h, el);
+  const reloj = document.createElement('button');
+  reloj.type = 'button'; reloj.className = 'btn dt24-r'; reloj.title = 'Elegir hora (24 h)'; reloj.setAttribute('aria-label', 'Elegir hora en formato de 24 horas');
+  reloj.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
+  caja.append(d, h, reloj, el);
+  reloj.addEventListener('click', () => abrirReloj(reloj, h, d));
   const pintar = (v) => { const m = String(v || '').match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/); d.value = m ? m[1] : ''; h.value = m ? m[2] : ''; };
   const leer = () => {
     if (d.value && HORA_24.test(h.value)) return `${d.value}T${h.value}`;
@@ -220,6 +224,56 @@ function convertirFechaHora(el) {
   });
   h.addEventListener('blur', () => { const m = h.value.match(/^(\d{1,2}):?(\d{0,2})$/); if (m && h.value && !HORA_24.test(h.value)) { h.value = `${m[1].padStart(2, '0')}:${(m[2] || '00').padEnd(2, '0')}`; h.dispatchEvent(new Event('input')); } });
 }
+/** Desplegable de reloj de 24 h: columnas de horas (00-23) y minutos (00-59). */
+let relojAbierto = null;
+function cerrarReloj() { if (relojAbierto) { relojAbierto.remove(); relojAbierto = null; } }
+function abrirReloj(boton, h, d) {
+  if (relojAbierto) { const era = relojAbierto.dataset.para === h.dataset.rid; cerrarReloj(); if (era) return; }
+  h.dataset.rid = h.dataset.rid || String(Math.random()).slice(2);
+  const [hh, mm] = HORA_24.test(h.value) ? h.value.split(':') : ['', ''];
+  const p = (n) => String(n).padStart(2, '0');
+  const pop = document.createElement('div');
+  pop.className = 'reloj24'; pop.dataset.para = h.dataset.rid;
+  pop.setAttribute('role', 'dialog'); pop.setAttribute('aria-label', 'Elegir hora (24 h)');
+  pop.innerHTML = `<div class="reloj24-t">Hora (24 h)</div>
+    <div class="reloj24-cols reloj24-cab"><span>Hora</span><span>Min</span></div>
+    <div class="reloj24-cols">
+      <div class="reloj24-col" data-col="h" aria-label="Horas">${Array.from({ length: 24 }, (_, i) => `<button type="button" data-h="${p(i)}" class="${p(i) === hh ? 'on' : ''}">${p(i)}</button>`).join('')}</div>
+      <div class="reloj24-col" data-col="m" aria-label="Minutos">${Array.from({ length: 60 }, (_, i) => `<button type="button" data-m="${p(i)}" class="${p(i) === mm ? 'on' : ''}">${p(i)}</button>`).join('')}</div>
+    </div>
+    <div class="reloj24-pie"><button type="button" class="btn sm" data-ahora>Ahora</button><button type="button" class="btn sm primary" data-listo>Listo</button></div>`;
+  // Dentro del diálogo abierto (si lo hay) para quedar por encima de él; posición fija respecto de la ventana
+  (boton.closest('dialog') || document.body).appendChild(pop);
+  relojAbierto = pop;
+  const r = boton.getBoundingClientRect();
+  const alto = 300, ancho = 190;
+  const top = r.bottom + 6 + alto > innerHeight ? Math.max(8, r.top - alto - 6) : r.bottom + 6;
+  Object.assign(pop.style, { position: 'fixed', top: `${top}px`, left: `${Math.min(innerWidth - ancho - 8, Math.max(8, r.right - ancho))}px`, margin: '0' });
+  pop.querySelectorAll('.on').forEach((b) => b.scrollIntoView({ block: 'center' }));
+  const poner = (nh, nm) => {
+    const [ah, am] = HORA_24.test(h.value) ? h.value.split(':') : ['', '00'];
+    h.value = `${nh ?? (ah || '00')}:${nm ?? (am || '00')}`;
+    if (!d.value) { const t = new Date(); d.value = `${t.getFullYear()}-${p(t.getMonth() + 1)}-${p(t.getDate())}`; d.dispatchEvent(new Event('change')); }
+    h.dispatchEvent(new Event('input'));
+    pop.querySelectorAll('[data-h]').forEach((b) => b.classList.toggle('on', b.dataset.h === h.value.slice(0, 2)));
+    pop.querySelectorAll('[data-m]').forEach((b) => b.classList.toggle('on', b.dataset.m === h.value.slice(3, 5)));
+  };
+  pop.addEventListener('click', (e) => {
+    const t = e.target.closest('button'); if (!t) return;
+    if (t.dataset.h) poner(t.dataset.h, null);
+    else if (t.dataset.m) { poner(null, t.dataset.m); cerrarReloj(); h.focus(); }
+    else if ('ahora' in t.dataset) { const n = new Date(); poner(p(n.getHours()), p(n.getMinutes())); cerrarReloj(); h.focus(); }
+    else if ('listo' in t.dataset) { cerrarReloj(); h.focus(); }
+  });
+  setTimeout(() => {
+    const fuera = (e) => { if (!relojAbierto) return document.removeEventListener('pointerdown', fuera, true);
+      if (!pop.contains(e.target) && e.target !== boton && !boton.contains(e.target)) { cerrarReloj(); document.removeEventListener('pointerdown', fuera, true); } };
+    document.addEventListener('pointerdown', fuera, true);
+  });
+  pop.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.stopPropagation(); e.preventDefault(); cerrarReloj(); boton.focus(); } });
+  (pop.querySelector('[data-h].on') || pop.querySelector('[data-h]')).focus({ preventScroll: true });
+}
+
 /** Convierte los campos de fecha-hora que haya en el elemento (y los que se agreguen después). */
 export function activarFechaHora24(root = document.body) {
   root.querySelectorAll('input[type="datetime-local"]').forEach(convertirFechaHora);
