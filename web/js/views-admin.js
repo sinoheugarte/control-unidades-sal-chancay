@@ -63,7 +63,7 @@ function opModal(o, despues) {
     wide: true,
     body: `<div class="form">
       ${f('nave', 'Nave *', 'text', 'required')}${f('orden', 'Orden *', 'text', 'required')}${f('manifiesto', 'Manifiesto')}${f('dam', 'DAM')}
-      ${f('eta', 'ETA', 'datetime-local')}${f('fecha_inicio', 'Fecha y hora de inicio (tentativa)', 'datetime-local')}${f('cliente', 'Cliente')}${f('producto', 'Producto')}
+      ${f('eta', 'ETA', 'datetime-local')}${f('fecha_inicio', 'Fecha y hora de inicio', 'datetime-local')}${f('cliente', 'Cliente')}${f('producto', 'Producto')}
       ${f('referencia', 'Referencia')}${f('punto_salida', 'Punto de salida')}${f('punto_llegada', 'Punto de llegada')}${f('empresa', 'Empresa')}
       ${f('coordinador', 'Coordinador de transporte')}
       ${f('tn_programadas', 'TN programadas *', 'number', 'step="0.01" min="0" required')}
