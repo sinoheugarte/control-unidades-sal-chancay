@@ -56,6 +56,8 @@ const N = (v) => (v === '' || v === undefined || v === null || Number.isNaN(Numb
 const S = (v) => (v === undefined || v === null || String(v).trim() === '' ? null : String(v).trim());
 const clon = (o) => JSON.parse(JSON.stringify(o));
 const ahora = () => C.fmtDT(Date.now() - new Date().getTimezoneOffset() * 60000, true);
+/** Fecha y hora para mensajes: dd/mm/yyyy hh:mm (24 h). */
+const fh = (s) => { const t = s ? C.fmtDT(C.toMs(s)) : null; return t ? `${t.slice(0, 10).split('-').reverse().join('/')} ${t.slice(11, 16)}` : '—'; };
 
 function indiceVacio() { return { version: 1, seq_op: 0, seq_t: 0, operaciones: [], transportistas: [], usuarios: [] }; }
 function opVacia() { return { operacion: null, op_transportistas: [], unidades: [], viajes: [], reportes: [], etapas: [], seq: 0, historial: [] }; }
@@ -272,13 +274,13 @@ function registrarCorte(D, proceso, cierre, modo = 'nuevo', inicioManual = null)
   const ultimo = cortes[cortes.length - 1];
   const nombre = proceso === 'despacho' ? 'despacho' : 'acopio';
   if (modo === 'actualizar' && ultimo) {
-    if (C.toMs(cierre) <= C.toMs(ultimo.inicio)) throw err(400, `El cierre (${cierre}) debe ser posterior al inicio del corte N° ${ultimo.numero} (${ultimo.inicio})`);
+    if (C.toMs(cierre) <= C.toMs(ultimo.inicio)) throw err(400, `El cierre (${fh(cierre)}) debe ser posterior al inicio del corte N° ${ultimo.numero} (${fh(ultimo.inicio)})`);
     ultimo.fin = cierre;
     return { numero: ultimo.numero, inicio: ultimo.inicio, fin: cierre, actualizado: true };
   }
   const inicio = ultimo ? ultimo.fin : (inicioManual || primeraHora(D, proceso));
   if (!inicio) throw err(400, `No se encontró la hora de ${proceso === 'despacho' ? 'despacho' : 'ingreso al puerto'} de la 1ra unidad para iniciar el 1er reporte de ${nombre}.`);
-  if (C.toMs(cierre) <= C.toMs(inicio)) throw err(400, `El cierre (${C.fmtDT(C.toMs(cierre))}) debe ser posterior al inicio del corte (${C.fmtDT(C.toMs(inicio))}).`);
+  if (C.toMs(cierre) <= C.toMs(inicio)) throw err(400, `El cierre (${fh(cierre)}) debe ser posterior al inicio del corte (${fh(inicio)}).`);
   D.seq = (D.seq || 0) + 1;
   const numero = (ultimo?.numero || 0) + 1;
   D.reportes.push({ id: D.seq, tipo: proceso, numero, inicio: C.normDT(inicio, false), fin: cierre, tn_acumulado: null, observacion: null });
@@ -591,7 +593,7 @@ ruta('PUT', '/reportes/:rid', async ({ rid }, b) => {
     const inicio = C.normDT(b.inicio ?? r.inicio, false), fin = C.normDT(b.fin, false);
     if (fin && C.toMs(fin) <= C.toMs(inicio)) throw err(400, 'El fin debe ser posterior al inicio');
     const sig = r.tipo !== 'embarque' && D.reportes.find((x) => x.tipo === r.tipo && x.numero === r.numero + 1);
-    if (sig && fin && sig.fin && C.toMs(fin) >= C.toMs(sig.fin)) throw err(400, `El cierre debe ser anterior al cierre del corte N° ${sig.numero} (${sig.fin})`);
+    if (sig && fin && sig.fin && C.toMs(fin) >= C.toMs(sig.fin)) throw err(400, `El cierre debe ser anterior al cierre del corte N° ${sig.numero} (${fh(sig.fin)})`);
     Object.assign(r, { inicio, fin, tn_acumulado: N(b.tn_acumulado), observacion: S(b.observacion) });
     // Encadenamiento: el cierre de un corte es el inicio del siguiente
     if (sig && fin) sig.inicio = fin;

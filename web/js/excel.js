@@ -805,7 +805,8 @@ export async function exportarResumenAnual(anio, ops, { soloTabla = false } = {}
     const h = wb.addWorksheet(nombre, { pageSetup: { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, paperSize: 9 } });
     h.getColumn(1).width = 2; COLS_RESUMEN_T.forEach((c, i) => { h.getColumn(i + 2).width = c[2]; });
     h.getCell('B1').value = `${o.nave} · ORDEN ${o.orden}`; h.getCell('B1').font = { bold: true, size: 13, color: { argb: AZUL } };
-    h.getCell('B2').value = `Acopio: ${o.resumen?.inicio_acopio ? C.fmtDT(C.toMs(o.resumen.inicio_acopio)).slice(0, 10) : '—'} al ${o.resumen?.fin_acopio ? C.fmtDT(C.toMs(o.resumen.fin_acopio)).slice(0, 10) : '—'} · TN acopiada ${Number(o.tot.tn_acopio || 0).toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })}`;
+    const dmy = (s) => (s ? C.fmtDT(C.toMs(s)).slice(0, 10).split('-').reverse().join('/') : '—');
+    h.getCell('B2').value = `Acopio: ${dmy(o.resumen?.inicio_acopio)} al ${dmy(o.resumen?.fin_acopio)} · TN acopiada ${Number(o.tot.tn_acopio || 0).toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })}`;
     h.getRow(4).values = [null, ...COLS_RESUMEN_T.map((c) => c[0])];
     cabecera(h.getRow(4));
     for (const r of o.filas) {
