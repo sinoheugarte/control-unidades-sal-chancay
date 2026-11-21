@@ -381,3 +381,31 @@ window.addEventListener('app:ops', (e) => {
 });
 render();
 $$('dialog').forEach((d) => d.remove());
+
+// Giro del teléfono: al volver de horizontal a vertical el visor podía quedar con el zoom alejado
+// (la app se veía más pequeña). En la app nativa se fija la escala; en el navegador se restablece al girar.
+(function ajustarVisorAlGirar() {
+  const meta = document.querySelector('meta[name=viewport]');
+  if (!meta) return;
+  const nativa = !!window.Capacitor?.isNativePlatform?.();
+  const base = 'width=device-width, initial-scale=1, viewport-fit=cover';
+  const fijo = base + ', minimum-scale=1, maximum-scale=1, user-scalable=no';
+  if (nativa) meta.setAttribute('content', fijo);
+  const restablecer = () => {
+    meta.setAttribute('content', fijo);
+    setTimeout(() => {
+      if (!nativa) meta.setAttribute('content', base);
+      window.scrollTo(0, window.scrollY);
+      redibujarGraficos();
+    }, 300);
+  };
+  const mq = window.matchMedia('(orientation: portrait)');
+  mq.addEventListener?.('change', restablecer);
+  window.addEventListener('orientationchange', restablecer);
+  // Si el menú quedó abierto al girar a una pantalla donde es fijo, se cierra el velo
+  window.addEventListener('resize', () => {
+    const velo = document.getElementById('menu-velo');
+    const side = document.getElementById('side');
+    if (velo && side && getComputedStyle(velo).display === 'none') { velo.classList.remove('on'); side.classList.remove('open'); }
+  });
+})();
