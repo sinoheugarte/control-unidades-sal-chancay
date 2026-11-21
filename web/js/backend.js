@@ -142,6 +142,15 @@ function nombreT(T, id) { return T.find((t) => t.id === id)?.nombre_comercial ??
  * también en operaciones importadas antes de este ajuste (que usaban la hora de inicio de carga).
  */
 function turnoDespacho(v) {
+  return { ...turnoDesp(v), ...turnoRecep(v) };
+}
+/** Recepción: el día y la jornada salen de la hora de salida de la unidad del puerto (tickets importados o registrados). */
+function turnoRecep(v) {
+  if (!v.ticket || v.ticket === '-' || v.rep_acopio != null || !v.salida_en) return {};
+  const t = C.turnoDe(v.salida_en);
+  return t.fecha ? { fecha_recepcion: t.fecha, jornada_recepcion: t.jornada } : {};
+}
+function turnoDesp(v) {
   if (!v.guia || v.rep_despacho != null || !v.despacho_en || /\b00:00(:00)?$/.test(v.despacho_en)) return {};
   const t = C.turnoDe(v.despacho_en);
   return t.fecha ? { fecha_despacho: t.fecha, jornada_despacho: t.jornada } : {};
@@ -244,8 +253,8 @@ function viajeDesdeBody(b, D) {
     // Día y jornada por turno: desde las 23:00 cuenta para el turno 23:00 - 07:00 del día siguiente
     transportista_id, placa, fecha_despacho: C.normDate(b.fecha_despacho) || C.turnoDe(despacho_en).fecha,
     jornada_despacho: S(b.jornada_despacho) || C.jornadaDe(despacho_en), despacho_en, guia: S(b.guia), peso_origen: N(b.peso_origen),
-    fecha_recepcion: C.normDate(b.fecha_recepcion) || C.turnoDe(ingreso_en).fecha,
-    jornada_recepcion: S(b.jornada_recepcion) || C.jornadaDe(ingreso_en), ticket: S(b.ticket), peso_destino: N(b.peso_destino),
+    fecha_recepcion: C.normDate(b.fecha_recepcion) || C.turnoDe(C.normDT(b.salida_en) || ingreso_en).fecha,
+    jornada_recepcion: S(b.jornada_recepcion) || C.jornadaDe(C.normDT(b.salida_en) || ingreso_en), ticket: S(b.ticket), peso_destino: N(b.peso_destino),
     ingreso_en, salida_en: C.normDT(b.salida_en), rep_despacho: N(b.rep_despacho), rep_acopio: N(b.rep_acopio), observacion: S(b.observacion),
   };
 }
@@ -261,12 +270,12 @@ function validarViaje(v, D, id) {
 }
 
 /* ---------------- cortes (reportes de avance) ----------------
-   Corte 1: inicio = despacho (o ingreso al puerto) de la 1ra unidad; fin = cierre indicado al importar.
+   Corte 1: inicio = despacho (o salida del puerto) de la 1ra unidad; fin = cierre indicado al importar.
    Corte n: inicio = cierre del corte n-1; fin = cierre indicado al importar el reporte n. */
 function primeraHora(D, proceso) {
   const hs = proceso === 'despacho'
     ? D.viajes.map((v) => v.despacho_en || (v.fecha_despacho ? `${v.fecha_despacho} 00:00:00` : null))
-    : [...D.viajes.map((v) => (v.ticket && v.ticket !== '-' ? v.ingreso_en : null)), ...(D.tickets || []).map((t) => t.ingreso)];
+    : [...D.viajes.map((v) => (v.ticket && v.ticket !== '-' ? v.salida_en || v.ingreso_en : null)), ...(D.tickets || []).map((t) => t.salida || t.ingreso)];
   return hs.filter(Boolean).sort()[0] || null;
 }
 function registrarCorte(D, proceso, cierre, modo = 'nuevo', inicioManual = null) {
@@ -279,14 +288,14 @@ function registrarCorte(D, proceso, cierre, modo = 'nuevo', inicioManual = null)
     return { numero: ultimo.numero, inicio: ultimo.inicio, fin: cierre, actualizado: true };
   }
   const inicio = ultimo ? ultimo.fin : (inicioManual || primeraHora(D, proceso));
-  if (!inicio) throw err(400, `No se encontró la hora de ${proceso === 'despacho' ? 'despacho' : 'ingreso al puerto'} de la 1ra unidad para iniciar el 1er reporte de ${nombre}.`);
+  if (!inicio) throw err(400, `No se encontró la hora de ${proceso === 'despacho' ? 'despacho' : 'salida del puerto'} de la 1ra unidad para iniciar el 1er reporte de ${nombre}.`);
   if (C.toMs(cierre) <= C.toMs(inicio)) throw err(400, `El cierre (${fh(cierre)}) debe ser posterior al inicio del corte (${fh(inicio)}).`);
   D.seq = (D.seq || 0) + 1;
   const numero = (ultimo?.numero || 0) + 1;
   D.reportes.push({ id: D.seq, tipo: proceso, numero, inicio: C.normDT(inicio, false), fin: cierre, tn_acumulado: null, observacion: null });
   const fuera = proceso === 'despacho'
     ? D.viajes.filter((v) => v.despacho_en && C.toMs(v.despacho_en) >= C.toMs(cierre)).length
-    : D.viajes.filter((v) => v.ingreso_en && C.toMs(v.ingreso_en) >= C.toMs(cierre)).length;
+    : D.viajes.filter((v) => (v.salida_en || v.ingreso_en) && C.toMs(v.salida_en || v.ingreso_en) >= C.toMs(cierre)).length;
   return { numero, inicio: C.normDT(inicio, false), fin: cierre, posteriores: fuera };
 }
 /* ---------------- router ---------------- */
@@ -560,8 +569,8 @@ ruta('GET', '/operaciones/:id/reportes', async ({ id }) => {
   const pend = (proceso) => {
     const vs = proceso === 'despacho'
       ? viajes.filter((v) => v.rep_despacho_calc == null && v.despacho_en)
-      : viajes.filter((v) => v.rep_acopio_calc == null && v.ingreso_en && v.status !== C.STATUS.PENDIENTE);
-    const hs = vs.map((v) => (proceso === 'despacho' ? v.despacho_en : v.ingreso_en)).sort();
+      : viajes.filter((v) => v.rep_acopio_calc == null && (v.salida_en || v.ingreso_en) && v.status !== C.STATUS.PENDIENTE);
+    const hs = vs.map((v) => (proceso === 'despacho' ? v.despacho_en : v.salida_en || v.ingreso_en)).sort();
     return { viajes: vs.length, tn: C.r3(vs.reduce((s, v) => s + ((proceso === 'despacho' ? v.peso_origen : v.peso_destino_calc) || 0), 0)), desde: hs[0] || null, hasta: hs[hs.length - 1] || null };
   };
   return { despacho: C.tablaReportes(viajes, op, D.reportes, 'despacho'), acopio: C.tablaReportes(viajes, op, D.reportes, 'acopio'), embarque,

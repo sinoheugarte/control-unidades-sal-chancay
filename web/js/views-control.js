@@ -84,7 +84,7 @@ function pintarCortes(body, cortes, proceso, edit, ctx, pend) {
   ];
   body.innerHTML = `
     <div class="card-h"><div><h2>PROCESO DE ${P}</h2>
-      <p class="muted small" style="margin:4px 0 0">El 1er reporte inicia con la hora de ${proceso === 'despacho' ? 'despacho de la 1ra unidad (REPORTE HUACHO)' : 'ingreso al puerto de la 1ra unidad (REPORTE CSPCP)'};
+      <p class="muted small" style="margin:4px 0 0">El 1er reporte inicia con la hora de ${proceso === 'despacho' ? 'despacho de la 1ra unidad (REPORTE HUACHO)' : 'salida del puerto de la 1ra unidad (REPORTE CSPCP)'};
       cada reporte cierra con la fecha y hora indicada al importar, y ese cierre es el inicio del siguiente.</p></div>
       <div class="btns"><button class="btn" id="c-xls">Excel</button><button class="btn" id="c-pdf">PDF</button>
       ${edit ? `<a class="btn primary" href="#/importar">Importar ${proceso === 'despacho' ? 'REPORTE HUACHO' : 'REPORTE CSPCP'}</a>` : ''}</div></div>
@@ -161,7 +161,7 @@ async function verViajes(proceso, r) {
     title: `${ordinal(r.numero)} reporte de ${proceso}: ${fechaHora(r.inicio)} a ${fechaHora(r.fin)}`, wide: true,
     body: tabla([
       { t: 'N° viaje', k: 'nro' }, { t: 'Transporte', k: 'transportista_nombre' }, { t: 'Placa', k: 'placa' }, { t: 'Guía', k: 'guia' },
-      { t: proceso === 'despacho' ? 'Despacho' : 'Ingreso CSPCP', f: (v) => fechaHora(proceso === 'despacho' ? v.despacho_en : v.ingreso_en) },
+      { t: proceso === 'despacho' ? 'Despacho' : 'Salida CSPCP', f: (v) => fechaHora(proceso === 'despacho' ? v.despacho_en : v.salida_en || v.ingreso_en) },
       { t: proceso === 'despacho' ? 'TN Huacho' : 'TN CSPCP', k, n: 1 },
     ], vs, { empty: 'Sin viajes en este reporte', foot: [`${vs.length} viajes`, '', '', '', '', num(vs.reduce((s, v) => s + (v[k] || 0), 0))] }),
   });
@@ -468,7 +468,7 @@ export async function vResumenes(view) {
         <div class="chart-box"><canvas id="ch-vueltas"></canvas></div>
         ${tabla([{ t: '# Vueltas', k: 'vueltas' }, { t: 'Cant. unidades', k: 'cantidad', n: 1, d: 0 }], d.unidades.distribucion, { foot: ['Total viajes', num(d.unidades.total_viajes ?? d.unidades.distribucion.reduce((a, x) => a + x.cantidad, 0), 0)] })}</div>
     </div>
-    <div class="card"><div class="card-h"><h3>Tiempo de atención en puerto (por día de ingreso)</h3></div>${tabla([
+    <div class="card"><div class="card-h"><h3>Tiempo de atención en puerto (por día de recepción: salida del puerto)</h3></div>${tabla([
       { t: 'Día', f: (x) => fecha(x.dia) }, ...R.map((r) => ({ t: r, k: r, n: 1, d: 0 })), { t: 'Total viajes', k: 'total', n: 1, d: 0 },
     ], d.tiempos, { foot: ['Total', ...R.map((r) => num(tt[r] || 0, 0)), num(tt.total || 0, 0)] })}</div>`;
   const c = colores();

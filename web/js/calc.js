@@ -128,7 +128,7 @@ function enriquecerViajes(viajes, op, reportes = []) {
       tiempo_min: tiempoMin,
       rango: rangoDe(tiempoMin),
       rep_despacho_calc: v.rep_despacho ?? enVentana(toMs(v.despacho_en), repD),
-      rep_acopio_calc: v.rep_acopio ?? enVentana(toMs(v.ingreso_en), repA),
+      rep_acopio_calc: v.rep_acopio ?? enVentana(toMs(v.salida_en || v.ingreso_en), repA),
     };
   });
 }
@@ -360,7 +360,7 @@ function resumenTransportistas(vs, participantes, unidades, tnProgramadas = 0) {
  */
 function resumenOperacion(vs, op, participantes, unidades) {
   const desc = vs.filter((v) => v.status === STATUS.DESCARGADO);
-  const fechasAcopio = desc.map((v) => (v.ingreso_en || v.fecha_recepcion || '').slice(0, 10)).filter(Boolean).sort();
+  const fechasAcopio = desc.map((v) => (v.fecha_recepcion || v.salida_en || v.ingreso_en || '').slice(0, 10)).filter(Boolean).sort();
   const fechasDesp = vs.map((v) => v.fecha_despacho).filter(Boolean).sort();
   const rt = resumenTransportistas(vs, participantes, unidades, op?.tn_programadas);
   return {
@@ -441,7 +441,7 @@ function resumenTiempos(vs) {
   const m = new Map();
   for (const v of vs) {
     if (!v.rango) continue;
-    const dia = (v.ingreso_en || v.fecha_recepcion || '').slice(0, 10);
+    const dia = (v.fecha_recepcion || v.salida_en || v.ingreso_en || '').slice(0, 10);
     const o = m.get(dia) || { dia, [RANGOS[0]]: 0, [RANGOS[1]]: 0, [RANGOS[2]]: 0, total: 0 };
     o[v.rango]++; o.total++;
     m.set(dia, o);

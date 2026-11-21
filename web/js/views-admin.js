@@ -95,7 +95,7 @@ export async function vImportar(view, ctx) {
   // Formulario de REPORTE HUACHO / CSPCP: exige la fecha y hora de cierre del corte
   const formCorte = (id, proceso) => {
     const c = ct[proceso];
-    const quien = proceso === 'despacho' ? 'despacho de la 1ra unidad (se toma del REPORTE HUACHO)' : 'ingreso al puerto de la 1ra unidad (se toma del REPORTE CSPCP)';
+    const quien = proceso === 'despacho' ? 'despacho de la 1ra unidad (se toma del REPORTE HUACHO)' : 'salida del puerto de la 1ra unidad (se toma del REPORTE CSPCP)';
     return `<form class="form" data-imp="${id}" data-proceso="${proceso}" style="margin-top:12px;grid-template-columns:repeat(auto-fill,minmax(220px,1fr))">
       <label class="full">Archivo *<input type="file" name="archivo" accept=".xlsx,.xlsm,.xls,.csv" required aria-label="Archivo"></label>
       <label>Corte<select name="modo">

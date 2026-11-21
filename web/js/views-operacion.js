@@ -273,11 +273,13 @@ export async function vRegistro(view, ctx) {
   const fD = $('#f-desp'), fR = $('#f-rec');
   // Jornada automática según la fecha-hora (el turno de las 23:00 cuenta para el día siguiente)
   const jornadaAuto = (sel, inp) => {
-    const t = turnoDe(String(inp.value || '').replace('T', ' '));
+    const val = Array.isArray(inp) ? inp.map((x) => x.value).find(Boolean) : inp.value;
+    const t = turnoDe(String(val || '').replace('T', ' '));
     sel.options[0].textContent = t.jornada ? `Automática: ${t.jornada}` : 'Automática';
   };
-  for (const [sel, inp] of [[fD.jornada_despacho, fD.despacho_en], [fR.jornada_recepcion, fR.ingreso_en]]) {
-    inp.addEventListener('change', () => jornadaAuto(sel, inp)); inp.addEventListener('input', () => jornadaAuto(sel, inp));
+  // Recepción: manda la hora de salida del puerto; mientras no se ingrese, se toma la de ingreso
+  for (const [sel, inp] of [[fD.jornada_despacho, [fD.despacho_en]], [fR.jornada_recepcion, [fR.salida_en, fR.ingreso_en]]]) {
+    for (const i of inp) { i.addEventListener('change', () => jornadaAuto(sel, inp)); i.addEventListener('input', () => jornadaAuto(sel, inp)); }
     jornadaAuto(sel, inp);
   }
   fD.placa.addEventListener('change', () => {
@@ -319,7 +321,7 @@ export async function vRegistro(view, ctx) {
     const p = e.target.closest('[data-rec]')?.dataset.rec;
     if (!p) return;
     fR.placa.value = p; fR.placa.dispatchEvent(new Event('change'));
-    fR.ingreso_en.value = ahoraInput(); jornadaAuto(fR.jornada_recepcion, fR.ingreso_en);
+    fR.ingreso_en.value = ahoraInput(); jornadaAuto(fR.jornada_recepcion, [fR.salida_en, fR.ingreso_en]);
     fR.ticket.focus();
     fR.scrollIntoView({ behavior: 'smooth', block: 'center' });
   });

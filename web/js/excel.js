@@ -123,7 +123,7 @@ const ahora = () => C.fmtDT(Date.now() - new Date().getTimezoneOffset() * 60000,
    se guardan aparte (D.tickets), así que no importa en qué orden se importen los reportes. */
 
 function aplicarTicket(v, t, completar) {
-  const turno = C.turnoDe(t.ingreso);
+  const turno = C.turnoDe(t.salida || t.ingreso); // día y jornada de recepción = salida del puerto
   Object.assign(v, { ticket: t.ticket, peso_destino: t.peso, ingreso_en: t.ingreso, salida_en: t.salida });
   if (!completar || !v.fecha_recepcion) v.fecha_recepcion = turno.fecha || v.fecha_recepcion;
   if (!completar || !v.jornada_recepcion) v.jornada_recepcion = turno.jornada || v.jornada_recepcion;
