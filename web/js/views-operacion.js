@@ -2,6 +2,7 @@ import {
   state, api, esc, num, pct, fecha, fechaHora, minutos, toInputDT, ahoraInput, hoyInput, normPlaca,
   statusPill, rangoPill, toast, $, modal, confirmar, tabla, sinOperacion, puedeEscribir, esAdmin, chart, colores, descargar,
 } from './core.js?v=__V__';
+import { turnoDe } from './calc.js?v=__V__';
 
 /* =================== TABLERO =================== */
 export async function vTablero(view) {
@@ -202,8 +203,8 @@ export function viajeModal(v, transp, done) {
     <div class="form">
       <label>Ticket (use "-" si fue devuelto)<input name="ticket" value="${esc(v.ticket || '')}"></label>
       <label>Peso TN destino<input name="peso_destino" type="number" step="0.01" min="0" max="80" value="${v.peso_destino ?? ''}"></label>
-      <label>Hora ingreso<input name="ingreso_en" type="datetime-local" value="${toInputDT(v.ingreso_en)}"></label>
-      <label>Hora salida<input name="salida_en" type="datetime-local" value="${toInputDT(v.salida_en)}"></label>
+      <label>Fecha - Hora ingreso<input name="ingreso_en" type="datetime-local" value="${toInputDT(v.ingreso_en)}"></label>
+      <label>Fecha - Hora salida<input name="salida_en" type="datetime-local" value="${toInputDT(v.salida_en)}"></label>
       <label>Día recepción<input name="fecha_recepcion" type="date" value="${v.fecha_recepcion || ''}"></label>
       <label>Jornada recepción<select name="jornada_recepcion">${optsJornada(v.jornada_recepcion)}</select></label>
       <label># Reporte acopio<input name="rep_acopio" type="number" min="1" value="${v.rep_acopio ?? ''}" placeholder="Auto: ${esc(v.rep_acopio_calc ?? 'por horario')}"></label>
@@ -236,7 +237,7 @@ export async function vRegistro(view, ctx) {
   const placas = [...new Set([...unidades.map((u) => u.tracto), ...viajes.map((v) => v.placa)])].sort();
   view.innerHTML = `
   <datalist id="dl-placas">${placas.map((p) => `<option value="${esc(p)}">`).join('')}</datalist>
-  <datalist id="dl-pend">${[...new Set(pend.map((p) => p.placa))].map((p) => `<option value="${esc(p)}">`).join('')}</datalist>
+  <datalist id="dl-pend">${[...new Set(pend.map((p) => p.placa))].map((p) => `<option value="${esc(p)}">En tránsito</option>`).join('')}${placas.filter((p) => !pend.some((x) => x.placa === p)).map((p) => `<option value="${esc(p)}">`).join('')}</datalist>
   <div class="grid g2">
     <div class="card"><div class="card-h"><h2>1 · Salida de planta (despacho)</h2></div>
       <form id="f-desp" class="form" autocomplete="off">
@@ -251,12 +252,13 @@ export async function vRegistro(view, ctx) {
       </form></div>
     <div class="card"><div class="card-h"><h2>2 · Recepción en puerto (ticket)</h2></div>
       <form id="f-rec" class="form" autocomplete="off">
-        <label>Placa *<input name="placa" list="dl-pend" required style="text-transform:uppercase"></label>
+        <label>Placa tracto *<input name="placa" list="dl-pend" required style="text-transform:uppercase"></label>
         <label>N° ticket *<input name="ticket" required></label>
         <label>Peso neto TN *<input name="peso_destino" type="number" step="0.01" min="0" max="80"></label>
         <label class="check" style="align-self:end"><input type="checkbox" name="devuelto"> Carga devuelta / no ingresó</label>
-        <label>Hora ingreso<input name="ingreso_en" type="datetime-local" value="${ahoraInput()}"></label>
-        <label>Hora salida<input name="salida_en" type="datetime-local"></label>
+        <label>Fecha - Hora ingreso<input name="ingreso_en" type="datetime-local" value="${ahoraInput()}"></label>
+        <label>Fecha - Hora salida<input name="salida_en" type="datetime-local"></label>
+        <label>Jornada<select name="jornada_recepcion">${optsJornada()}</select></label>
         <div class="full muted small" id="info-rec"></div>
         <div class="full"><button class="btn primary">Registrar recepción</button></div>
       </form></div>
@@ -269,6 +271,15 @@ export async function vRegistro(view, ctx) {
     ], pend, { empty: 'No hay unidades en tránsito' })}</div>`;
 
   const fD = $('#f-desp'), fR = $('#f-rec');
+  // Jornada automática según la fecha-hora (el turno de las 23:00 cuenta para el día siguiente)
+  const jornadaAuto = (sel, inp) => {
+    const t = turnoDe(String(inp.value || '').replace('T', ' '));
+    sel.options[0].textContent = t.jornada ? `Automática: ${t.jornada}` : 'Automática';
+  };
+  for (const [sel, inp] of [[fD.jornada_despacho, fD.despacho_en], [fR.jornada_recepcion, fR.ingreso_en]]) {
+    inp.addEventListener('change', () => jornadaAuto(sel, inp)); inp.addEventListener('input', () => jornadaAuto(sel, inp));
+    jornadaAuto(sel, inp);
+  }
   fD.placa.addEventListener('change', () => {
     const p = normPlaca(fD.placa.value); fD.placa.value = p;
     const u = unidades.find((x) => x.tracto === p);
@@ -308,7 +319,7 @@ export async function vRegistro(view, ctx) {
     const p = e.target.closest('[data-rec]')?.dataset.rec;
     if (!p) return;
     fR.placa.value = p; fR.placa.dispatchEvent(new Event('change'));
-    fR.ingreso_en.value = ahoraInput();
+    fR.ingreso_en.value = ahoraInput(); jornadaAuto(fR.jornada_recepcion, fR.ingreso_en);
     fR.ticket.focus();
     fR.scrollIntoView({ behavior: 'smooth', block: 'center' });
   });

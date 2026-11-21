@@ -392,6 +392,8 @@ ruta('POST', '/operaciones/:id/recepcion', async ({ id }, b) => {
   const vid = await mutarOp(id, (D) => {
     const r = X.asignarTicket(D, t);
     if (!r) throw err(404, `La placa ${t.placa} no tiene viajes pendientes de descarga`);
+    const jr = S(b.jornada_recepcion);
+    if (jr && C.JORNADAS.includes(jr)) D.viajes.find((x) => x.id === r).jornada_recepcion = jr;
     historial(D, 'recepcion', `${t.placa} ticket ${t.ticket}`);
     return r;
   });
