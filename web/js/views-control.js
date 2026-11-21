@@ -77,7 +77,7 @@ function pintarCortes(body, cortes, proceso, edit, ctx) {
   const filas = [
     ['INICIO', (r) => fechaHora(r.inicio)], ['CIERRE', (r) => fechaHora(r.fin)],
     ['TN PARCIAL', (r) => num(r.tn_parcial), true], ['# VIAJES', (r) => num(r.viajes, 0)], ['# HORAS', (r) => horas(r.horas)],
-    ['Ø TN X UNID.', (r) => num(r.tn_x_unidad)], ['Ø UNID. X HR', (r) => num(r.unid_x_hora)],
+    ['Ø TN X UNID.', (r) => num(r.tn_x_unidad)], ['Ø UNID. X HR', (r) => num(r.unid_x_hora, 0)],
     ['TN TOTAL', (r) => num(r.tn_total), true], ['VIAJES TOTAL', (r) => num(r.viajes_total, 0)], ['HRS. TOTAL', (r) => horas(r.horas_total)],
     ['TN RESTANTES', (r) => num(r.tn_restantes), true], ['VIAJES EST. REST.', (r) => num(r.viajes_est_rest, 0)],
     ['HRS. EST. REST.', (r) => horas(r.horas_est_rest)], ['FCH. EST. TERM.', (r) => fechaHora(r.fecha_est_termino), true],
@@ -123,7 +123,7 @@ function pintarCortes(body, cortes, proceso, edit, ctx) {
     chart($('#c-ritmo'), {
       type: 'line',
       data: { labels: etiquetas, datasets: [
-        { label: 'Unid. por hora', data: cortes.map((r) => r.unid_x_hora), borderColor: c.serie[2], backgroundColor: c.serie[2], tension: 0.25, yAxisID: 'y' },
+        { label: 'Unid. por hora', data: cortes.map((r) => (r.unid_x_hora == null ? null : Math.round(r.unid_x_hora))), borderColor: c.serie[2], backgroundColor: c.serie[2], tension: 0.25, yAxisID: 'y' },
         { label: 'TN por unidad', data: cortes.map((r) => r.tn_x_unidad), borderColor: c.serie[3], backgroundColor: c.serie[3], tension: 0.25, yAxisID: 'y1' },
       ] },
       options: { plugins: { legend: { position: 'bottom' } }, scales: { y: { beginAtZero: true, position: 'left' }, y1: { beginAtZero: false, position: 'right', grid: { drawOnChartArea: false } } } },

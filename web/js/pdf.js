@@ -227,7 +227,7 @@ export async function pdfResumenAnual(anio, ops, empresa, { soloTabla = false } 
 export async function pdfCortes(op, proceso, cortes, ordinal) {
   const doc = nuevoDoc('a4');
   const P = proceso === 'despacho' ? 'DESPACHO' : 'ACOPIO';
-  const fmt = (v, t) => (v == null || v === '' ? '' : t === 'dt' ? fh(v).slice(0, 16) : t === 'n' ? n2(v) : String(v));
+  const fmt = (v, t) => (v == null || v === '' ? '' : t === 'dt' ? fh(v).slice(0, 16) : t === 'n' ? n2(v) : t === 'i' && typeof v === 'number' ? Math.round(v).toLocaleString('en-US') : String(v));
   for (let i = 0; i < Math.max(1, cortes.length); i += 6) {
     if (i) doc.addPage();
     const y = await encabezado(doc, op, `PROCESO DE ${P} — ${op.nave} / ORDEN ${op.orden}`);

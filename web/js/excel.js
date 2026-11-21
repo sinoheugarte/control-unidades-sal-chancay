@@ -827,7 +827,7 @@ export async function exportarResumenAnual(anio, ops, { soloTabla = false } = {}
 const horasTxt = (h) => (h == null ? '' : `${Math.floor(Math.round(h * 60) / 60)}:${String(Math.round(h * 60) % 60).padStart(2, '0')}`);
 export const FILAS_CORTE = [
   ['INICIO', (r) => r.inicio, 'dt'], ['CIERRE', (r) => r.fin, 'dt'], ['TN PARCIAL', (r) => r.tn_parcial, 'n'], ['# VIAJES', (r) => r.viajes, 'i'],
-  ['# HORAS', (r) => horasTxt(r.horas)], ['Ø TN X UNID.', (r) => r.tn_x_unidad, 'n'], ['Ø UNID. X HR', (r) => r.unid_x_hora, 'n'],
+  ['# HORAS', (r) => horasTxt(r.horas)], ['Ø TN X UNID.', (r) => r.tn_x_unidad, 'n'], ['Ø UNID. X HR', (r) => r.unid_x_hora, 'i'],
   ['TN TOTAL', (r) => r.tn_total, 'n'], ['VIAJES TOTAL', (r) => r.viajes_total, 'i'], ['HRS. TOTAL', (r) => horasTxt(r.horas_total)],
   ['TN RESTANTES', (r) => r.tn_restantes, 'n'], ['VIAJES EST. REST.', (r) => r.viajes_est_rest, 'i'], ['HRS. EST. REST.', (r) => horasTxt(r.horas_est_rest)],
   ['FCH. EST. TERM.', (r) => r.fecha_est_termino, 'dt'],
