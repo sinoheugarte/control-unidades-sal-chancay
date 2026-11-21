@@ -208,13 +208,28 @@ export function chart(canvas, config) {
   Chart.defaults.plugins.legend.labels.boxWidth = 8;
   Object.assign(Chart.defaults.plugins.tooltip, { padding: 10, cornerRadius: 10, boxPadding: 4, titleFont: { weight: '700' } });
   Chart.defaults.animation = matchMedia('(prefers-reduced-motion: reduce)').matches ? false : { duration: 700, easing: 'easeOutQuart' };
+  // Si el lienzo ya tenía un gráfico (pantalla pintada dos veces), se reemplaza sin error
+  const previo = Chart.getChart?.(canvas);
+  if (previo) { previo.destroy(); charts.delete(previo); }
   const ch = new Chart(canvas, { ...config, options: { responsive: true, maintainAspectRatio: false, ...config.options } });
   charts.add(ch);
+  // El navegador puede borrar el lienzo para ahorrar memoria (pestaña en segundo plano): al restaurarlo se redibuja
+  canvas.addEventListener('contextrestored', () => { try { ch.update('none'); } catch { /* */ } });
   return ch;
 }
-export function destruirGraficos() { charts.forEach((c) => c.destroy()); charts.clear(); }
+/** Libera los gráficos que ya no están en pantalla (todos = true: también los visibles). */
+export function destruirGraficos(todos = false) {
+  charts.forEach((c) => { if (todos || !c.canvas || !c.canvas.isConnected) { try { c.destroy(); } catch { /* */ } charts.delete(c); } });
+}
 /** Fuerza el redibujado de los gráficos (tras animaciones de entrada o al girar el teléfono). */
-export function redibujarGraficos() { charts.forEach((c) => { try { c.resize(); c.update('none'); } catch { /* */ } }); }
+export function redibujarGraficos() {
+  destruirGraficos();
+  charts.forEach((c) => { try { c.resize(); c.update('none'); } catch { /* */ } });
+}
+// Al volver a la pestaña o a la app (o al recuperar el foco) se redibujan: el navegador pudo haber borrado los lienzos
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { redibujarGraficos(); setTimeout(redibujarGraficos, 400); } });
+window.addEventListener('pageshow', () => setTimeout(redibujarGraficos, 100));
+window.addEventListener('focus', () => setTimeout(redibujarGraficos, 100));
 let tGiro; ['orientationchange', 'resize'].forEach((ev) => window.addEventListener(ev, () => { clearTimeout(tGiro); tGiro = setTimeout(redibujarGraficos, 350); }));
 
 /* ---------- Fecha y hora en formato 24 h ----------

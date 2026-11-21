@@ -250,7 +250,7 @@ async function capturarPantallas(keys) {
   try {
     for (const [i, k] of keys.entries()) {
       velo.querySelector('#velo-paso').textContent = `${i + 1} de ${keys.length}: ${RUTAS[k].t}`;
-      destruirGraficos();
+      view.innerHTML = ''; destruirGraficos();
       view.classList.remove('sale', 'entra', 'atras');
       view.innerHTML = '';
       try { await RUTAS[k].v(view, { rerender: () => {} }); } catch (e) { view.innerHTML = `<div class="alert bad">${esc(e.message)}</div>`; }
@@ -316,6 +316,7 @@ async function render() {
   const cargando = setTimeout(() => { if (id === renderId) view.innerHTML = '<div class="cargando"><i></i><span>Cargando…</span></div>'; }, cambia ? 0 : 250);
   try {
     await RUTAS[r].v(view, { rerender: () => id === renderId && render() });
+    destruirGraficos(); // libera los de la pantalla anterior (ya fuera del documento)
   } catch (err) {
     if (id === renderId) view.innerHTML = `<div class="alert bad">${esc(err.message)}</div>`;
   } finally { clearTimeout(cargando); }
