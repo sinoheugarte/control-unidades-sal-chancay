@@ -63,7 +63,7 @@ export function escena(canvas, t0, reducido) {
     muro: lin(0, 752, 0, 900, [[0, '#475569'], [1, '#1e293b']]),
     sal: lin(0, -1, 0, 0, [[0, '#ffffff'], [1, '#cbd5e1']]),
     salRuma: lin(0, 600, 0, 730, [[0, '#ffffff'], [0.6, '#e2e8f0'], [1, '#a5b4c8']]),
-    casco: lin(0, 612, 0, 760, [[0, '#24466f'], [1, '#0f2340']]),
+    casco: lin(0, 560, 0, 760, [[0, '#1f2937'], [1, '#05070d']]),
     tolva: lin(0, -66, 0, 0, [[0, '#f8fafc'], [0.55, '#cbd5e1'], [1, '#8b9bb0']]),
     cabina: lin(0, -110, 0, -30, [[0, '#60a5fa'], [0.5, '#2563eb'], [1, '#1e3a8a']]),
     deflector: lin(0, -112, 0, -98, [[0, '#93c5fd'], [1, '#3b82f6']]),
@@ -78,11 +78,6 @@ export function escena(canvas, t0, reducido) {
   const CERRO_CERCA = cerro(-1400, 1100, (x) => 700 - clamp((1100 - x) / 120) * (26 + 16 * Math.sin(x * 0.0075 + 2) + 8 * Math.sin(x * 0.023)));
   const CASCO = new Path2D('M1204 560 L2900 560 L2900 760 L1236 760 Q1212 736 1206 660 Z');
   const FRANJA = new Path2D('M1226 742 L2900 742 L2900 760 L1236 760 Q1230 752 1226 742 Z');
-  // Recorrido de la sal: faja desde la ruma de acopio hasta la torre del cargador de buques, brazo sobre la nave y chute a bodega
-  const FAJA = [[860, 700], [1168, 520], [1414, 500], [1414, 556]];
-  const tramos = FAJA.slice(1).map((p, i) => Math.hypot(p[0] - FAJA[i][0], p[1] - FAJA[i][1]));
-  const largoFaja = tramos.reduce((a, b) => a + b, 0);
-  const enFaja = (u) => { let d = u * largoFaja; for (let i = 0; i < tramos.length; i++) { if (d <= tramos[i]) { const k = d / tramos[i]; return [FAJA[i][0] + (FAJA[i + 1][0] - FAJA[i][0]) * k, FAJA[i][1] + (FAJA[i + 1][1] - FAJA[i][1]) * k, i]; } d -= tramos[i]; } return [...FAJA[3], 2]; };
 
   const ajustar = () => {
     dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -182,6 +177,109 @@ export function escena(canvas, t0, reducido) {
     ctx.fillStyle = 'rgba(100,116,139,.22)'; ctx.beginPath(); ctx.moveTo(cx, base - h); ctx.quadraticCurveTo(cx + hw * 0.5, base - h * 0.95, cx + hw, base); ctx.lineTo(cx + hw * 0.15, base); ctx.closePath(); ctx.fill();
   }
 
+  // Torre de iluminación de celosía con plataformas y reflectores
+  function torreLuz(x, top, brillo) {
+    ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 1.6; ctx.beginPath();
+    ctx.moveTo(x - 10, 702); ctx.lineTo(x - 4, top); ctx.moveTo(x + 10, 702); ctx.lineTo(x + 4, top);
+    const n = Math.round((702 - top) / 14);
+    for (let i = 0; i < n; i++) { const y0 = 702 - i * 14, y1 = y0 - 14; const w0 = 10 - (6 * i) / n, w1 = 10 - (6 * (i + 1)) / n; ctx.moveTo(x - w0, y0); ctx.lineTo(x + w1, y1); }
+    ctx.stroke();
+    ctx.fillStyle = '#cbd5e1'; [0.38, 0.7].forEach((k) => { const y = 702 - (702 - top) * k; ctx.fillRect(x - 13, y, 26, 3); });
+    ctx.fillRect(x - 15, top - 2, 30, 4); ctx.fillRect(x - 1, top - 22, 2, 20);
+    ctx.fillStyle = '#fef9c3'; for (let k = -2; k <= 2; k++) ctx.fillRect(x + k * 6 - 2, top - 8, 4, 5);
+    ctx.save(); ctx.translate(x, top - 6); ctx.globalAlpha = brillo; ctx.fillStyle = G.luz; ctx.fillRect(-60, -60, 120, 120); ctx.restore();
+  }
+
+  /* Grúa pórtico (grúa móvil de muelle con cuchara bivalva). Ciclo: gira hacia la ruma, baja la cuchara
+     abierta, la cierra mordiendo la sal, la sube, gira hacia la nave, baja sobre la bodega y la abre. */
+  const PIV = { x: 1160, y: 466 }, PUNTA = 370;
+  const CUERDA = { alta: 60, ruma: 218, nave: 140 };
+  const FASES = [['ruma', 1.3], ['baja', 1.0], ['cierra', 0.5], ['sube', 1.0], ['nave', 1.4], ['bajaN', 0.6], ['abre', 0.6], ['subeN', 0.8]];
+  const CICLO = FASES.reduce((a, f) => a + f[1], 0);
+  function estadoGrua(t) {
+    let u = (((t - 1.8) % CICLO) + CICLO) % CICLO, fase = 'ruma', p = 0;
+    for (const [n, d] of FASES) { if (u < d) { fase = n; p = suave(u / d); break; } u -= d; }
+    const S = { th: Math.PI, cuerda: CUERDA.alta, abierta: 1, carga: 0, fase, p };
+    switch (fase) {
+      case 'ruma': S.th = Math.PI * p; break;
+      case 'baja': S.cuerda = CUERDA.alta + (CUERDA.ruma - CUERDA.alta) * p; break;
+      case 'cierra': S.cuerda = CUERDA.ruma; S.abierta = 1 - p; S.carga = p; break;
+      case 'sube': S.cuerda = CUERDA.ruma + (CUERDA.alta - CUERDA.ruma) * p; S.abierta = 0; S.carga = 1; break;
+      case 'nave': S.th = Math.PI * (1 - p); S.abierta = 0; S.carga = 1; break;
+      case 'bajaN': S.th = 0; S.cuerda = CUERDA.alta + (CUERDA.nave - CUERDA.alta) * p; S.abierta = 0; S.carga = 1; break;
+      case 'abre': S.th = 0; S.cuerda = CUERDA.nave; S.abierta = p; S.carga = 1 - p; break;
+      case 'subeN': S.th = 0; S.cuerda = CUERDA.nave + (CUERDA.alta - CUERDA.nave) * p; break;
+    }
+    return S;
+  }
+  function cuchara(gx, gy, abierta, carga) {
+    // cabezal y cables de cierre
+    ctx.fillStyle = '#7f1d1d'; ctx.fillRect(gx - 7, gy, 14, 8);
+    const a = abierta * 0.62;
+    [-1, 1].forEach((lado) => {
+      ctx.save(); ctx.translate(gx + lado * 3, gy + 10); ctx.rotate(lado * a);
+      ctx.fillStyle = '#dc2626';
+      ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(lado * 15, 2); ctx.quadraticCurveTo(lado * 17, 18, lado * 3, 24); ctx.lineTo(0, 24); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = '#991b1b'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(lado * 6, 3); ctx.lineTo(lado * 7, 20); ctx.stroke();
+      ctx.strokeStyle = '#475569'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(lado * 14, 2); ctx.lineTo(-lado * 3, -8); ctx.stroke();
+      ctx.restore();
+    });
+    ctx.fillStyle = '#b91c1c'; ctx.fillRect(gx - 5, gy + 7, 10, 5);
+    if (carga > 0.05) { ctx.fillStyle = G.sal; ctx.save(); ctx.translate(gx, gy + 11); ctx.beginPath(); ctx.moveTo(-15, 1); ctx.quadraticCurveTo(0, -12 * carga, 15, 1); ctx.closePath(); ctx.fill(); ctx.restore(); }
+  }
+  function grua(t) {
+    const S = estadoGrua(t), A = ctx.globalAlpha;
+    const c = Math.cos(S.th), alcance = 246 + (185 - 246) * (1 - c) / 2;
+    const px = PIV.x + c * alcance; // punta de la pluma (proyección del giro)
+    const azul = '#1d4ed8', azul2 = '#2563eb', blanco = '#e2e8f0';
+    // pórtico sobre rieles con boguies rojos
+    ctx.fillStyle = azul; ctx.fillRect(1116, 628, 78, 16);
+    ctx.beginPath(); ctx.moveTo(1118, 644); ctx.lineTo(1130, 644); ctx.lineTo(1132, 696); ctx.lineTo(1122, 696); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(1180, 644); ctx.lineTo(1192, 644); ctx.lineTo(1188, 696); ctx.lineTo(1178, 696); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = blanco; ctx.fillRect(1116, 628, 78, 4);
+    ctx.fillStyle = '#ef4444'; [1118, 1176].forEach((x) => { ctx.fillRect(x, 694, 18, 7); ctx.fillStyle = '#b91c1c'; ctx.fillRect(x + 2, 699, 5, 3); ctx.fillRect(x + 11, 699, 5, 3); ctx.fillStyle = '#ef4444'; });
+    ctx.fillStyle = '#f8fafc'; ctx.font = '700 7px Inter, system-ui, sans-serif'; ctx.fillText('CHANCAY TERMINAL', 1124, 640);
+    // columna
+    ctx.fillStyle = azul2; ctx.fillRect(1151, 500, 18, 130); ctx.fillStyle = 'rgba(255,255,255,.15)'; ctx.fillRect(1151, 500, 4, 130);
+    ctx.fillStyle = blanco; ctx.fillRect(1146, 596, 28, 12); ctx.fillStyle = azul; ctx.fillRect(1146, 606, 28, 3);
+    // caseta de máquinas (gira con la pluma)
+    const ancho = 34 + 18 * Math.abs(c), cx = PIV.x - c * 8;
+    ctx.fillStyle = blanco; ctx.fillRect(cx - ancho / 2, 464, ancho, 20); ctx.fillStyle = azul; ctx.fillRect(cx - ancho / 2, 482, ancho, 18);
+    ctx.fillStyle = '#fff'; ctx.font = '800 8px Inter, system-ui, sans-serif'; ctx.fillText('22', cx + ancho / 2 - 13, 494);
+    // contrapeso y marco A
+    ctx.strokeStyle = azul; ctx.lineCap = 'round';
+    ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(cx, 466); ctx.lineTo(cx - c * 4, 412); ctx.stroke();
+    ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(cx - c * 4, 420); ctx.lineTo(cx - c * 46, 436); ctx.stroke();
+    ctx.fillStyle = azul; ctx.fillRect(cx - c * 46 - 9, 430, 18, 14);
+    // pluma principal + plumín (nivel constante en la punta)
+    const kx = PIV.x + (px - PIV.x) * 0.72, ky = 344;
+    ctx.lineWidth = 6; ctx.strokeStyle = azul2; ctx.beginPath(); ctx.moveTo(PIV.x, PIV.y); ctx.lineTo(kx, ky); ctx.stroke();
+    ctx.lineWidth = 1.2; ctx.strokeStyle = 'rgba(191,219,254,.8)'; ctx.beginPath();
+    for (let i = 0; i < 9; i++) { const a0 = i / 9, a1 = (i + 0.5) / 9; ctx.moveTo(PIV.x + (kx - PIV.x) * a0 - 2, PIV.y + (ky - PIV.y) * a0); ctx.lineTo(PIV.x + (kx - PIV.x) * a1 + 2, PIV.y + (ky - PIV.y) * a1); }
+    ctx.stroke();
+    ctx.lineWidth = 4.5; ctx.strokeStyle = azul; ctx.beginPath(); ctx.moveTo(kx - (px - kx) * 0.35, ky + 6); ctx.lineTo(px, PUNTA); ctx.stroke();
+    ctx.lineWidth = 2; ctx.strokeStyle = '#3b82f6'; ctx.beginPath(); ctx.moveTo(cx - c * 4, 412); ctx.lineTo(kx - (px - kx) * 0.35, ky + 6); ctx.stroke(); // tirante
+    // cables y cuchara
+    const gy = PUNTA + S.cuerda;
+    ctx.strokeStyle = 'rgba(226,232,240,.85)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(px - 2, PUNTA); ctx.lineTo(px - 2, gy); ctx.moveTo(px + 2, PUNTA); ctx.lineTo(px + 2, gy); ctx.stroke();
+    ctx.fillStyle = '#0f172a'; ctx.fillRect(px - 4, PUNTA - 3, 8, 6);
+    cuchara(px, gy, S.abierta, S.carga);
+    // sal que cae a la bodega al abrir la cuchara
+    if (S.fase === 'abre' || (S.fase === 'subeN' && S.p < 0.3)) {
+      const fuerza = S.fase === 'abre' ? Math.sin(Math.PI * Math.min(1, S.p * 1.3)) : 0.3 * (1 - S.p / 0.3);
+      ctx.fillStyle = '#ffffff';
+      for (let k = 0; k < 26; k++) { const ph = (t * 3 + k * 0.618) % 1; ctx.globalAlpha = A * (fuerza * (0.5 + ((k * 13) % 7) / 14)); ctx.beginPath(); ctx.arc(px + ((k * 29) % 22) - 11, gy + 30 + ph * (552 - gy - 30), 1.3 + (k % 3) * 0.6, 0, Math.PI * 2); ctx.fill(); }
+      ctx.globalAlpha = A * (fuerza * 0.35); ctx.fillStyle = '#e2e8f0'; ctx.beginPath(); ctx.ellipse(px, 548, 30, 7, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = A;
+    }
+    // polvo al morder la ruma
+    if (S.fase === 'cierra') {
+      ctx.fillStyle = '#e2e8f0';
+      for (let k = 0; k < 5; k++) { ctx.globalAlpha = A * ((1 - S.p) * 0.35); ctx.beginPath(); ctx.arc(px + (k - 2) * 9 * (0.5 + S.p), gy + 30 - S.p * 12, 5 + S.p * 9, 0, Math.PI * 2); ctx.fill(); }
+      ctx.globalAlpha = A;
+    }
+  }
+
   function dibujar(t, dt) {
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, canvas.width, canvas.height);
     const alfa = reducido ? 1 : clamp((t - 3) / 1.4);
@@ -217,25 +315,9 @@ export function escena(canvas, t0, reducido) {
       ctx.fillStyle = G.salRuma; ctx.beginPath(); ctx.moveTo(x - w, 702); ctx.lineTo(x - 8, 702 - h); ctx.quadraticCurveTo(x, 702 - h - 6, x + 8, 702 - h); ctx.lineTo(x + w, 702); ctx.closePath(); ctx.fill();
       ctx.fillStyle = 'rgba(71,85,105,.28)'; ctx.beginPath(); ctx.moveTo(x + 4, 702 - h + 2); ctx.lineTo(x + w, 702); ctx.lineTo(x + w * 0.2, 702); ctx.closePath(); ctx.fill();
     });
-    // postes de luz del puerto
-    [[850, 548], [1160, 540]].forEach(([x, y]) => {
-      ctx.fillStyle = '#64748b'; ctx.fillRect(x - 2, y, 4, 702 - y); ctx.fillStyle = '#cbd5e1'; ctx.fillRect(x - 12, y - 4, 24, 6);
-      ctx.save(); ctx.translate(x, y); ctx.globalAlpha = alfa * (1 - 0.7 * amanecer); ctx.fillStyle = G.luz; ctx.fillRect(-60, -60, 120, 120); ctx.restore(); ctx.globalAlpha = alfa;
-    });
-    // faja transportadora (de la ruma de acopio a la torre del cargador)
-    ctx.lineCap = 'round';
-    const celosia = (a, b) => {
-      const n = Math.max(2, Math.round(Math.hypot(b[0] - a[0], b[1] - a[1]) / 18)); const nx = -(b[1] - a[1]), ny = b[0] - a[0], ln = Math.hypot(nx, ny); const ox = (nx / ln) * 7, oy2 = (ny / ln) * 7;
-      ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 2.4; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.moveTo(a[0] + ox, a[1] + oy2); ctx.lineTo(b[0] + ox, b[1] + oy2); ctx.stroke();
-      ctx.lineWidth = 1.1; ctx.strokeStyle = 'rgba(148,163,184,.75)'; ctx.beginPath();
-      for (let i = 0; i < n; i++) { const k0 = i / n, k1 = (i + 1) / n; ctx.moveTo(a[0] + (b[0] - a[0]) * k0, a[1] + (b[1] - a[1]) * k0); ctx.lineTo(a[0] + (b[0] - a[0]) * k1 + ox, a[1] + (b[1] - a[1]) * k1 + oy2); }
-      ctx.stroke();
-    };
-    celosia(FAJA[0], FAJA[1]);
-    ctx.fillStyle = '#64748b'; [[1010, 612], [1100, 560]].forEach(([x, y]) => ctx.fillRect(x - 2, y, 4, 702 - y));
-    // torre del cargador de buques (sobre el muelle)
-    ctx.fillStyle = '#475569'; ctx.fillRect(1166, 512, 12, 190); ctx.fillRect(1150, 694, 44, 8);
-    ctx.fillStyle = '#f59e0b'; ctx.fillRect(1158, 504, 28, 18);
+    // torres de iluminación de celosía (como las del terminal)
+    [[850, 420], [560, 470]].forEach(([x, top]) => torreLuz(x, top, alfa * (1 - 0.7 * amanecer)));
+    ctx.globalAlpha = alfa;
 
     // pista, loza de acopio y suelo
     ctx.fillStyle = G.pista; ctx.fillRect(izq, 700, Math.max(0, MUELLE - izq), 52);
@@ -282,7 +364,7 @@ export function escena(canvas, t0, reducido) {
     ctx.fillStyle = '#0f2340'; ctx.fillRect(1216, 505, 100, 8);
     ctx.fillStyle = '#94a3b8'; ctx.fillRect(1248, 470, 3, 30); ctx.fillRect(1238, 478, 22, 2);
     ctx.fillStyle = '#1d4ed8'; ctx.beginPath(); ctx.moveTo(1282, 500); ctx.lineTo(1286, 452); ctx.lineTo(1310, 452); ctx.lineTo(1312, 500); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#fff'; ctx.fillRect(1285, 468, 26, 6); ctx.fillStyle = '#0b1220'; ctx.fillRect(1286, 452, 24, 6);
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(1297, 466); ctx.lineTo(1305, 476); ctx.lineTo(1297, 486); ctx.lineTo(1289, 476); ctx.closePath(); ctx.fill(); ctx.fillStyle = '#0b1220'; ctx.fillRect(1286, 452, 24, 6);
     // bodegas y grúas de cubierta
     for (let i = 0; i < 8; i++) {
       const hx = 1350 + i * 150;
@@ -291,9 +373,9 @@ export function escena(canvas, t0, reducido) {
       else { ctx.fillStyle = '#7f1d1d'; ctx.fillRect(hx, 596, 112, 16); ctx.fillStyle = 'rgba(255,255,255,.18)'; ctx.fillRect(hx, 596, 112, 2); ctx.fillStyle = 'rgba(0,0,0,.25)'; for (let k = 1; k < 4; k++) ctx.fillRect(hx + k * 28, 596, 1.5, 16); }
       if (i < 7) {
         const cx = hx + 131; const ang = 0.95 + 0.06 * Math.sin(t * 0.5 + i);
-        ctx.fillStyle = '#f59e0b'; ctx.fillRect(cx - 7, 560, 14, 52); ctx.fillStyle = '#fbbf24'; ctx.fillRect(cx - 10, 546, 20, 16); ctx.fillStyle = '#1e3a5f'; ctx.fillRect(cx + 2, 550, 6, 5);
+        ctx.fillStyle = '#cbd5e1'; ctx.fillRect(cx - 7, 560, 14, 52); ctx.fillStyle = '#e2e8f0'; ctx.fillRect(cx - 10, 546, 20, 16); ctx.fillStyle = '#1e3a5f'; ctx.fillRect(cx + 2, 550, 6, 5);
         const tx = cx + Math.cos(ang) * 110, ty = 554 - Math.sin(ang) * 110;
-        ctx.strokeStyle = '#f59e0b'; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(cx, 556); ctx.lineTo(tx, ty); ctx.stroke();
+        ctx.strokeStyle = '#cbd5e1'; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(cx, 556); ctx.lineTo(tx, ty); ctx.stroke();
         ctx.strokeStyle = 'rgba(203,213,225,.7)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(tx, 585); ctx.stroke();
         ctx.fillStyle = '#334155'; ctx.fillRect(tx - 3, 585, 6, 5);
       }
@@ -308,20 +390,8 @@ export function escena(canvas, t0, reducido) {
       ctx.globalAlpha = alfa * (0.9 - k * 0.18); ctx.stroke();
     });
     ctx.globalAlpha = alfa;
-    // brazo del cargador de buques sobre la nave y chute a la bodega 1
-    celosia(FAJA[1], FAJA[2]);
-    ctx.strokeStyle = '#64748b'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(1172, 504); ctx.lineTo(1290, 468); ctx.lineTo(1414, 500); ctx.stroke();
-    ctx.fillStyle = '#475569'; ctx.fillRect(1408, 500, 12, 44 + bob);
-    // sal avanzando por la faja y cayendo a la bodega
-    if (t > 3.2 || reducido) {
-      ctx.fillStyle = '#f8fafc';
-      for (let k = 0; k < 46; k++) {
-        const u = ((t * 0.16 + k / 46) % 1); const [x, y, tramo] = enFaja(u);
-        ctx.globalAlpha = alfa * (tramo === 2 ? 0.85 : 0.95);
-        ctx.beginPath(); ctx.arc(x + (tramo === 2 ? ((k * 7) % 5) - 2 : 0), y - 3.5, tramo === 2 ? 1.8 : 2.4, 0, Math.PI * 2); ctx.fill();
-      }
-      ctx.globalAlpha = alfa;
-    }
+    // grúa pórtico del muelle: toma sal de la ruma con la cuchara y la lleva a la bodega 1
+    grua(reducido ? 5 : t);
 
     // ruma donde descarga el camión (crece con la descarga)
     const h = reducido ? 82 : alturaRuma(t), hw = h * 0.72;
