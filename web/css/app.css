@@ -479,3 +479,23 @@ table.cortes tr.fuerte .lab { color: var(--text); }
 table.cortes .rep.vacio { color: color-mix(in srgb, var(--muted) 50%, transparent); background: repeating-linear-gradient(135deg, transparent 0 8px, color-mix(in srgb, var(--surface-3) 45%, transparent) 8px 16px); }
 table.cortes thead .rep.vacio span { display: inline-block; padding: 3px 9px; border-radius: 8px; border: 1px dashed var(--border); font-size: 11px; font-weight: 700; color: var(--muted); }
 table.cortes tbody tr:hover td.rep:not(.vacio) { background: color-mix(in srgb, var(--primary) 8%, var(--surface)); }
+
+/* Cuadros verticales concepto/valor (Planificación, como la hoja PREACOPIO) */
+.plan4 { align-items: stretch; }
+.vcard { position: relative; overflow: hidden; }
+.vcard::before { content: ""; position: absolute; inset: 0 0 auto; height: 3px; background: linear-gradient(90deg, var(--k), color-mix(in srgb, var(--k) 30%, transparent)); }
+.vlista { display: grid; border-radius: 11px; overflow: hidden; box-shadow: 0 0 0 1px var(--border); }
+.vrow { display: flex; align-items: center; gap: 10px; padding: 6px 11px; font-size: 12.8px; border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent); }
+.vrow:nth-child(even) { background: color-mix(in srgb, var(--surface-2) 60%, transparent); }
+.vrow:last-child { border-bottom: 0; }
+.vrow > span { flex: 1; min-width: 0; display: flex; align-items: center; gap: 7px; }
+.vrow > b { font-variant-numeric: tabular-nums; font-weight: 750; white-space: nowrap; }
+.vrow.total { background: color-mix(in srgb, var(--k) 14%, var(--surface)) !important; font-weight: 750; }
+.vrow.total > b { color: color-mix(in srgb, var(--k) 75%, var(--text)); }
+.vrow.dato { background: color-mix(in srgb, var(--k) 6%, var(--surface)) !important; }
+.vrow.clave { background: color-mix(in srgb, var(--k) 22%, var(--surface)) !important; }
+.vrow.clave > b { font-size: 15px; color: color-mix(in srgb, var(--k) 80%, var(--text)); }
+.vrow .pt { width: 9px; height: 9px; border-radius: 3px; background: var(--c); flex: none; }
+.rt-linea.mini { height: 10px; border-radius: 99px; margin: 0 0 10px; }
+@media (max-width: 1400px) { .plan4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 860px) { .plan4 { grid-template-columns: 1fr; } }

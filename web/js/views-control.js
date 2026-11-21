@@ -612,6 +612,9 @@ export async function vPlanificacion(view, ctx) {
   const rv = roundTripViajes(p.unidades_viajes ?? d.unidades_en_lista, p.round_trip_min);
   const ETC = ['#2563eb', '#06b6d4', '#0ea5e9', '#8b5cf6', '#a855f7', '#f97316', '#f59e0b', '#ec4899', '#10b981'];
   const rtTot = p.round_trip_min || 1;
+  // Lista vertical concepto/valor (como los cuadros de la hoja PREACOPIO del Excel)
+  const vlista = (filas) => `<div class="vlista">${filas.map(([l, v, t]) => `<div class="vrow${t ? ` ${t}` : ''}"><span>${l}</span><b>${v ?? '—'}</b></div>`).join('')}</div>`;
+  const rtLinea = () => `<div class="rt-linea mini" role="img" aria-label="Etapas del round trip">${p.round_trip.map((x, i) => `<i style="flex:${Math.max(0.001, (x.min || 0) / rtTot)};background:${ETC[i % ETC.length]};animation-delay:${i * 60}ms" title="${esc(x.etapa)}: ${horas((x.min || 0) / 60)}"></i>`).join('')}</div>`;
   view.innerHTML = `
   <div class="kpis">
     <div class="kpi"><div class="l">TN programadas</div><div class="v">${num(p.tn_total)}</div><div class="s">${num(p.tn_x_unidad)} TN por unidad</div></div>
@@ -622,41 +625,40 @@ export async function vPlanificacion(view, ctx) {
     <div class="kpi"><div class="l">Round trip</div><div class="v">${horas(p.round_trip_min / 60)} h</div><div class="s">${p.round_trip.length} etapas</div></div>
     <div class="kpi"><div class="l">Unidades necesarias</div><div class="v">${num(p.unidades_necesarias, 0)}</div><div class="s">${num(d.unidades_en_lista, 0)} en lista · ${num(d.totales.unidades_activas, 0)} participantes</div></div>
   </div>
-  <div class="grid g2">
-    <div class="card"><div class="card-h"><h3>Tiempo estimado de acopio</h3><span class="muted small">puerto CSPCP</span></div>
-      ${fichas([
-        { l: 'TN total', v: num(p.tn_total) }, { l: 'TN por unidad', v: num(p.tn_x_unidad) }, { l: 'Viajes total', v: num(p.acopio.viajes_total, 0) },
-        { l: 'Prom. viajes por hora', v: num(p.viajes_x_hora, 0) }, { l: 'Horas total', v: horas(p.acopio.horas) }, { l: 'Días', v: num(p.acopio.dias, 2) },
-        { l: 'Jornadas por día', v: num(p.jornadas_x_dia, 0) }, { l: 'Jornadas total', v: num(p.acopio.jornadas_total, 0) },
-        { l: 'Inicio', v: fechaHora(p.acopio.inicio), k: '#10b981' }, { l: 'Término estimado', v: fechaHora(p.acopio.termino), fuerte: true, k: '#10b981' },
-      ], { min: 140 })}</div>
-    <div class="card"><div class="card-h"><h3>Tiempo estimado de embarque</h3><span class="muted small">a la nave</span></div>
-      ${fichas([
-        { l: 'TN total', v: num(p.tn_total) }, { l: 'TN por hora', v: num(p.tn_x_hora_embarque) }, { l: 'Horas total', v: horas(p.embarque.horas) },
-        { l: 'Días', v: num(p.embarque.dias, 2) }, { l: 'Jornadas por día', v: num(p.jornadas_x_dia, 0) }, { l: 'Jornadas total', v: num(p.embarque.jornadas_total, 0) },
-        { l: 'Inicio', v: fechaHora(p.embarque.inicio), k: '#8b5cf6' }, { l: 'Término estimado', v: fechaHora(p.embarque.termino), fuerte: true, k: '#8b5cf6' },
-      ], { min: 140 })}</div>
-  </div>
-  <div class="card"><div class="card-h"><h3>Round trip promedio</h3><span class="muted small">Total ${horas(p.round_trip_min / 60)} h · Salinas Huacho ⇄ Puerto CSPCP</span></div>
-    <div class="rt-linea" role="img" aria-label="Etapas del round trip">${p.round_trip.map((x, i) => `<i style="flex:${Math.max(0.001, (x.min || 0) / rtTot)};background:${ETC[i % ETC.length]};animation-delay:${i * 60}ms" title="${esc(x.etapa)}: ${horas((x.min || 0) / 60)}">${(x.min || 0) / rtTot > 0.08 ? horas((x.min || 0) / 60) : ''}</i>`).join('')}</div>
-    <div class="rt-leyenda">${p.round_trip.map((x, i) => `<span style="--k:${ETC[i % ETC.length]}">${esc(x.etapa)}<b>${horas((x.min || 0) / 60)}</b></span>`).join('')}</div>
-    <div class="grid g2" style="margin-top:14px">
-      <div><h3 style="margin-bottom:8px">Round trip promedio de unidades</h3>
-        <p class="card-sub" style="margin:0 0 8px">Con los viajes por hora planificados, cuántas unidades se necesitan.</p>
-        ${fichas([
-          { l: 'Prom. viajes por hora', v: num(p.viajes_x_hora, 0), k: '#2563eb' }, { l: 'Unidades mínimas para el acopio', v: num(p.unidades_min, 0), k: '#2563eb' },
-          { l: 'Unidades necesarias (+50 %)', v: num(p.unidades_necesarias, 0), fuerte: true, k: '#2563eb' },
-          { l: 'Unidades en lista', v: num(d.unidades_en_lista, 0) }, { l: 'Unidades participantes', v: num(d.totales.unidades_activas, 0) },
-        ], { min: 150 })}</div>
-      <div><h3 style="margin-bottom:8px">Round trip promedio de viajes</h3>
-        <p class="card-sub" style="margin:0 0 8px">Con las unidades disponibles, cuántos viajes por hora se logran.</p>
-        ${fichas([
-          { l: `Unidades mínimas para el acopio${p.unidades_viajes == null ? ' (en lista)' : ''}`, v: num(rv.unidades, 0), k: '#f97316' },
-          { l: 'Prom. viajes por hora', v: num(rv.viajes_x_hora, 0), fuerte: true, k: '#f97316' },
-          { l: 'Unidades necesarias (+50 %)', v: num(rv.necesarias, 0), fuerte: true, k: '#f97316' },
-          { l: 'Unidades en lista', v: num(d.unidades_en_lista, 0) }, { l: 'Unidades participantes', v: num(d.totales.unidades_activas, 0) },
-        ], { min: 150 })}</div>
-    </div>
+  <div class="grid g4 plan4">
+    <div class="card vcard" style="--k:#10b981"><div class="card-h"><h3>Tiempo estimado de acopio</h3><span class="muted small">puerto CSPCP</span></div>
+      ${vlista([
+        ['TN total', num(p.tn_total)], ['TN por unidad', num(p.tn_x_unidad)], ['Viajes total', num(p.acopio.viajes_total, 0)],
+        ['Prom. viajes por hora', num(p.viajes_x_hora, 0)], ['Horas total', `${horas(p.acopio.horas)} h`], ['Días', num(p.acopio.dias, 2)],
+        ['Jornadas por día', num(p.jornadas_x_dia, 0)], ['Jornadas total', num(p.acopio.jornadas_total, 0)],
+        ['Inicio', fechaHora(p.acopio.inicio)], ['Término', fechaHora(p.acopio.termino), 'total'],
+      ])}</div>
+    <div class="card vcard" style="--k:#8b5cf6"><div class="card-h"><h3>Tiempo estimado de embarque</h3><span class="muted small">a la nave</span></div>
+      ${vlista([
+        ['TN total', num(p.tn_total)], ['TN por hora', num(p.tn_x_hora_embarque)], ['Horas total', `${horas(p.embarque.horas)} h`],
+        ['Días', num(p.embarque.dias, 2)], ['Jornadas por día', num(p.jornadas_x_dia, 0)], ['Jornadas total', num(p.embarque.jornadas_total, 0)],
+        ['Inicio', fechaHora(p.embarque.inicio)], ['Término', fechaHora(p.embarque.termino), 'total'],
+      ])}</div>
+    <div class="card vcard" style="--k:#2563eb"><div class="card-h"><h3>Round trip promedio de unidades</h3></div>
+      ${rtLinea()}
+      ${vlista([
+        ...p.round_trip.map((x, i) => [`<i class="pt" style="--c:${ETC[i % ETC.length]}"></i>${esc(x.etapa)}`, horas((x.min || 0) / 60)]),
+        ['Total round trip', `${horas(p.round_trip_min / 60)} h`, 'total'],
+        ['Prom. viajes por hora', num(p.viajes_x_hora, 0), 'dato'],
+        ['Unidades mín. para el acopio', num(p.unidades_min, 0), 'dato'],
+        ['Unidades necesarias (+50 %)', num(p.unidades_necesarias, 0), 'clave'],
+        ['Unidades en lista', num(d.unidades_en_lista, 0)], ['Unidades participantes', num(d.totales.unidades_activas, 0)],
+      ])}</div>
+    <div class="card vcard" style="--k:#f97316"><div class="card-h"><h3>Round trip promedio de viajes</h3></div>
+      ${rtLinea()}
+      ${vlista([
+        ...p.round_trip.map((x, i) => [`<i class="pt" style="--c:${ETC[i % ETC.length]}"></i>${esc(x.etapa)}`, horas((x.min || 0) / 60)]),
+        ['Total round trip', `${horas(p.round_trip_min / 60)} h`, 'total'],
+        ['Prom. viajes por hora', num(rv.viajes_x_hora, 0), 'clave'],
+        [`Unidades mín. para el acopio${p.unidades_viajes == null ? ' <span class="muted small">(en lista)</span>' : ''}`, num(rv.unidades, 0), 'dato'],
+        ['Unidades necesarias (+50 %)', num(rv.necesarias, 0), 'clave'],
+        ['Unidades en lista', num(d.unidades_en_lista, 0)], ['Unidades participantes', num(d.totales.unidades_activas, 0)],
+      ])}</div>
   </div>
   ${edit ? `<div class="card"><div class="card-h"><h3>Parámetros de planificación</h3></div>
     <form id="f-par" class="form">
