@@ -134,10 +134,20 @@ async function datosOp(id) {
   return D;
 }
 function nombreT(T, id) { return T.find((t) => t.id === id)?.nombre_comercial ?? null; }
+/**
+ * Viajes del REPORTE HUACHO (con guía, sin N° de reporte fijado a mano): el día y la jornada de despacho salen de la
+ * hora de despacho, la misma con la que se arman los cortes. Así la tabla por jornada y el reporte de avance cuadran
+ * también en operaciones importadas antes de este ajuste (que usaban la hora de inicio de carga).
+ */
+function turnoDespacho(v) {
+  if (!v.guia || v.rep_despacho != null || !v.despacho_en || /\b00:00(:00)?$/.test(v.despacho_en)) return {};
+  const t = C.turnoDe(v.despacho_en);
+  return t.fecha ? { fecha_despacho: t.fecha, jornada_despacho: t.jornada } : {};
+}
 async function cargar(id) {
   const [D, I] = [await datosOp(id), await leer(INDICE)];
   const op = D.operacion;
-  const raw = D.viajes.map((v) => ({ ...v, operacion_id: op.id, transportista_nombre: nombreT(I.transportistas, v.transportista_id) }));
+  const raw = D.viajes.map((v) => ({ ...v, ...turnoDespacho(v), operacion_id: op.id, transportista_nombre: nombreT(I.transportistas, v.transportista_id) }));
   const viajes = C.enriquecerViajes(raw, op, D.reportes);
   const embarque = C.tablaEmbarque(op, D.reportes, D.etapas);
   return { D, I, op, viajes, embarque };
@@ -154,7 +164,7 @@ const unidadesDe = (D, I) => D.unidades.map((u) => ({ ...u, transportista_nombre
 function calcularResumen(D, I) {
   const fechas = (r) => r;
   if (!D.viajes.length && D.resumen_manual) return fechas(D.resumen_manual);
-  const raw = D.viajes.map((v) => ({ ...v, transportista_nombre: nombreT(I.transportistas, v.transportista_id) }));
+  const raw = D.viajes.map((v) => ({ ...v, ...turnoDespacho(v), transportista_nombre: nombreT(I.transportistas, v.transportista_id) }));
   const vs = C.enriquecerViajes(raw, D.operacion, D.reportes);
   return fechas(C.resumenOperacion(vs, D.operacion, participantes(D, I), unidadesDe(D, I)));
 }
@@ -939,7 +949,7 @@ const CAMPOS_VIAJE_PORTAL = ['nro', 'fecha_despacho', 'jornada_despacho', 'trans
 function vistaTransportista(D, I, tid) {
   const op = D.operacion;
   const t = I.transportistas.find((x) => x.id === tid);
-  const raw = D.viajes.map((v) => ({ ...v, transportista_nombre: nombreT(I.transportistas, v.transportista_id) }));
+  const raw = D.viajes.map((v) => ({ ...v, ...turnoDespacho(v), transportista_nombre: nombreT(I.transportistas, v.transportista_id) }));
   const todos = C.enriquecerViajes(raw, op, D.reportes);
   const viajes = todos.filter((v) => v.transportista_id === tid).map((v) => Object.fromEntries(CAMPOS_VIAJE_PORTAL.map((k) => [k, v[k] ?? null])));
   const unidades = D.unidades.filter((u) => u.transportista_id === tid)

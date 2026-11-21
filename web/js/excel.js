@@ -211,15 +211,17 @@ export function importarDespachos(D, T, wb, usuario) {
     if (!guia || !placa) { res.omitidos++; res.errores.push(`Fila ${r._row}: falta ${!guia ? 'la guía' : 'la placa'}`); continue; }
     const peso = toTn(r.get('Peso TON', 'P.Neto Ent. Ton', 'P.Neto Ton.', 'PESO TN X UNID HUACHO', 'P.Neto Ent.', 'Peso neto', 'PESO'));
     const salida = combinarFechaHora(r.get('FeActDpExp', 'FinActCarg', 'Fe.SM real', 'DIA DESPACHO', 'FECHA'), r.get('HrADpExp', 'HrAFCg', 'HORA'));
-    const inicioCarga = combinarFechaHora(r.get('InActCarga', 'FeActDpExp', 'Fe.SM real', 'DIA DESPACHO', 'FECHA'), r.get('HrAICg', 'HrADpExp', 'HORA'));
     if (!salida) { res.omitidos++; res.errores.push(`Fila ${r._row} (guía ${guia}): sin fecha de despacho`); continue; }
     const e = porGuia.get(guia);
     const nombreT = str(r.get(...COL_TRANSP_HUACHO));
     if (e) {
       // Completa la empresa si el viaje quedó sin transportista en una carga anterior
       const tidE = e.transportista_id || resolverTransportista(T, D, nombreT, placa);
-      if (e.placa === placa && e.peso_origen === peso && e.despacho_en === salida && e.transportista_id === tidE) { res.sin_cambios++; continue; }
-      Object.assign(e, { placa, peso_origen: peso, despacho_en: salida, transportista_id: tidE || null });
+      // Día y jornada de despacho = hora de salida (la misma que usan los reportes de avance)
+      const tE = C.turnoDe(salida);
+      const fE = C.normDate(r.get('DIA DESPACHO')) || tE.fecha, jE = str(r.get('JORNADA DESPACHO', 'JORNADA')) || tE.jornada;
+      if (e.placa === placa && e.peso_origen === peso && e.despacho_en === salida && e.transportista_id === tidE && e.fecha_despacho === fE && e.jornada_despacho === jE) { res.sin_cambios++; continue; }
+      Object.assign(e, { placa, peso_origen: peso, despacho_en: salida, transportista_id: tidE || null, fecha_despacho: fE, jornada_despacho: jE });
       asegurarParticipacion(D, tidE);
       res.actualizados++;
       continue;
@@ -227,8 +229,9 @@ export function importarDespachos(D, T, wb, usuario) {
     const tid = resolverTransportista(T, D, nombreT, placa);
     if (!tid) res.sin_transportista.push(`${placa} (${nombreT || 'sin nombre'})`);
     asegurarParticipacion(D, tid);
-    // Día y jornada según el inicio de carga; el turno de las 23:00 cuenta para el día siguiente (como en el Excel).
-    const turno = C.turnoDe(inicioCarga || salida);
+    // Día y jornada según la hora de despacho (salida de planta), la misma que usan los reportes de avance,
+    // para que la tabla por jornada y los cortes cuadren. El turno de las 23:00 cuenta para el día siguiente.
+    const turno = C.turnoDe(salida);
     const nv = nuevoViaje(D, {
       transportista_id: tid, placa, fecha_despacho: C.normDate(r.get('DIA DESPACHO')) || turno.fecha,
       jornada_despacho: str(r.get('JORNADA DESPACHO', 'JORNADA')) || turno.jornada,
