@@ -2,6 +2,8 @@
 import { COLS_DETALLE, COLS_TRANSP, COLS_UNIDADES, COLS_RESUMEN_T, FILAS_CORTE, logoBase64 } from './excel.js?v=__V__';
 
 const AZUL = [31, 78, 121];
+// Estilo común de las tablas de los PDF: filas alternadas y bordes finos
+try { window.jspdf?.jsPDF?.autoTableSetDefaults?.({ alternateRowStyles: { fillColor: [243, 247, 252] }, styles: { lineColor: [225, 231, 240], lineWidth: 0.1 } }); } catch { /* versión sin soporte */ }
 const nf = new Intl.NumberFormat('es-PE', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 const n3 = (v) => (v === null || v === undefined || v === '' ? '' : Number(v).toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 }));
 const n2 = (v) => (v === null || v === undefined || v === '' ? '' : nf.format(v));

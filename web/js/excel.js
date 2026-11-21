@@ -594,6 +594,11 @@ const FMT = { f: 'dd/mm/yyyy', dt: 'dd/mm/yyyy hh:mm:ss', h: '[h]:mm:ss', n: '#,
 
 const AZUL = 'FF1F4E79';
 const borde = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
+/** Autofiltro en la fila de encabezados y paneles inmovilizados hasta esa fila (como una tabla de Excel). */
+function autoFiltro(ws, fila, desde, hasta, ultima) {
+  ws.autoFilter = { from: { row: fila, column: desde }, to: { row: Math.max(fila, ultima), column: hasta } };
+  ws.views = [{ state: 'frozen', ySplit: fila, xSplit: 0 }];
+}
 function cabecera(row) {
   row.eachCell((c) => {
     c.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 9 };
@@ -623,6 +628,7 @@ function filasDatos(ws, cols, viajes, desdeCol) {
     cols.forEach(([, , , t], i) => {
       const c = row.getCell(desdeCol + i);
       c.border = borde; c.font = { size: 9 };
+      if (row.number % 2 === 0) c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F7FC' } };
       if (FMT[t]) c.numFmt = FMT[t];
       if (t && t !== 'f' && t !== 'dt') c.alignment = { horizontal: 'right' };
     });
@@ -709,6 +715,7 @@ async function hojaTransportista(wb, op, t, viajes) {
   cabecera(ws.getRow(11));
   const orden = [...viajes].sort((a, b) => a.nro - b.nro);
   filasDatos(ws, COLS_TRANSP, orden, 2);
+  autoFiltro(ws, 11, 2, COLS_TRANSP.length + 1, 11 + orden.length);
   const tr = ws.addRow([null, 'Total', null, orden.length, null, null, null, suma(orden, 'peso_origen'), null, suma(orden, 'peso_destino_calc')]);
   tr.font = { bold: true, size: 9 };
   tr.getCell(8).numFmt = FMT.n; tr.getCell(10).numFmt = FMT.n;
@@ -762,6 +769,7 @@ export async function exportarUnidades(op, t, unidades) {
     const row = ws.addRow([null, ...COLS_UNIDADES.map(([, k]) => u[k] ?? '')]);
     for (let c = 2; c <= COLS_UNIDADES.length + 1; c++) { row.getCell(c).border = borde; row.getCell(c).font = { size: 9 }; }
   }
+  autoFiltro(ws, 7, 2, COLS_UNIDADES.length + 1, 7 + unidades.length);
   ws.addRow([null, `Total: ${unidades.length} unidades`]).font = { bold: true, size: 9 };
   return blob(wb);
 }
@@ -793,6 +801,7 @@ export async function exportarResumenAnual(anio, ops, { soloTabla = false } = {}
     row.getCell(2).alignment = { horizontal: 'center' };
     row.getCell(4).numFmt = FMT.f; row.getCell(5).numFmt = FMT.f; row.getCell(6).numFmt = FMT.t;
   });
+  autoFiltro(ws, 4, 2, 6, 4 + ops.length);
   const t = ws.addRow([null, null, 'TOTAL', null, null, rd(ops.reduce((s, o) => s + o.tot.tn_acopio, 0))]);
   t.font = { bold: true }; t.getCell(6).numFmt = FMT.t;
   for (let c = 2; c <= 6; c++) t.getCell(c).border = borde;
@@ -813,6 +822,7 @@ export async function exportarResumenAnual(anio, ops, { soloTabla = false } = {}
       const row = h.addRow([null, ...COLS_RESUMEN_T.map(([, k]) => r[k] ?? (k === 'observacion' ? '' : 0))]);
       COLS_RESUMEN_T.forEach(([, , , tp], i) => { const c = row.getCell(i + 2); c.border = borde; c.font = { size: 9 }; if (FMT[tp]) c.numFmt = FMT[tp]; });
     }
+    autoFiltro(h, 4, 2, COLS_RESUMEN_T.length + 1, 4 + o.filas.length);
     const s = (k) => rd(o.filas.reduce((a, x) => a + (Number(x[k]) || 0), 0));
     const tr = h.addRow([null, 'TOTAL ', o.filas.filter((x) => x.ruc).length, s('unidades_solicitadas'), '-', s('viajes_aprox'), s('tn_aprox'), s('viajes_realizados'), s('tn_huacho'), s('tn_cspcp')]);
     tr.font = { bold: true, size: 9 }; [8, 9, 10].forEach((c) => { tr.getCell(c).numFmt = FMT.t; }); [4, 6, 7].forEach((c) => { tr.getCell(c).numFmt = '#,##0'; }); tr.getCell(5).alignment = { horizontal: 'right' };

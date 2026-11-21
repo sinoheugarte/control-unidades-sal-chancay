@@ -172,6 +172,15 @@ export function chart(canvas, config) {
   Chart.defaults.color = c.texto;
   Chart.defaults.borderColor = c.grid;
   Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+  Chart.defaults.font.size = 11.5;
+  Chart.defaults.elements.bar.borderRadius = 6;
+  Chart.defaults.elements.line.borderWidth = 2.5;
+  Chart.defaults.elements.point.radius = 3;
+  Chart.defaults.elements.point.hoverRadius = 6;
+  Chart.defaults.plugins.legend.labels.usePointStyle = true;
+  Chart.defaults.plugins.legend.labels.boxWidth = 8;
+  Object.assign(Chart.defaults.plugins.tooltip, { padding: 10, cornerRadius: 10, boxPadding: 4, titleFont: { weight: '700' } });
+  Chart.defaults.animation = matchMedia('(prefers-reduced-motion: reduce)').matches ? false : { duration: 700, easing: 'easeOutQuart' };
   const ch = new Chart(canvas, { ...config, options: { responsive: true, maintainAspectRatio: false, ...config.options } });
   charts.add(ch);
   return ch;
@@ -290,4 +299,159 @@ export function horasValidas(form) {
   const mal = [...form.querySelectorAll('.dt24-h')].find((h) => (h.value ? !HORA_24.test(h.value) : h.required));
   if (mal) { mal.focus(); toast('Ingrese la hora en formato de 24 horas (HH:MM, de 00:00 a 23:59).', true); return false; }
   return true;
+}
+
+/* =====================================================================
+   Interacción: onda al presionar botones (respeta "reducir movimiento")
+   ===================================================================== */
+const sinMovimiento = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+export function activarOndas(root = document) {
+  root.addEventListener('pointerdown', (e) => {
+    const b = e.target.closest?.('.btn, .tabs button');
+    if (!b || b.disabled || sinMovimiento()) return;
+    const r = b.getBoundingClientRect();
+    const d = Math.max(r.width, r.height) * 2.2;
+    const s = document.createElement('span');
+    s.className = 'onda';
+    s.style.cssText = `width:${d}px;height:${d}px;left:${e.clientX - r.left - d / 2}px;top:${e.clientY - r.top - d / 2}px`;
+    if (getComputedStyle(b).position === 'static') b.style.position = 'relative';
+    b.appendChild(s);
+    setTimeout(() => s.remove(), 600);
+  }, { passive: true });
+}
+
+/* =====================================================================
+   Tablas: búsqueda, filtros por columna, orden al tocar el encabezado,
+   conteo de filas y totales del pie recalculados con lo filtrado.
+   Se aplica sola a toda tabla dentro de .table-wrap (excepto matrices y agrupadas).
+   ===================================================================== */
+const ICO_BUSCAR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>';
+const textoCelda = (td) => (td?.innerText ?? td?.textContent ?? '').replace(/\s+/g, ' ').trim();
+const aNumero = (s) => (/^-?[\d,]+(\.\d+)?$/.test(s) ? Number(s.replace(/,/g, '')) : null);
+function claveOrden(s) {
+  const n = aNumero(s);
+  if (n !== null) return n;
+  const f = s.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2}))?/);
+  if (f) return Number(`${f[3]}${f[2]}${f[1]}${f[4] || '00'}${f[5] || '00'}`);
+  if (s === '—' || s === '') return null;
+  return s.toLowerCase();
+}
+function mejorarTabla(t) {
+  t.dataset.mt = '1';
+  const tb = t.tBodies[0];
+  const head = t.tHead?.rows[0];
+  if (!tb || !head || tb.querySelector('tr.grp')) return;
+  const filas = [...tb.rows];
+  if (filas.length < 2) return;
+  const ths = [...head.cells];
+  const ncol = ths.length;
+  const valores = filas.map((tr) => [...tr.cells].map(textoCelda));
+  const conBoton = ths.map((_, i) => filas.some((tr) => tr.cells[i]?.querySelector('button, a.btn, input')));
+  // Totales del pie que son suma de la columna: se recalculan con lo filtrado
+  const pie = t.tFoot?.rows[0];
+  const sumables = [];
+  if (pie) {
+    [...pie.cells].forEach((td, i) => {
+      const txt = textoCelda(td); const f = aNumero(txt);
+      if (f === null || conBoton[i]) {
+        const m = txt.match(/^([\d,]+)\s+(\D+)$/);
+        if (m && aNumero(m[1]) === filas.length) sumables.push({ i, conteo: m[2] });
+        return;
+      }
+      const s = valores.reduce((a, v) => a + (aNumero(v[i]) ?? 0), 0);
+      const dec = (txt.split('.')[1] || '').length;
+      if (Math.abs(s - f) <= 0.6 * 10 ** -dec + 1e-9) sumables.push({ i, dec });
+    });
+  }
+  const estado = { q: '', f: Array(ncol).fill(''), col: -1, dir: 0 };
+  const orig = filas.slice();
+  let wrap = t.closest('.table-wrap');
+  let barra = null, cuenta = null, filaFiltros = null;
+  const aplicar = () => {
+    const q = estado.q.toLowerCase();
+    let vis = 0;
+    const visibles = [];
+    filas.forEach((tr, k) => {
+      const v = valores[k];
+      const ok = (!q || v.join(' ').toLowerCase().includes(q))
+        && estado.f.every((f, i) => !f || (f.startsWith('=') ? v[i] === f.slice(1) : (v[i] || '').toLowerCase().includes(f.toLowerCase())));
+      tr.hidden = !ok;
+      if (ok) { vis++; visibles.push(k); }
+    });
+    if (cuenta) cuenta.innerHTML = vis === filas.length ? `<b>${vis.toLocaleString('en-US')}</b> filas` : `<b>${vis.toLocaleString('en-US')}</b> de ${filas.length.toLocaleString('en-US')} filas`;
+    if (pie) {
+      for (const s of sumables) {
+        const td = pie.cells[s.i];
+        if (s.conteo) { td.textContent = `${vis.toLocaleString('en-US')} ${s.conteo}`; continue; }
+        const suma = visibles.reduce((a, k) => a + (aNumero(valores[k][s.i]) ?? 0), 0);
+        td.textContent = suma.toLocaleString('en-US', { minimumFractionDigits: s.dec, maximumFractionDigits: s.dec });
+      }
+    }
+  };
+  const ordenar = (i) => {
+    estado.dir = estado.col === i ? (estado.dir === 1 ? -1 : estado.dir === -1 ? 0 : 1) : 1;
+    estado.col = i;
+    ths.forEach((th, j) => {
+      th.classList.toggle('asc', j === i && estado.dir === 1);
+      th.classList.toggle('desc', j === i && estado.dir === -1);
+      if (th.classList.contains('ord')) th.setAttribute('aria-sort', j === i && estado.dir ? (estado.dir === 1 ? 'ascending' : 'descending') : 'none');
+    });
+    const idx = new Map(orig.map((tr, k) => [tr, k]));
+    const lista = estado.dir === 0 ? orig.slice() : filas.slice().sort((a, b) => {
+      const x = claveOrden(valores[idx.get(a)][i]), y = claveOrden(valores[idx.get(b)][i]);
+      if (x === null && y === null) return 0; if (x === null) return 1; if (y === null) return -1;
+      return (typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y), 'es', { numeric: true })) * estado.dir;
+    });
+    lista.forEach((tr) => tb.appendChild(tr));
+  };
+  ths.forEach((th, i) => {
+    if (!textoCelda(th) || conBoton[i]) return;
+    th.classList.add('ord'); th.tabIndex = 0; th.setAttribute('aria-sort', 'none');
+    th.addEventListener('click', () => ordenar(i));
+    th.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ordenar(i); } });
+  });
+  if (filas.length < 6 || !wrap) return;
+  // Barra: búsqueda + filtros por columna + conteo
+  barra = document.createElement('div');
+  barra.className = 'tbar no-print';
+  barra.innerHTML = `<label class="tq"><span class="hidden">Buscar en la tabla</span>${ICO_BUSCAR}<input type="search" placeholder="Buscar en la tabla…" aria-label="Buscar en la tabla"></label>
+    <button type="button" class="btn sm" data-filtros aria-expanded="false">Filtros por columna</button><span class="tcount"></span>`;
+  wrap.parentNode.insertBefore(barra, wrap);
+  cuenta = barra.querySelector('.tcount');
+  let tq; barra.querySelector('input').addEventListener('input', (e) => { clearTimeout(tq); tq = setTimeout(() => { estado.q = e.target.value.trim(); aplicar(); }, 120); });
+  barra.querySelector('[data-filtros]').addEventListener('click', (e) => {
+    const b = e.currentTarget;
+    if (!filaFiltros) {
+      filaFiltros = document.createElement('tr');
+      filaFiltros.className = 'tfil';
+      filaFiltros.innerHTML = ths.map((th, i) => {
+        if (conBoton[i] || !textoCelda(th)) return '<th></th>';
+        const dist = [...new Set(valores.map((v) => v[i]).filter((x) => x && x !== '—'))];
+        if (dist.length > 1 && dist.length <= 15) {
+          return `<th><select data-c="${i}" aria-label="Filtrar ${esc(textoCelda(th))}"><option value="">Todos</option>${dist.sort((a, b) => a.localeCompare(b, 'es', { numeric: true })).map((d) => `<option value="=${esc(d)}">${esc(d)}</option>`).join('')}</select></th>`;
+        }
+        return `<th><input data-c="${i}" placeholder="Filtrar…" aria-label="Filtrar ${esc(textoCelda(th))}"></th>`;
+      }).join('');
+      t.tHead.appendChild(filaFiltros);
+      t.style.setProperty('--th-h', `${head.offsetHeight}px`);
+      filaFiltros.addEventListener('input', (ev) => { const c = ev.target.dataset.c; if (c == null) return; estado.f[c] = ev.target.value; aplicar(); });
+      filaFiltros.addEventListener('change', (ev) => { const c = ev.target.dataset.c; if (c == null) return; estado.f[c] = ev.target.value; aplicar(); });
+      b.classList.add('on'); b.setAttribute('aria-expanded', 'true');
+    } else {
+      const abierto = !filaFiltros.hidden;
+      filaFiltros.hidden = abierto;
+      if (abierto) { estado.f.fill(''); filaFiltros.querySelectorAll('input,select').forEach((x) => { x.value = ''; }); aplicar(); }
+      b.classList.toggle('on', !abierto); b.setAttribute('aria-expanded', String(!abierto));
+    }
+  });
+  aplicar();
+}
+export function activarTablas(root = document.body) {
+  const scan = (n) => n.querySelectorAll?.('.table-wrap > table:not(.matriz):not(.info):not([data-mt])').forEach(mejorarTabla);
+  scan(root);
+  let pend = false;
+  new MutationObserver(() => {
+    if (pend) return; pend = true;
+    requestAnimationFrame(() => { pend = false; scan(root); });
+  }).observe(root, { childList: true, subtree: true });
 }

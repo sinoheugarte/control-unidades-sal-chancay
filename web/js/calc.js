@@ -322,7 +322,7 @@ function planVueltas(participantes, tnProgramadas) {
       if (n === N_VUELTAS && nV > N_VUELTAS) return { tn: final, manual: false }; // más de 15 vueltas: la 15ª lleva el total
       return { tn: n <= k ? r3(c * n) : final, manual: false };
     });
-    out.set(p.transportista_id, { vueltas, total: final, viajes: p.tn_prom_unidad ? Math.ceil(final / p.tn_prom_unidad - 1e-9) : 0 });
+    out.set(p.transportista_id, { vueltas, total: final, viajes: p.tn_prom_unidad ? Math.max(0, Math.ceil(final / p.tn_prom_unidad - 1e-9)) : 0 });
   }
   return out;
 }

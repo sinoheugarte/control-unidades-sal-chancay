@@ -1,4 +1,5 @@
-import { state, api, esc, toast, $, $$, modal, destruirGraficos, esAdmin, activarFechaHora24 } from './core.js?v=__V__';
+import { state, api, esc, toast, $, $$, modal, destruirGraficos, esAdmin, activarFechaHora24, activarOndas, activarTablas } from './core.js?v=__V__';
+import { mostrarIntro } from './intro.js?v=__V__';
 import { vTablero, vViajes, vRegistro } from './views-operacion.js?v=__V__';
 import { vReportes, vTransportistas, vUnidades, vResumenes, vPlanificacion, vReporteTransportista } from './views-control.js?v=__V__';
 import { vOperaciones, vImportar, vUsuarios } from './views-admin.js?v=__V__';
@@ -48,6 +49,14 @@ const NAV = [
 const NAV_PORTAL = [['Mi empresa', ['portal', 'portal-unidades']]];
 const esTransp = () => state.user?.rol === 'transportista';
 ICON.portal = ICON.viajes;
+const COLOR = {
+  tablero: '#2563eb', reportes: '#8b5cf6', resumenes: '#ec4899', viajes: '#0ea5e9', registro: '#10b981',
+  planificacion: '#f59e0b', transportistas: '#f97316', unidades: '#14b8a6',
+  'resumen-anual': '#6366f1', operaciones: '#0891b2', importar: '#22c55e', usuarios: '#64748b',
+  portal: '#0ea5e9', 'portal-unidades': '#14b8a6',
+};
+const ORDEN_NAV = [...NAV.flatMap(([, it]) => it), ...NAV_PORTAL.flatMap(([, it]) => it)];
+const icoNav = (k) => `<span class="ico" aria-hidden="true">${ICON[k] || ''}</span>`;
 ICON['resumen-anual'] = ICON.reportes;
 ICON['portal-unidades'] = ICON.unidades;
 
@@ -128,17 +137,31 @@ function pintarSelector() {
   sel.insertAdjacentHTML('beforeend', '<option value="__buscar">🔍 Buscar / nueva operación…</option>');
 }
 
+function actualizarShell(ruta) {
+  const act = RUTAS[ruta].nav || ruta;
+  $$('#side .nav a').forEach((a) => {
+    const on = a.dataset.k === act;
+    a.classList.toggle('active', on);
+    if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+  });
+  const h = $('#titulo');
+  if (h) h.innerHTML = `<span class="ico" style="background:linear-gradient(145deg, ${COLOR[act] || '#2563eb'}, color-mix(in srgb, ${COLOR[act] || '#2563eb'} 70%, #000))">${ICON[act] || ''}</span>${esc(RUTAS[ruta].t)}`;
+}
+let shellDe = null;
 function shell(root, ruta) {
+  const clave = `${state.user?.email}|${state.user?.rol}`;
+  if (shellDe === clave && $('#view', root)) { actualizarShell(ruta); pintarSelector(); return; }
+  shellDe = clave;
   root.innerHTML = `<div class="layout">
     <aside class="side" id="side">
       <div class="brand"><div class="brand-logo">${ICON.viajes}</div><div>Control de Unidades<small>Despacho · Acopio · Embarque</small></div></div>
       <nav class="nav">${(esTransp() ? NAV_PORTAL : NAV).map(([sec, items]) => `<div class="sep">${sec}</div>${items.filter((k) => !RUTAS[k].admin || esAdmin())
-        .map((k) => { const on = k === (RUTAS[ruta].nav || ruta); return `<a href="#/${k}" class="${on ? 'active' : ''}" ${on ? 'aria-current="page"' : ''}>${ICON[k]}${RUTAS[k].t}</a>`; }).join('')}`).join('')}</nav>
+        .map((k) => `<a href="#/${k}" data-k="${k}" style="--c:${COLOR[k] || '#3b82f6'}">${icoNav(k)}<span>${RUTAS[k].t}</span></a>`).join('')}`).join('')}</nav>
     </aside>
     <div class="main">
       <header class="top">
         <button class="btn sm menu-btn" id="menu" aria-label="Abrir menú">☰</button>
-        <h1>${esc(RUTAS[ruta].t)}</h1>
+        <h1 id="titulo"></h1>
         <div class="grow"></div>
         ${esTransp() ? '' : '<label style="min-width:220px" class="no-print"><span class="hidden">Operación</span><select id="op-sel" aria-label="Operación activa"></select></label>'}
         <button class="btn sm" id="tema" title="Cambiar tema claro/oscuro">Tema</button>
@@ -147,6 +170,7 @@ function shell(root, ruta) {
       </header>
       <main class="content" id="view"></main>
     </div></div>`;
+  actualizarShell(ruta);
   pintarSelector();
   $('#op-sel')?.addEventListener('change', (e) => {
     if (e.target.value === '__buscar') { e.target.value = String(state.opId ?? ''); location.hash = '#/operaciones'; return; }
@@ -154,7 +178,7 @@ function shell(root, ruta) {
   });
   $('#menu').addEventListener('click', () => $('#side').classList.toggle('open'));
   $('#side').addEventListener('click', (e) => { if (e.target.closest('a')) $('#side').classList.remove('open'); });
-  $('#salir').addEventListener('click', () => { B.cerrarSesion(); state.user = null; location.hash = '#/login'; });
+  $('#salir').addEventListener('click', () => { B.cerrarSesion(); state.user = null; shellDe = null; location.hash = '#/login'; });
   $('#tema').addEventListener('click', () => {
     const dark = document.documentElement.dataset.theme === 'dark' || (!document.documentElement.dataset.theme && matchMedia('(prefers-color-scheme: dark)').matches);
     document.documentElement.dataset.theme = dark ? 'light' : 'dark';
@@ -172,6 +196,8 @@ function shell(root, ruta) {
 }
 
 let renderId = 0;
+let rutaAnterior = null;
+const espera = (ms) => new Promise((r) => setTimeout(r, ms));
 async function render() {
   const root = $('#app');
   const ruta = (location.hash.replace(/^#\/?/, '').split('?')[0] || 'tablero');
@@ -186,25 +212,50 @@ async function render() {
   }
   if (!state.user || ruta === 'login') {
     if (state.user && ruta === 'login') { location.hash = '#/tablero'; return; }
+    shellDe = null; rutaAnterior = null;
     return vLogin(root, errorLogin);
   }
   const qOp = Number(new URLSearchParams(location.hash.split('?')[1] || '').get('op'));
   if (qOp && !esTransp() && qOp !== state.opId && state.ops.some((o) => o.id === qOp)) setOp(qOp);
   const permitida = (k) => RUTAS[k] && (esTransp() ? RUTAS[k].portal : !RUTAS[k].portal && (!RUTAS[k].admin || esAdmin()));
   const r = permitida(ruta) ? ruta : esTransp() ? 'portal' : 'tablero';
+  const nueva = !$('#view');
   shell(root, r);
   document.title = `${RUTAS[r].t} · Control de Unidades`;
   const id = ++renderId;
   const view = $('#view');
-  view.innerHTML = '<div class="empty">Cargando…</div>';
+  const cambia = rutaAnterior !== r;
+  const reducido = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const atras = rutaAnterior && ORDEN_NAV.indexOf(r) < ORDEN_NAV.indexOf(rutaAnterior);
+  rutaAnterior = r;
+  // Salida suave de la pantalla anterior (como al navegar en iOS / macOS)
+  if (cambia && !nueva && !reducido && view.childElementCount) {
+    view.classList.remove('entra', 'atras');
+    view.classList.add('sale'); view.classList.toggle('atras', !!atras);
+    await espera(150);
+    if (id !== renderId) return;
+  }
+  view.classList.remove('sale', 'entra', 'atras');
+  const cargando = setTimeout(() => { if (id === renderId) view.innerHTML = '<div class="cargando"><i></i><span>Cargando…</span></div>'; }, cambia ? 0 : 250);
   try {
     await RUTAS[r].v(view, { rerender: () => id === renderId && render() });
   } catch (err) {
     if (id === renderId) view.innerHTML = `<div class="alert bad">${esc(err.message)}</div>`;
+  } finally { clearTimeout(cargando); }
+  if (id !== renderId) return;
+  // Entrada escalonada de los bloques de la pantalla
+  if (cambia && !reducido) {
+    [...view.children].forEach((el, i) => el.style.setProperty('--i', Math.min(i, 8)));
+    void view.offsetWidth;
+    view.classList.add('entra'); view.classList.toggle('atras', !!atras);
+    setTimeout(() => { if (id === renderId) view.classList.remove('entra', 'atras'); }, 1100);
   }
 }
 
 activarFechaHora24(document.body);
+activarOndas(document);
+activarTablas(document.body);
+mostrarIntro();
 
 // Aviso de nueva versión publicada (evita trabajar con una copia antigua guardada en el navegador)
 const VERSION_APP = '__V__';
