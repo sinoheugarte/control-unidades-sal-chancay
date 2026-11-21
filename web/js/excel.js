@@ -455,7 +455,7 @@ export function importarLibro(wb, T, usuario) {
     tn_programadas: toNum(cv(det, 'S1')) || toNum(cv(pre, 'B7')) || 0,
     tn_embarque_programadas: toNum(cv(emb, 'C35')), tn_draft_sgs: toNum(cv(emb, 'G35')), estado: 'EN CURSO',
     params: JSON.stringify(pre ? {
-      tn_x_unidad: toNum(cv(pre, 'B8')), viajes_x_hora: toNum(cv(pre, 'B10')), jornadas_x_dia: toNum(cv(pre, 'B13')),
+      tn_x_unidad: toNum(cv(pre, 'B8')), viajes_x_hora: toNum(cv(pre, 'B10')), jornadas_x_dia: toNum(cv(pre, 'B13')), unidades_viajes: toNum(cv(pre, 'L18')),
       inicio_acopio: C.normDT(cv(pre, 'C15'), false), tn_x_hora_embarque: toNum(cv(pre, 'E8')), inicio_embarque: C.normDT(cv(pre, 'F13'), false),
       round_trip: [7, 8, 9, 10, 11, 12, 13, 14, 15].map((r) => {
         const t = cv(pre, `I${r}`);

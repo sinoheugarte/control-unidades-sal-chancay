@@ -454,6 +454,14 @@ function resumenTiempos(vs) {
 function nombreEtapa(s) {
   return String(s || '').replace(/\bOtuma\b/gi, 'Salinas Huacho').replace(/\bPuerto\b(?!\s+CSPCP)/gi, 'Puerto CSPCP');
 }
+/**
+ * ROUND TRIP PROMEDIO DE VIAJES (PREACOPIO K:L): con una cantidad de unidades, cuántos viajes por hora salen.
+ * Prom. viajes x hora = REDONDEAR.MAS(unidades / horas de round trip); necesarias = REDONDEAR.MAS(unidades × 1.5).
+ */
+function roundTripViajes(unidades, rtMin) {
+  const u = Number(unidades) || 0;
+  return { unidades: u, viajes_x_hora: rtMin > 0 ? Math.ceil(u / (rtMin / 60) - 1e-9) : null, necesarias: Math.ceil(u * 1.5 - 1e-9) };
+}
 function preacopio(op) {
   let p = {};
   try { p = typeof op.params === 'string' ? JSON.parse(op.params || '{}') : (op.params || {}); } catch { p = {}; }
@@ -486,6 +494,7 @@ function preacopio(op) {
     },
     round_trip: roundTrip, round_trip_min: rtMin,
     unidades_min: unidMin, unidades_necesarias: Math.ceil(unidMin * 1.5),
+    unidades_viajes: Number(p.unidades_viajes) || null,
   };
 }
 
@@ -493,5 +502,5 @@ export {
   JORNADAS, RANGOS, STATUS,
   normPlaca, toMs, fmtDT, normDT, normDate, jornadaDe, turnoDe, rangoDe, r3,
   enriquecerViajes, totales, tablaReportes, tablaEmbarque,
-  resumenTransportistas, vueltasPlan, planVueltas, resumenOperacion, anioOperacion, resumenJornadas, resumenUnidades, resumenTiempos, preacopio,
+  resumenTransportistas, vueltasPlan, planVueltas, resumenOperacion, anioOperacion, resumenJornadas, resumenUnidades, resumenTiempos, preacopio, roundTripViajes,
 };

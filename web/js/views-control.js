@@ -2,7 +2,7 @@ import {
   state, api, esc, num, fecha, fechaHora, fechaHoraOpc, horas, toInputDT, normPlaca, toast, $, modal, confirmar,
   tabla, sinOperacion, puedeEscribir, esAdmin, chart, colores, descargar, descargarBlob,
 } from './core.js?v=__V__';
-import { NOMBRES_VUELTA } from './calc.js?v=__V__';
+import { NOMBRES_VUELTA, roundTripViajes } from './calc.js?v=__V__';
 import { formularioLista, enviarLista, registrarTransportistaModal, registrarHabituales } from './views-admin.js?v=__V__';
 
 /* =================== REPORTES POR TURNO =================== */
@@ -502,7 +502,9 @@ export async function vPlanificacion(view, ctx) {
   const [op, d] = await Promise.all([api(`/operaciones/${state.opId}`), api(`/operaciones/${state.opId}/tablero`)]);
   const p = d.preacopio;
   const edit = puedeEscribir();
-  view.innerHTML = `<div class="grid g3">
+  // Cuadro de viajes: con las unidades indicadas (por defecto, las unidades en lista)
+  const rv = roundTripViajes(p.unidades_viajes ?? d.unidades_en_lista, p.round_trip_min);
+  view.innerHTML = `<div class="grid g2">
     <div class="card"><h3>Tiempo estimado de acopio</h3><div class="table-wrap" style="margin-top:10px"><table><tbody>
       <tr><td>TN total</td><td class="num">${num(p.tn_total)}</td></tr><tr><td>TN por unidad</td><td class="num">${num(p.tn_x_unidad)}</td></tr>
       <tr><td>Viajes total</td><td class="num">${num(p.acopio.viajes_total, 0)}</td></tr><tr><td>Prom. viajes por hora</td><td class="num">${num(p.viajes_x_hora, 0)}</td></tr>
@@ -521,8 +523,20 @@ export async function vPlanificacion(view, ctx) {
     <div class="card"><h3>Round trip promedio de unidades</h3><div class="table-wrap" style="margin-top:10px"><table><tbody>
       ${p.round_trip.map((x) => `<tr><td>${esc(x.etapa)}</td><td class="num">${horas((x.min || 0) / 60)}</td></tr>`).join('')}
       <tr><td><strong>Total round trip</strong></td><td class="num"><strong>${horas(p.round_trip_min / 60)}</strong></td></tr>
+      <tr><td>Prom. viajes por hora</td><td class="num">${num(p.viajes_x_hora, 0)}</td></tr>
       <tr><td>Unidades mínimas para el acopio</td><td class="num">${p.unidades_min}</td></tr>
       <tr><td><strong>Unidades necesarias (+50 %)</strong></td><td class="num"><strong>${p.unidades_necesarias}</strong></td></tr>
+      <tr><td>Unidades en lista</td><td class="num">${d.unidades_en_lista}</td></tr>
+      <tr><td>Unidades participantes</td><td class="num">${d.totales.unidades_activas}</td></tr>
+    </tbody></table></div></div>
+    <div class="card"><h3>Round trip promedio de viajes</h3>
+      <p class="muted small" style="margin:4px 0 0">Con la cantidad de unidades disponibles, cuántos viajes por hora se logran con el round trip.</p>
+      <div class="table-wrap" style="margin-top:10px"><table><tbody>
+      ${p.round_trip.map((x) => `<tr><td>${esc(x.etapa)}</td><td class="num">${horas((x.min || 0) / 60)}</td></tr>`).join('')}
+      <tr><td><strong>Total round trip</strong></td><td class="num"><strong>${horas(p.round_trip_min / 60)}</strong></td></tr>
+      <tr><td><strong>Prom. viajes por hora</strong></td><td class="num"><strong>${num(rv.viajes_x_hora, 0)}</strong></td></tr>
+      <tr><td>Unidades mínimas para el acopio${p.unidades_viajes == null ? ' <span class="muted small">(unidades en lista)</span>' : ''}</td><td class="num">${num(rv.unidades, 0)}</td></tr>
+      <tr><td><strong>Unidades necesarias (+50 %)</strong></td><td class="num"><strong>${num(rv.necesarias, 0)}</strong></td></tr>
       <tr><td>Unidades en lista</td><td class="num">${d.unidades_en_lista}</td></tr>
       <tr><td>Unidades participantes</td><td class="num">${d.totales.unidades_activas}</td></tr>
     </tbody></table></div></div>
@@ -533,6 +547,7 @@ export async function vPlanificacion(view, ctx) {
       <label>Prom. viajes por hora<input name="viajes_x_hora" type="number" step="1" min="1" value="${p.viajes_x_hora}"></label>
       <label>Jornadas por día<input name="jornadas_x_dia" type="number" min="1" value="${p.jornadas_x_dia}"></label>
       <label>TN por hora (embarque)<input name="tn_x_hora_embarque" type="number" value="${p.tn_x_hora_embarque}"></label>
+      <label>Unidades (round trip de viajes)<input name="unidades_viajes" type="number" min="0" step="1" value="${p.unidades_viajes ?? ''}" placeholder="${d.unidades_en_lista} (en lista)"></label>
       <label>Inicio acopio<input name="inicio_acopio" type="datetime-local" value="${toInputDT(p.acopio.inicio)}"></label>
       <label>Inicio embarque<input name="inicio_embarque" type="datetime-local" value="${toInputDT(p.embarque.inicio)}"></label>
       <div class="full"><h3 style="margin:6px 0">Round trip (minutos por etapa)</h3></div>
@@ -545,7 +560,7 @@ export async function vPlanificacion(view, ctx) {
     const params = {
       ...(JSON.parse(op.params || '{}')),
       tn_x_unidad: Number(f.tn_x_unidad), viajes_x_hora: Number(f.viajes_x_hora), jornadas_x_dia: Number(f.jornadas_x_dia),
-      tn_x_hora_embarque: Number(f.tn_x_hora_embarque), inicio_acopio: f.inicio_acopio.replace('T', ' ') || null,
+      tn_x_hora_embarque: Number(f.tn_x_hora_embarque), unidades_viajes: f.unidades_viajes === '' ? null : Number(f.unidades_viajes), inicio_acopio: f.inicio_acopio.replace('T', ' ') || null,
       inicio_embarque: f.inicio_embarque.replace('T', ' ') || null,
       round_trip: p.round_trip.map((x, i) => ({ etapa: x.etapa, min: Number(f[`rt_${i}`]) || 0 })),
     };
