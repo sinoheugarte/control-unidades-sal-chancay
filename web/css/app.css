@@ -558,3 +558,15 @@ table.cortes tbody tr:hover td.rep:not(.vacio) { background: color-mix(in srgb, 
 .cerrar-menu:active { transform: scale(.92); }
 @media (hover: hover) { .cerrar-menu:hover { background: rgba(255, 255, 255, .16); } }
 @media (max-width: 860px) { .cerrar-menu { display: grid; } .menu-velo { display: block; } }
+
+/* Aviso de nueva versión: se ajusta al ancho del teléfono y respeta la barra de estado */
+.aviso-version {
+  position: fixed; left: 50%; transform: translateX(-50%); top: calc(12px + var(--sat)); z-index: 200;
+  width: max-content; max-width: calc(100vw - 24px); box-sizing: border-box;
+  display: flex; gap: 12px; align-items: center; padding: 10px 12px 10px 16px; border-radius: 14px;
+  background: var(--grad); color: #fff; font-weight: 650; box-shadow: 0 10px 30px rgba(0, 0, 0, .3);
+  animation: hoja .35s var(--ease-ios);
+}
+.aviso-version > span { flex: 1 1 auto; min-width: 0; line-height: 1.3; }
+.aviso-version .btn { flex: none; background: #fff; color: #1d4ed8; box-shadow: none; }
+@media (max-width: 480px) { .aviso-version { left: 12px; right: 12px; transform: none; width: auto; max-width: none; font-size: 13px; } }

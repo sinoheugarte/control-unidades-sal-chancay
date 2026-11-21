@@ -364,8 +364,8 @@ async function revisarVersion() {
       const d = document.createElement('div');
       d.id = 'aviso-version';
       d.setAttribute('role', 'status');
-      d.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);top:12px;z-index:200;background:var(--primary);color:var(--primary-ink);padding:10px 14px;border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.25);display:flex;gap:12px;align-items:center;font-weight:600';
-      d.innerHTML = 'Hay una nueva versión de la aplicación. <button class="btn sm" id="b-act-version">Actualizar</button>';
+      d.className = 'aviso-version';
+      d.innerHTML = '<span>✨ Hay una nueva versión de la aplicación.</span><button class="btn sm" id="b-act-version">Actualizar</button>';
       document.body.appendChild(d);
       d.querySelector('button').onclick = () => location.reload();
     }
