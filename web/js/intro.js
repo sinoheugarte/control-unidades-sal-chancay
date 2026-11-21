@@ -30,6 +30,7 @@ const CSS = `
 .ix .anillo.b{animation-delay:1.3s;border-color:rgba(167,139,250,.6)}
 @keyframes ix-onda{0%{opacity:.9;transform:scale(.6)}100%{opacity:0;transform:scale(6)}}
 .ix canvas.mundo{z-index:0}
+@keyframes ix-aparece{to{opacity:1}}
 /* Escena 3: título */
 .ix .tit{position:absolute;left:0;right:0;top:24%;text-align:center;pointer-events:none}
 .ix .tit h1{margin:0;font-size:clamp(30px,5.6vw,76px);font-weight:900;letter-spacing:-.04em;line-height:1}
@@ -57,6 +58,21 @@ const CSS = `
   background:rgba(15,23,42,.6);box-shadow:inset 0 0 0 1px rgba(255,255,255,.18);transition:background-color .2s ease,transform .15s ease}
 .ix .controles button:hover{background:rgba(255,255,255,.18)}.ix .controles button:active{transform:scale(.95)}
 .ix .controles .snd.on{background:rgba(56,189,248,.25);box-shadow:inset 0 0 0 1px rgba(56,189,248,.6)}
+.ix.tapa{display:grid;place-items:center;z-index:1001}
+.ix .tapa-c{position:relative;display:grid;justify-items:center;gap:18px;text-align:center;padding:24px}
+.ix .logo.fijo{position:relative;left:auto;top:auto;margin:0;width:120px;height:120px;border-radius:32px;box-shadow:0 0 0 1px rgba(255,255,255,.25) inset,0 24px 60px -12px rgba(14,165,233,.8);animation:ix-latido 2.4s ease-in-out infinite}
+.ix .logo.fijo svg{width:66px;height:66px}
+.ix .logo.fijo::after{animation:ix-brillo 1.3s ease .4s forwards}
+@keyframes ix-latido{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
+.ix .tapa-c h2{margin:6px 0 0;font-size:clamp(26px,4.4vw,46px);font-weight:900;letter-spacing:-.03em;
+  background:linear-gradient(90deg,#fff,#bae6fd 40%,#c4b5fd 70%,#fff);-webkit-background-clip:text;background-clip:text;color:transparent}
+.ix .tapa-go{font:inherit;font-size:17px;font-weight:750;color:#fff;cursor:pointer;border:0;padding:15px 30px;border-radius:99px;margin-top:8px;
+  background:linear-gradient(135deg,#2563eb,#06b6d4);box-shadow:0 16px 40px -12px rgba(14,165,233,.75),inset 0 0 0 1px rgba(255,255,255,.25);
+  display:inline-flex;align-items:center;gap:10px;animation:ix-pulso 1.8s ease-in-out infinite}
+.ix .tapa-go span{font-size:14px}
+.ix .tapa-go:active{transform:scale(.96)}
+@keyframes ix-pulso{0%,100%{box-shadow:0 16px 40px -12px rgba(14,165,233,.75),0 0 0 0 rgba(56,189,248,.45)}50%{box-shadow:0 16px 40px -12px rgba(14,165,233,.75),0 0 0 14px rgba(56,189,248,0)}}
+.ix .tapa-c p{margin:0;color:#9fb3cf;font-size:13px;letter-spacing:.12em;text-transform:uppercase}
 @media (prefers-reduced-motion:reduce){.ix *,.ix *::before,.ix *::after{animation-duration:1ms!important;animation-delay:0s!important;animation-iteration-count:1!important}}
 `;
 
@@ -98,10 +114,8 @@ function particulas(canvas, reducido) {
    acordes cinematográficos, arpegio, bajo, percusión suave y efectos
    sincronizados con la escena (logo, descarga de sal y título).
    ===================================================================== */
-function musica(t0) {
-  const AC = window.AudioContext || window.webkitAudioContext;
-  if (!AC) return null;
-  const ctx = new AC();
+function musica(t0, ctx) {
+  if (!ctx) return null;
   const master = ctx.createGain(); master.gain.value = 0;
   const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -18; comp.ratio.value = 3;
   master.connect(comp).connect(ctx.destination);
@@ -168,10 +182,46 @@ function musica(t0) {
   };
 }
 
+/* Los navegadores (y el visor de Android) sólo permiten sonido después de un toque del usuario.
+   Si el audio ya puede sonar (p. ej. en la app nativa) la presentación arranca sola; si no, se muestra
+   una portada "Toca para comenzar": ese toque habilita la música y arranca la presentación. */
 export function mostrarIntro() {
   try { if (sessionStorage.getItem('intro-vista')) return; sessionStorage.setItem('intro-vista', '1'); } catch { /* sin storage */ }
   const reducido = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const st = document.createElement('style'); st.textContent = CSS; document.head.appendChild(st);
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (reducido || !AC) return presentar(st, reducido, null);
+  let actx = null;
+  try { actx = new AC(); } catch { return presentar(st, reducido, null); }
+  const tapa = document.createElement('div');
+  tapa.className = 'ix tapa';
+  tapa.innerHTML = `<div class="aur"><i></i><i></i><i></i></div>
+    <div class="tapa-c"><div class="logo fijo">${LOGO}</div><h2>Control de Unidades</h2>
+      <button type="button" class="tapa-go"><span>▶</span> Toca para comenzar</button>
+      <p>Presentación con música</p></div>
+    <div class="controles" style="animation-delay:0s"><button type="button" class="skip">Saltar ›</button></div>`;
+  document.body.appendChild(tapa);
+  let listo = false;
+  const arrancar = (conSonido) => {
+    if (listo) return; listo = true;
+    clearTimeout(tEspera);
+    if (conSonido) { try { actx.resume(); } catch { /* */ } }
+    presentar(st, reducido, actx);
+    tapa.classList.add('fuera');
+    setTimeout(() => tapa.remove(), 1000);
+  };
+  tapa.addEventListener('click', (e) => {
+    if (e.target.closest('.skip')) { listo = true; clearTimeout(tEspera); tapa.classList.add('fuera'); try { actx.close(); } catch { /* */ } setTimeout(() => { tapa.remove(); st.remove(); }, 900); return; }
+    arrancar(true);
+  });
+  // Si el audio ya está permitido (app nativa / sitio con permiso), arranca sin esperar el toque
+  actx.resume().then(() => { if (actx.state === 'running') arrancar(false); }).catch(() => {});
+  setTimeout(() => { if (actx.state === 'running') arrancar(false); }, 250);
+  // Sin toque en 12 s: arranca igual (sin sonido; el botón "Activar música" sigue disponible)
+  const tEspera = setTimeout(() => arrancar(false), 12000);
+}
+
+function presentar(st, reducido, actx) {
   const titulo = 'Control de Unidades';
   const el = document.createElement('div');
   el.className = 'ix';
@@ -186,7 +236,7 @@ export function mostrarIntro() {
   const parar = particulas(el.querySelector('canvas'), reducido);
   const t0 = performance.now();
   const pararEscena = escena(el.querySelector('canvas.mundo'), t0, reducido);
-  const audio = reducido ? null : musica(t0);
+  const audio = reducido ? null : musica(t0, actx);
   const bSnd = el.querySelector('.snd');
   const pintarSnd = () => { const on = audio?.sonando(); bSnd.classList.toggle('on', !!on); bSnd.textContent = on ? '🔊 Música' : '🔇 Activar música'; };
   if (!audio) bSnd.remove(); else { audio.iniciar().then(pintarSnd); }
