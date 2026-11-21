@@ -337,7 +337,10 @@ dialog .df { padding: 12px 18px; border-top: 1px solid var(--border); display: f
 @media (max-width: 860px) {
   .layout { grid-template-columns: 1fr; }
   .side { position: fixed; inset: 0 auto 0 0; width: 260px; z-index: 20; transform: translateX(-100%); transition: transform .35s var(--ease-ios); }
-  .side.open { transform: none; box-shadow: 0 0 0 100vmax rgba(0, 0, 0, .45); }
+  .side.open { transform: none; box-shadow: 0 0 40px rgba(0, 0, 0, .5); }
+  .menu-velo { display: block; position: fixed; inset: 0; z-index: 19; background: rgba(2, 6, 16, .55); backdrop-filter: blur(2px); opacity: 0; pointer-events: none; transition: opacity .3s ease; }
+  .menu-velo.on { opacity: 1; pointer-events: auto; }
+  .cerrar-menu { display: grid; }
   .btn.menu-btn { display: inline-flex; }
   .top .who { display: none; }
   .top h1 { font-size: 16px; }
@@ -547,3 +550,11 @@ table.cortes tbody tr:hover td.rep:not(.vacio) { background: color-mix(in srgb, 
 }
 @keyframes entra-suave { from { opacity: 0; } }
 @keyframes sale-suave { to { opacity: 0; } }
+
+/* Botón para cerrar el menú lateral (sólo en pantallas angostas) */
+.menu-velo { display: none; }
+.cerrar-menu { display: none; place-items: center; margin-left: auto; flex: none; width: 40px; height: 40px; border: 0; border-radius: 12px; cursor: pointer;
+  font-size: 18px; font-weight: 700; color: #e2e8f0; background: rgba(255, 255, 255, .08); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .14); transition: background-color .2s ease, transform .15s ease; }
+.cerrar-menu:active { transform: scale(.92); }
+@media (hover: hover) { .cerrar-menu:hover { background: rgba(255, 255, 255, .16); } }
+@media (max-width: 860px) { .cerrar-menu { display: grid; } .menu-velo { display: block; } }

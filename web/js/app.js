@@ -160,10 +160,12 @@ function shell(root, ruta) {
   shellDe = clave;
   root.innerHTML = `<div class="layout${esInvitado() ? ' solo' : ''}">
     <aside class="side" id="side">
-      <div class="brand"><div class="brand-logo">${ICON.viajes}</div><div>Control de Unidades<small>Despacho · Acopio · Embarque</small></div></div>
+      <div class="brand"><div class="brand-logo">${ICON.viajes}</div><div>Control de Unidades<small>Despacho · Acopio · Embarque</small></div>
+        <button type="button" class="cerrar-menu" id="menu-x" aria-label="Cerrar menú">✕</button></div>
       <nav class="nav">${(esTransp() ? NAV_PORTAL : esInvitado() ? [] : NAV).map(([sec, items]) => `<div class="sep">${sec}</div>${items.filter((k) => !RUTAS[k].admin || esAdmin())
         .map((k) => `<a href="#/${k}" data-k="${k}" style="--c:${COLOR[k] || '#3b82f6'}">${icoNav(k)}<span>${RUTAS[k].t}</span></a>`).join('')}`).join('')}</nav>
     </aside>
+    <div class="menu-velo" id="menu-velo" aria-hidden="true"></div>
     <div class="main">
       <header class="top">
         <button class="btn sm menu-btn" id="menu" aria-label="Abrir menú">☰</button>
@@ -185,7 +187,22 @@ function shell(root, ruta) {
     if (e.target.value === '__buscar') { e.target.value = String(state.opId ?? ''); location.hash = '#/operaciones'; return; }
     setOp(Number(e.target.value)); render();
   });
-  $('#menu').addEventListener('click', () => $('#side').classList.toggle('open'));
+  // Menú lateral en el teléfono: abrir / cerrar (botón ✕, toque en la zona oscura, deslizar a la izquierda, Esc o "Atrás")
+  const menu = (abrir) => {
+    const abierto = $('#side').classList.contains('open');
+    if (abrir === abierto) return;
+    $('#side').classList.toggle('open', abrir); $('#menu-velo').classList.toggle('on', abrir);
+    $('#menu').setAttribute('aria-expanded', String(abrir));
+    if (abrir) history.pushState({ menu: 1 }, ''); else if (history.state?.menu) history.back();
+  };
+  $('#menu').addEventListener('click', () => menu(!$('#side').classList.contains('open')));
+  $('#menu-x').addEventListener('click', () => menu(false));
+  $('#menu-velo').addEventListener('click', () => menu(false));
+  let x0 = null;
+  $('#side').addEventListener('touchstart', (e) => { x0 = e.touches[0].clientX; }, { passive: true });
+  $('#side').addEventListener('touchend', (e) => { if (x0 != null && x0 - e.changedTouches[0].clientX > 60) menu(false); x0 = null; }, { passive: true });
+  window.addEventListener('keydown', (e) => { if (e.key === 'Escape') menu(false); });
+  window.addEventListener('popstate', () => { if ($('#side')?.classList.contains('open')) { $('#side').classList.remove('open'); $('#menu-velo').classList.remove('on'); } });
   const tituloPag = () => $('#titulo')?.textContent.trim() || 'Reporte';
   const selector = (accion) => {
     const actual = (location.hash.replace(/^#\/?/, '').split('?')[0]) || 'tablero';
@@ -195,7 +212,7 @@ function shell(root, ruta) {
   };
   $('#b-html')?.addEventListener('click', () => (esTransp() ? descargarHTML($('#view'), tituloPag()) : selector('html')));
   $('#b-link')?.addEventListener('click', () => selector('compartir'));
-  $('#side').addEventListener('click', (e) => { if (e.target.closest('a')) $('#side').classList.remove('open'); });
+  $('#side').addEventListener('click', (e) => { if (e.target.closest('a') && $('#side').classList.contains('open')) { $('#side').classList.remove('open'); $('#menu-velo').classList.remove('on'); } });
   $('#salir').addEventListener('click', () => { B.cerrarSesion(); state.user = null; shellDe = null; location.hash = '#/login'; });
   $('#tema').addEventListener('click', () => {
     const dark = document.documentElement.dataset.theme === 'dark' || (!document.documentElement.dataset.theme && matchMedia('(prefers-color-scheme: dark)').matches);
