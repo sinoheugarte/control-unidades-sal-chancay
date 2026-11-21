@@ -34,10 +34,10 @@
       "showSpinner": false,
       "androidScaleType": "CENTER_CROP"
     },
-    "StatusBar": {
+    "SystemBars": {
+      "insetsHandling": "css",
       "style": "DARK",
-      "backgroundColor": "#0b1424",
-      "overlaysWebView": false
+      "initialViewportFitValueHint": "cover"
     }
   }
 }

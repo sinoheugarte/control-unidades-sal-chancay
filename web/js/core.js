@@ -213,6 +213,9 @@ export function chart(canvas, config) {
   return ch;
 }
 export function destruirGraficos() { charts.forEach((c) => c.destroy()); charts.clear(); }
+/** Fuerza el redibujado de los gráficos (tras animaciones de entrada o al girar el teléfono). */
+export function redibujarGraficos() { charts.forEach((c) => { try { c.resize(); c.update('none'); } catch { /* */ } }); }
+let tGiro; ['orientationchange', 'resize'].forEach((ev) => window.addEventListener(ev, () => { clearTimeout(tGiro); tGiro = setTimeout(redibujarGraficos, 350); }));
 
 /* ---------- Fecha y hora en formato 24 h ----------
    Los <input type="datetime-local"> muestran AM/PM según la configuración regional de Windows.

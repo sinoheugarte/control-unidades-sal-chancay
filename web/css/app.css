@@ -521,9 +521,29 @@ table.cortes tbody tr:hover td.rep:not(.vacio) { background: color-mix(in srgb, 
 
 /* App instalable: el atributo hidden siempre oculta; respeta la muesca/barras del teléfono */
 [hidden] { display: none !important; }
-@media (display-mode: standalone) {
-  .top { padding-top: max(10px, env(safe-area-inset-top)); }
-  .side { padding-top: max(14px, env(safe-area-inset-top)); }
-  .content { padding-bottom: max(40px, env(safe-area-inset-bottom)); }
-  body { overscroll-behavior-y: none; }
+/* Zonas seguras (hora, batería, cámara, barra de navegación) en celulares, app instalada y app nativa (Android/iOS).
+   La app nativa (Capacitor) inyecta --safe-area-inset-*; los navegadores usan env(safe-area-inset-*). */
+:root {
+  --sat: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
+  --sab: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
+  --sal: var(--safe-area-inset-left, env(safe-area-inset-left, 0px));
+  --sar: var(--safe-area-inset-right, env(safe-area-inset-right, 0px));
 }
+.top { padding-top: calc(10px + var(--sat)); padding-left: calc(22px + var(--sal)); padding-right: calc(22px + var(--sar)); }
+.side { padding-top: calc(14px + var(--sat)); padding-bottom: calc(14px + var(--sab)); padding-left: calc(10px + var(--sal)); }
+.content { padding-bottom: calc(40px + var(--sab)); padding-right: calc(22px + var(--sar)); }
+#toast { bottom: calc(16px + var(--sab)); right: calc(16px + var(--sar)); }
+.login { padding-top: calc(16px + var(--sat)); padding-bottom: calc(16px + var(--sab)); }
+@media (max-width: 860px) {
+  .top { padding-left: calc(14px + var(--sal)); padding-right: calc(14px + var(--sar)); }
+  .content { padding-left: calc(14px + var(--sal)); padding-right: calc(14px + var(--sar)); }
+}
+@media (display-mode: standalone) { body { overscroll-behavior-y: none; } }
+/* Celulares (pantalla táctil): entrada de pantallas sólo con fundido — sin desenfoque ni desplazamiento
+   (en algunos WebView de Android dejan los gráficos sin redibujar) */
+@media (pointer: coarse) {
+  .content.entra > *, .content.entra.atras > * { animation-name: entra-suave; }
+  .content.sale, .content.sale.atras { animation-name: sale-suave; }
+}
+@keyframes entra-suave { from { opacity: 0; } }
+@keyframes sale-suave { to { opacity: 0; } }

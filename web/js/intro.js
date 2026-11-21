@@ -93,7 +93,7 @@ const CSS = `
 .ix .prog{position:absolute;left:50%;bottom:0;width:min(320px,60vw);height:3px;transform:translateX(-50%);background:rgba(255,255,255,.1);border-radius:99px;overflow:hidden}
 .ix .prog i{display:block;height:100%;background:linear-gradient(90deg,#38bdf8,#a78bfa,#f472b6);transform-origin:left;animation:ix-prog ${DURACION}ms linear forwards}
 @keyframes ix-prog{from{transform:scaleX(0)}to{transform:scaleX(1)}}
-.ix .controles{position:absolute;right:18px;bottom:16px;display:flex;gap:8px;opacity:0;animation:ix-aparece .6s ease .8s forwards}
+.ix .controles{position:absolute;right:calc(18px + var(--sar, 0px));bottom:calc(16px + var(--sab, 0px));display:flex;gap:8px;opacity:0;animation:ix-aparece .6s ease .8s forwards}
 .ix .controles button{font:inherit;font-size:12px;font-weight:650;letter-spacing:.04em;color:#e2e8f0;cursor:pointer;padding:8px 15px;border-radius:99px;border:0;
   background:rgba(15,23,42,.6);box-shadow:inset 0 0 0 1px rgba(255,255,255,.18);transition:background-color .2s ease,transform .15s ease}
 .ix .controles button:hover{background:rgba(255,255,255,.18)}.ix .controles button:active{transform:scale(.95)}

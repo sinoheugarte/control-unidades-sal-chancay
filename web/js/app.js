@@ -1,4 +1,4 @@
-import { state, api, esc, toast, $, $$, modal, destruirGraficos, esAdmin, activarFechaHora24, activarOndas, activarTablas, activarEquilibrio } from './core.js?v=__V__';
+import { state, api, esc, toast, $, $$, modal, destruirGraficos, redibujarGraficos, esAdmin, activarFechaHora24, activarOndas, activarTablas, activarEquilibrio } from './core.js?v=__V__';
 import { mostrarIntro } from './intro.js?v=__V__';
 import { activarExportes, ICO as FX, descargarHTML, vVer, fragmentoDe, elegirPantallas } from './compartir.js?v=__V__';
 import { vTablero, vViajes, vRegistro } from './views-operacion.js?v=__V__';
@@ -308,8 +308,8 @@ async function render() {
     [...view.children].forEach((el, i) => el.style.setProperty('--i', Math.min(i, 8)));
     void view.offsetWidth;
     view.classList.add('entra'); view.classList.toggle('atras', !!atras);
-    setTimeout(() => { if (id === renderId) view.classList.remove('entra', 'atras'); }, 1100);
-  }
+    setTimeout(() => { if (id === renderId) { view.classList.remove('entra', 'atras'); redibujarGraficos(); } }, 1100);
+  } else setTimeout(redibujarGraficos, 60);
 }
 
 activarFechaHora24(document.body);
