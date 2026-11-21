@@ -45,6 +45,10 @@ async function canjear(params, scopes = null) {
 /** ¿Esta ventana es el popup que vuelve del login de Microsoft? */
 export const esRetornoLogin = () => !!window.opener && /[?&](code|error)=/.test(location.search);
 
+/** ¿Corre como app instalada (PWA) o en un celular/tablet? */
+export const modoApp = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true
+  || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+
 /** Inicia sesión en una ventana emergente (igual que la app TP). */
 export async function login(extra = []) {
   const cfg = getCfg();
@@ -59,12 +63,18 @@ export async function login(extra = []) {
     code_challenge: challenge, code_challenge_method: 'S256', state, response_mode: 'query', prompt: 'select_account',
   }).forEach(([k, v]) => u.searchParams.set(k, v));
   sessionStorage.setItem(PKCE_KEY, JSON.stringify({ verifier, state }));
+  // En la app instalada (PWA) y en celulares se usa redirección: una ventana emergente se abriría fuera de la app
+  if (modoApp()) {
+    ls.set(`${PKCE_KEY}_redir`, { verifier, state, hash: location.hash });
+    location.href = u.toString();
+    return new Promise(() => {});
+  }
   const W = 500, H = 640;
   const popup = window.open(u.toString(), 'msAuth', `width=${W},height=${H},left=${(screen.width - W) / 2},top=${(screen.height - H) / 2}`);
   if (!popup && extra.length) throw new Error('El navegador bloqueó la ventana de Microsoft. Permita ventanas emergentes para este sitio e intente de nuevo.');
   if (!popup) {
     // Sin ventanas emergentes (p. ej. algunos celulares): flujo por redirección
-    ls.set(`${PKCE_KEY}_redir`, { verifier, state });
+    ls.set(`${PKCE_KEY}_redir`, { verifier, state, hash: location.hash });
     location.href = u.toString();
     return new Promise(() => {});
   }
@@ -91,7 +101,8 @@ export async function completarRedireccion() {
   const saved = ls.get(`${PKCE_KEY}_redir`);
   if (!saved || (!p.get('code') && !p.get('error'))) return false;
   ls.del(`${PKCE_KEY}_redir`);
-  history.replaceState({}, '', location.pathname + location.hash);
+  // Vuelve a la pantalla desde la que se inició sesión (p. ej. un reporte compartido)
+  history.replaceState({}, '', location.pathname + (saved.hash && saved.hash !== '#/login' ? saved.hash : location.hash));
   if (p.get('error')) throw new Error(mensajeError(p.get('error_description') || p.get('error')));
   if (p.get('state') !== saved.state) throw new Error('Respuesta de inicio de sesión inválida (state)');
   await canjear({ grant_type: 'authorization_code', code: p.get('code'), redirect_uri: appUrl(), code_verifier: saved.verifier });

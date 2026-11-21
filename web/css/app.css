@@ -518,3 +518,12 @@ table.cortes tbody tr:hover td.rep:not(.vacio) { background: color-mix(in srgb, 
 .inf-prev { display: grid; grid-auto-flow: column; grid-auto-columns: 240px; gap: 10px; overflow-x: auto; padding: 4px 2px 10px; scroll-snap-type: x mandatory; }
 .inf-prev img { width: 240px; aspect-ratio: 16 / 9; border-radius: 10px; box-shadow: var(--shadow); scroll-snap-align: start; outline: 1px solid rgba(255, 255, 255, .08); }
 .pant .ico { font-size: 10.5px; font-weight: 800; }
+
+/* App instalable: el atributo hidden siempre oculta; respeta la muesca/barras del teléfono */
+[hidden] { display: none !important; }
+@media (display-mode: standalone) {
+  .top { padding-top: max(10px, env(safe-area-inset-top)); }
+  .side { padding-top: max(14px, env(safe-area-inset-top)); }
+  .content { padding-bottom: max(40px, env(safe-area-inset-bottom)); }
+  body { overscroll-behavior-y: none; }
+}

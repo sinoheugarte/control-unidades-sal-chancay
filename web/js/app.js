@@ -78,6 +78,7 @@ function vLogin(root, error = '') {
         <svg width="18" height="18" viewBox="0 0 21 21" aria-hidden="true"><rect x="1" y="1" width="9" height="9" fill="#f25022"/><rect x="11" y="1" width="9" height="9" fill="#7fba00"/><rect x="1" y="11" width="9" height="9" fill="#00a4ef"/><rect x="11" y="11" width="9" height="9" fill="#ffb900"/></svg>
         Iniciar sesión con Microsoft</button>
       <p class="small" id="login-err" role="alert" style="color:var(--bad);margin:0">${esc(error)}</p>
+      ${instalada() ? '' : `<button type="button" class="btn b-instalar" style="justify-content:center" ${avisoInstalar || esIOS() || /Android/i.test(navigator.userAgent) ? '' : 'hidden'}>📲 Instalar la app en este dispositivo</button>`}
       <details class="small"><summary class="muted">Configuración avanzada</summary>
         <form id="f-cfg" class="form" style="grid-template-columns:1fr;margin-top:10px">
           <label>Sitio de SharePoint<input name="spSite" value="${esc(cfg.spSite)}"></label>
@@ -171,6 +172,7 @@ function shell(root, ruta) {
         ${esTransp() || esInvitado() ? '' : '<label style="min-width:220px" class="no-print"><span class="hidden">Operación</span><select id="op-sel" aria-label="Operación activa"></select></label>'}
         ${esInvitado() ? '' : `<button class="btn sm fx" id="b-html" data-fx="html" title="Descargar esta pantalla como página HTML">${FX.html}<span class="who">HTML</span></button>`}
         ${esTransp() || esInvitado() ? '' : `<button class="btn sm fx" id="b-link" data-fx="link" title="Crear un enlace de esta pantalla para compartir por correo">${FX.link}<span class="who">Compartir</span></button>`}
+        ${instalada() ? '' : `<button class="btn sm b-instalar" title="Instalar en este dispositivo" ${avisoInstalar || esIOS() ? '' : 'hidden'}>📲 <span class="who">Instalar app</span></button>`}
         <button class="btn sm" id="tema" title="Cambiar tema claro/oscuro">Tema</button>
         <button class="btn sm" id="perfil" title="Mi cuenta: cambiar contraseña"><span class="who">${esc(state.user.nombre)} · </span>${esc(state.user.rol)}</button>
         <button class="btn sm" id="salir">Salir</button>
@@ -311,6 +313,22 @@ async function render() {
 }
 
 activarFechaHora24(document.body);
+/* ---------- App instalable (PWA) ---------- */
+if ('serviceWorker' in navigator && !'__V__'.includes('_V_')) navigator.serviceWorker.register('sw.js').catch(() => { /* sin soporte */ });
+let avisoInstalar = null;
+const instalada = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const esIOS = () => /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); avisoInstalar = e; document.querySelectorAll('.b-instalar').forEach((b) => { b.hidden = false; }); });
+window.addEventListener('appinstalled', () => { avisoInstalar = null; document.querySelectorAll('.b-instalar').forEach((b) => { b.hidden = true; }); toast('Aplicación instalada. Ábrala desde el ícono "Control Sal".'); });
+function instalar() {
+  if (avisoInstalar) { avisoInstalar.prompt(); avisoInstalar.userChoice.finally(() => { avisoInstalar = null; }); return; }
+  modal({ title: 'Instalar la aplicación', body: esIOS()
+    ? `<ol style="margin:0;padding-left:20px;display:grid;gap:8px"><li>Abra esta página en <strong>Safari</strong>.</li><li>Toque <strong>Compartir</strong> (el cuadro con la flecha hacia arriba).</li>
+        <li>Elija <strong>"Agregar a inicio"</strong> y confirme con <strong>Agregar</strong>.</li><li>Abra <strong>Control Sal</strong> desde el ícono en su pantalla de inicio.</li></ol>`
+    : `<ol style="margin:0;padding-left:20px;display:grid;gap:8px"><li>Abra esta página en <strong>Chrome</strong> o <strong>Edge</strong>.</li><li>Toque el menú <strong>⋮</strong>.</li>
+        <li>Elija <strong>"Instalar aplicación"</strong> o <strong>"Agregar a la pantalla principal"</strong>.</li><li>Abra <strong>Control Sal</strong> desde el ícono.</li></ol>` });
+}
+document.addEventListener('click', (e) => { if (e.target.closest('.b-instalar')) instalar(); });
 activarOndas(document);
 activarTablas(document.body);
 activarEquilibrio(document.body);
