@@ -349,6 +349,7 @@ export function leerLista(wb) {
       const tracto = C.normPlaca(r.get(...AL.tracto));
       const dni = normDni(r.get(...AL.dni));
       if (!tracto && !dni) continue;
+      if (tracto && /^\d+$/.test(tracto) && !dni) continue; // fila de totales
       if (tracto && !/[A-Z0-9]{5,7}/.test(tracto)) { avisos.push(`${ws.name}, fila ${r._row}: placa "${tracto}" no válida`); continue; }
       let nom = { ap_paterno: str(r.get(...AL.paterno)), ap_materno: str(r.get(...AL.materno)), nombre1: str(r.get(...AL.nombre1)), nombre2: str(r.get(...AL.nombre2)) };
       if (!nom.ap_paterno) {
@@ -498,7 +499,7 @@ export function importarLibro(wb, T, usuario) {
   const lista = sh('LISTA');
   if (lista) {
     for (const r of rowsByHeader(lista, [['TRACTO'], ['RUC']]) || []) {
-      const tracto = C.normPlaca(r.get('TRACTO')); if (!tracto) continue;
+      const tracto = C.normPlaca(r.get('TRACTO')); if (!tracto || /^\d+$/.test(tracto) || /^TOTAL/i.test(String(r.get('TRANSPORTE') ?? r.get('EMPRESA') ?? ''))) continue; // la fila "Total" del Excel no es una unidad
       const tid = TT().find((t) => t.ruc === String(r.get('RUC') ?? ''))?.id ?? null;
       D.unidades.push({ id: nuevoId(D), transportista_id: tid, ap_paterno: str(r.get('AP. PATERNO')), ap_materno: str(r.get('AP. MATERNO')),
         nombre1: str(r.get('1ER NOMBRE')), nombre2: str(r.get('2DO NOMBRE')), dni: str(r.get('DNI')), brevete: str(r.get('BREVETE')),

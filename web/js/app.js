@@ -1,4 +1,4 @@
-import { state, api, esc, toast, $, $$, modal, destruirGraficos, esAdmin, activarFechaHora24, activarOndas, activarTablas } from './core.js?v=__V__';
+import { state, api, esc, toast, $, $$, modal, destruirGraficos, esAdmin, activarFechaHora24, activarOndas, activarTablas, activarEquilibrio } from './core.js?v=__V__';
 import { mostrarIntro } from './intro.js?v=__V__';
 import { vTablero, vViajes, vRegistro } from './views-operacion.js?v=__V__';
 import { vReportes, vTransportistas, vUnidades, vResumenes, vPlanificacion, vReporteTransportista } from './views-control.js?v=__V__';
@@ -255,6 +255,7 @@ async function render() {
 activarFechaHora24(document.body);
 activarOndas(document);
 activarTablas(document.body);
+activarEquilibrio(document.body);
 mostrarIntro();
 
 // Aviso de nueva versión publicada (evita trabajar con una copia antigua guardada en el navegador)

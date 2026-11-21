@@ -112,16 +112,34 @@ export async function confirmar(texto) {
 /** Tabla genérica. cols: [{t: título, k: clave | f: (fila)=>html, n: numérica, d: decimales}] */
 export function tabla(cols, filas, { foot, empty = 'Sin registros', rowAttr } = {}) {
   if (!filas.length) return `<div class="empty">${esc(empty)}</div>`;
-  const cel = (c, r) => {
-    if (c.f) return c.f(r);
-    const v = r[c.k];
-    return c.n ? num(v, c.d ?? 3) : esc(v ?? '—');
+  // Columnas con barra de datos (bar: true): proporción respecto al mayor valor de la columna
+  const max = cols.map((c) => (c.bar ? Math.max(0, ...filas.map((r) => Number(c.k ? r[c.k] : c.v?.(r)) || 0)) : 0));
+  const cel = (c, r, i) => {
+    const txt = c.f ? c.f(r) : c.n ? num(r[c.k], c.d ?? 3) : esc(r[c.k] ?? '—');
+    if (!c.bar || !max[i]) return txt;
+    const v = Number(c.k ? r[c.k] : c.v?.(r)) || 0;
+    return `<div class="dbar" style="--w:${Math.max(0, Math.min(100, (v / max[i]) * 100)).toFixed(1)}%${c.color ? `;--bc:${c.color}` : ''}"><span>${txt}</span></div>`;
   };
   return `<div class="table-wrap"><table>
     <thead><tr>${cols.map((c) => `<th class="${c.n ? 'num' : ''}">${esc(c.t)}</th>`).join('')}</tr></thead>
-    <tbody>${filas.map((r) => `<tr ${rowAttr ? rowAttr(r) : ''}>${cols.map((c) => `<td class="${c.n ? 'num' : ''}">${cel(c, r)}</td>`).join('')}</tr>`).join('')}</tbody>
+    <tbody>${filas.map((r) => `<tr ${rowAttr ? rowAttr(r) : ''}>${cols.map((c, i) => `<td class="${c.n ? 'num' : ''}${c.bar ? ' cbar' : ''}">${cel(c, r, i)}</td>`).join('')}</tr>`).join('')}</tbody>
     ${foot ? `<tfoot><tr>${cols.map((c, i) => `<td class="${c.n ? 'num' : ''}">${foot[i] ?? ''}</td>`).join('')}</tr></tfoot>` : ''}
   </table></div>`;
+}
+
+/**
+ * Fichas compactas de dato/valor (en lugar de tablas de 2 columnas con mucho espacio vacío).
+ * items: [{ l: etiqueta, v: valor (html), s: nota, fuerte: bool, k: color }]
+ */
+export function fichas(items, { min = 150 } = {}) {
+  return `<div class="fichas" style="--min:${min}px">${items.filter(Boolean).map((x) => `<div class="ficha${x.fuerte ? ' fuerte' : ''}"${x.k ? ` style="--k:${x.k}"` : ''}>
+    <span class="l">${x.l}</span><b class="v">${x.v ?? '—'}</b>${x.s ? `<small>${x.s}</small>` : ''}</div>`).join('')}</div>`;
+}
+/** Píldora de color por jornada (07-16 ámbar, 16-23 violeta, 23-07 azul). */
+export function jornadaPill(j) {
+  if (!j) return '—';
+  const c = String(j).startsWith('07') ? 'j1' : String(j).startsWith('16') ? 'j2' : 'j3';
+  return `<span class="pill ${c}">${esc(j)}</span>`;
 }
 
 export const opActual = () => state.ops.find((o) => o.id === state.opId) || null;
@@ -454,4 +472,29 @@ export function activarTablas(root = document.body) {
     if (pend) return; pend = true;
     requestAnimationFrame(() => { pend = false; scan(root); });
   }).observe(root, { childList: true, subtree: true });
+}
+
+/* =====================================================================
+   Filas equilibradas: KPIs y fichas se reparten en filas del mismo tamaño
+   (p. ej. 9 tarjetas → 5 + 4 en vez de 8 + 1) y la última fila se estira.
+   ===================================================================== */
+function equilibrar(el) {
+  const n = el.children.length;
+  if (!n) return;
+  const min = el.classList.contains('kpis') ? 160 : Number(getComputedStyle(el).getPropertyValue('--min')) || 150;
+  const gap = el.classList.contains('kpis') ? 12 : 8;
+  const max = Math.max(1, Math.floor((el.clientWidth + gap) / (min + gap)));
+  const filas = Math.ceil(n / max);
+  el.style.setProperty('--cols', String(Math.ceil(n / filas)));
+}
+export function activarEquilibrio(root = document.body) {
+  const ro = new ResizeObserver((es) => es.forEach((e) => equilibrar(e.target)));
+  const scan = () => root.querySelectorAll('.kpis:not([data-eq]), .fichas:not([data-eq])').forEach((el) => {
+    el.dataset.eq = '1';
+    if (el.classList.contains('fichas')) el.classList.add('eq');
+    equilibrar(el); ro.observe(el);
+  });
+  scan();
+  let pend = false;
+  new MutationObserver(() => { if (pend) return; pend = true; requestAnimationFrame(() => { pend = false; scan(); }); }).observe(root, { childList: true, subtree: true });
 }

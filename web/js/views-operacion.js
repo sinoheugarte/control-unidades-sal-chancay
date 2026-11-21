@@ -1,6 +1,6 @@
 import {
   state, api, esc, num, pct, fecha, fechaHora, minutos, toInputDT, ahoraInput, hoyInput, normPlaca,
-  statusPill, rangoPill, toast, $, modal, confirmar, tabla, sinOperacion, puedeEscribir, esAdmin, chart, colores, descargar,
+  statusPill, rangoPill, toast, $, modal, confirmar, tabla, sinOperacion, puedeEscribir, esAdmin, chart, colores, descargar, fichas,
 } from './core.js?v=__V__';
 import { turnoDe } from './calc.js?v=__V__';
 
@@ -41,12 +41,13 @@ export async function vTablero(view) {
       <div class="card"><div class="card-h"><h3>Participación por transportista</h3><span class="muted small">TN entregadas en puerto</span></div><div class="chart-box"><canvas id="ch-transp"></canvas></div></div>
       <div class="card"><div class="card-h"><h3>Tiempo de atención en puerto</h3><span class="muted small">viajes por rango y día</span></div><div class="chart-box"><canvas id="ch-tiempos"></canvas></div></div>
     </div>
-    <div class="grid g2">
+    <div class="grid g57">
       <div class="card"><div class="card-h"><h3>Balance de la operación</h3></div>${balance(t)}</div>
       <div class="card"><div class="card-h"><h3>Últimos viajes</h3><a href="#/viajes" class="btn sm">Ver todos</a></div>
         ${tabla([
-          { t: 'N°', k: 'nro' }, { t: 'Placa', k: 'placa' }, { t: 'Transporte', k: 'transportista_nombre' },
-          { t: 'TN origen', k: 'peso_origen', n: 1 }, { t: 'TN destino', k: 'peso_destino', n: 1 }, { t: 'Status', f: (v) => statusPill(v.status) },
+          { t: 'N°', k: 'nro' }, { t: 'Placa', f: (v) => `<strong>${esc(v.placa)}</strong>` }, { t: 'Transporte', k: 'transportista_nombre' },
+          { t: 'Salida planta', f: (v) => (v.despacho_en ? `${fecha(v.despacho_en).slice(0, 5)} ${String(v.despacho_en).slice(11, 16)}` : '—') }, { t: 'TN origen', k: 'peso_origen', n: 1 }, { t: 'TN destino', k: 'peso_destino', n: 1 },
+          { t: 'Status', f: (v) => statusPill(v.status) },
         ], d.ultimos, { empty: 'Aún no hay viajes registrados' })}</div>
     </div>`;
 
@@ -106,17 +107,22 @@ export async function vTablero(view) {
 }
 
 function balance(t) {
-  const fila = (l, v, strong) => `<tr><td>${strong ? `<strong>${l}</strong>` : l}</td><td class="num">${strong ? `<strong>${num(v)}</strong>` : num(v)}</td></tr>`;
-  return `<div class="table-wrap"><table><tbody>
-    ${fila('Cantidad despachada en planta', t.tn_despacho)}
-    ${fila('Cantidad rechazada / devuelta', t.tn_devueltas)}
-    ${fila('Cantidad acopiada en puerto', t.tn_acopio, true)}
-    ${fila('Diferencia peso puerto − planta (viajes descargados)', t.diferencia_acopio_despacho)}
-    ${fila('Cantidad embarcada', t.tn_embarque)}
-    ${fila('Diferencia embarque − acopio', t.dif_embarque_acopio)}
-    ${fila('Cantidad embarcada según draft SGS', t.tn_draft_sgs)}
-    ${fila('Diferencia draft SGS − embarque', t.dif_draft_embarque, true)}
-  </tbody></table></div>`;
+  const vs = [['Despachado (planta)', t.tn_despacho, '#2563eb'], ['Acopiado (puerto)', t.tn_acopio, '#10b981'], ['Embarcado', t.tn_embarque, '#8b5cf6'], ['Draft SGS', t.tn_draft_sgs, '#f97316']];
+  const max = Math.max(1, ...vs.map((x) => Number(x[1]) || 0));
+  return `<div style="display:grid;gap:8px;margin-bottom:12px">${vs.map(([l, v, k]) => `<div style="display:grid;grid-template-columns:150px 1fr 110px;gap:10px;align-items:center;font-size:12.5px">
+      <span class="muted" style="font-weight:650">${l}</span>
+      <div class="bar" style="margin:0;height:10px;--k:${k}"><i style="width:${(((Number(v) || 0) / max) * 100).toFixed(1)}%"></i></div>
+      <b class="num">${num(v)}</b></div>`).join('')}</div>
+    ${fichas([
+      { l: 'Avance despacho', v: pct(t.pct_despacho), k: '#2563eb' },
+      { l: 'Avance acopio', v: pct(t.pct_acopio), k: '#10b981' },
+      { l: 'En tránsito', v: num(t.tn_transito), s: `${t.viajes_pendientes} viajes`, k: '#f59e0b' },
+      { l: 'Prom. TN / unidad', v: num(t.peso_prom_unidad), k: '#06b6d4' },
+      { l: 'Rechazada / devuelta', v: num(t.tn_devueltas), k: '#ef4444' },
+      { l: 'Dif. puerto − planta', v: num(t.diferencia_acopio_despacho), s: 'viajes descargados', k: '#06b6d4' },
+      { l: 'Dif. embarque − acopio', v: num(t.dif_embarque_acopio), k: '#8b5cf6' },
+      { l: 'Dif. draft SGS − embarque', v: num(t.dif_draft_embarque), fuerte: true, k: '#f97316' },
+    ], { min: 125 })}`;
 }
 
 /* =================== VIAJES =================== */

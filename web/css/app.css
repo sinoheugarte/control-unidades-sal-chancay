@@ -394,3 +394,64 @@ tr.grp td { background: var(--surface-3) !important; border-top: 1px solid var(-
 /* Botones dentro de tablas: compactos para no agrandar las filas */
 td .btn.sm { min-height: 26px; padding: 2px 9px; border-radius: 8px; }
 td .btns { gap: 4px; flex-wrap: nowrap; }
+
+/* ---------- Densidad y organización ---------- */
+/* KPIs: la última fila se estira para no dejar huecos */
+.kpis { display: flex; flex-wrap: wrap; }
+.kpis > .kpi { flex: 1 1 calc((100% - 12px * (var(--cols, 6) - 1)) / var(--cols, 6)); min-width: 150px; }
+.fichas.eq { display: flex; flex-wrap: wrap; }
+.fichas.eq > .ficha { flex: 1 1 calc((100% - 8px * (var(--cols, 4) - 1)) / var(--cols, 4)); }
+.g4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.g21 { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+.g12 { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); }
+@media (max-width: 1100px) { .g4 { grid-template-columns: 1fr 1fr; } .g21, .g12 { grid-template-columns: 1fr; } }
+@media (max-width: 860px) { .g4 { grid-template-columns: 1fr; } }
+.chart-box.sm { height: 190px; }
+.chart-box.md { height: 230px; }
+.card-sub { color: var(--muted); font-size: 12px; margin: -6px 0 10px; }
+
+/* Barras de datos dentro de celdas (como las barras de datos del Excel) */
+td.cbar { min-width: 150px; }
+.dbar { position: relative; display: flex; justify-content: flex-end; align-items: center; min-height: 20px; isolation: isolate; }
+.dbar::before {
+  content: ""; position: absolute; left: 0; top: 2px; bottom: 2px; width: var(--w); border-radius: 6px; z-index: -1;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--bc, var(--primary)) 14%, transparent), color-mix(in srgb, var(--bc, var(--primary)) 42%, transparent));
+  transform-origin: left; animation: barra .8s var(--ease-out) both;
+}
+.dbar > span { padding: 0 2px; }
+
+/* Fichas compactas dato/valor */
+.fichas { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(var(--min, 150px), 1fr)); }
+.ficha {
+  --k: var(--primary); position: relative; background: var(--surface-2); border-radius: 11px; padding: 8px 11px 8px 13px; min-width: 0;
+  display: grid; gap: 1px; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border) 70%, transparent);
+}
+.ficha::before { content: ""; position: absolute; left: 0; top: 9px; bottom: 9px; width: 3px; border-radius: 0 3px 3px 0; background: var(--k); opacity: .85; }
+.ficha .l { color: var(--muted); font-size: 11px; font-weight: 650; text-transform: uppercase; letter-spacing: .04em; line-height: 1.25; }
+.ficha .v { font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+.ficha small { color: var(--muted); font-size: 11.5px; }
+.ficha.fuerte { background: color-mix(in srgb, var(--k) 12%, var(--surface)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--k) 35%, transparent); }
+.ficha.fuerte .v { color: color-mix(in srgb, var(--k) 75%, var(--text)); }
+
+/* Jornadas */
+.pill.j1 { background: color-mix(in srgb, #f59e0b 18%, transparent); color: #d97706; }
+.pill.j2 { background: color-mix(in srgb, #8b5cf6 18%, transparent); color: #7c3aed; }
+.pill.j3 { background: color-mix(in srgb, #3b82f6 18%, transparent); color: #2563eb; }
+:root[data-theme="dark"] .pill.j1 { color: #fbbf24; } :root[data-theme="dark"] .pill.j2 { color: #c4b5fd; } :root[data-theme="dark"] .pill.j3 { color: #93c5fd; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .pill.j1 { color: #fbbf24; } :root:not([data-theme="light"]) .pill.j2 { color: #c4b5fd; } :root:not([data-theme="light"]) .pill.j3 { color: #93c5fd; } }
+
+/* Línea del round trip (etapas proporcionales al tiempo) */
+.rt-linea { display: flex; height: 34px; border-radius: 11px; overflow: hidden; box-shadow: inset 0 0 0 1px var(--border); margin: 4px 0 10px; }
+.rt-linea > i { display: grid; place-items: center; min-width: 0; color: #fff; font-style: normal; font-size: 11px; font-weight: 750; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 4px; transform-origin: left; animation: barra .9s var(--ease-out) both; }
+.rt-leyenda { display: grid; gap: 6px 18px; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); font-size: 12.5px; }
+.rt-leyenda span { display: flex; align-items: center; gap: 7px; }
+.rt-leyenda span::before { content: ""; width: 10px; height: 10px; border-radius: 3px; background: var(--k); flex: none; }
+.rt-leyenda b { margin-left: auto; font-variant-numeric: tabular-nums; }
+
+/* Tabla transpuesta (una fila por serie) para series cortas */
+table.trans th:first-child, table.trans td:first-child { position: sticky; left: 0; z-index: 1; background: var(--surface-2); text-align: left; }
+table.trans td, table.trans th { text-align: center; }
+@media (prefers-reduced-motion: reduce) { .dbar::before, .rt-linea > i { animation: none; } }
+table.trans td, table.trans th { padding: 6px 7px; }
+.g57 { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); }
+@media (max-width: 1100px) { .g57 { grid-template-columns: 1fr; } }

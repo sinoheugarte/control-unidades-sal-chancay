@@ -1,6 +1,6 @@
 import {
   state, api, esc, num, fecha, fechaHora, fechaHoraOpc, horas, toInputDT, normPlaca, toast, $, modal, confirmar,
-  tabla, sinOperacion, puedeEscribir, esAdmin, chart, colores, descargar, descargarBlob,
+  tabla, sinOperacion, puedeEscribir, esAdmin, chart, colores, descargar, descargarBlob, fichas, jornadaPill,
 } from './core.js?v=__V__';
 import { NOMBRES_VUELTA, roundTripViajes } from './calc.js?v=__V__';
 import { formularioLista, enviarLista, registrarTransportistaModal, registrarHabituales } from './views-admin.js?v=__V__';
@@ -454,34 +454,89 @@ function unidadModal(u, transp, done) {
 export async function vResumenes(view) {
   if (!state.opId) { view.innerHTML = sinOperacion(); return; }
   const d = await api(`/operaciones/${state.opId}/tablero`);
-  const jTabla = (filas, titulo) => {
-    const tot = filas.reduce((a, x) => ({ v: a.v + x.viajes, tn: a.tn + x.tn }), { v: 0, tn: 0 });
-    return `<div class="card"><div class="card-h"><h3>${titulo}</h3></div>${tabla([
-      { t: 'Día', f: (x) => fecha(x.fecha) }, { t: 'Jornada', k: 'jornada' }, { t: 'Cant. viajes', k: 'viajes', n: 1, d: 0 }, { t: 'TN', k: 'tn', n: 1 },
-    ], filas, { foot: ['Total general', '', num(tot.v, 0), num(tot.tn)] })}</div>`;
-  };
+  const JC = { '07:00 - 16:00': '#f59e0b', '16:00 - 23:00': '#8b5cf6', '23:00 - 07:00': '#3b82f6' };
+  const sumJ = (fs) => fs.reduce((a, x) => ({ v: a.v + x.viajes, tn: a.tn + x.tn }), { v: 0, tn: 0 });
+  const jD = d.jornadas.despacho, jA = d.jornadas.acopio;
+  const tD = sumJ(jD), tA = sumJ(jA);
+  const mejor = (fs) => fs.reduce((m, x) => (!m || x.tn > m.tn ? x : m), null);
+  const mD = mejor(jD), mA = mejor(jA);
   const R = state.catalogos.rangos;
   const tt = d.tiempos.reduce((a, x) => { R.forEach((r) => { a[r] = (a[r] || 0) + x[r]; }); a.total = (a.total || 0) + x.total; return a; }, {});
+  const u = d.unidades;
+  const jCard = (id, titulo, sub, fs, tot) => `<div class="card"><div class="card-h"><h3>${titulo}</h3><span class="muted small">${sub}</span></div>
+    <div class="chart-box sm"><canvas id="${id}"></canvas></div>
+    ${tabla([
+      { t: 'Día', f: (x) => fecha(x.fecha) }, { t: 'Jornada', f: (x) => jornadaPill(x.jornada) },
+      { t: 'Viajes', k: 'viajes', n: 1, d: 0 }, { t: 'TN', k: 'tn', n: 1, bar: true, v: (x) => x.tn },
+      { t: '% del total', n: 1, f: (x) => (tot.tn ? `${num((x.tn / tot.tn) * 100, 1)} %` : '—') },
+    ], fs, { foot: ['Total general', `${fs.length} jornadas`, num(tot.v, 0), num(tot.tn), '100.0 %'] })}</div>`;
   view.innerHTML = `
-    <div class="grid g2">${jTabla(d.jornadas.despacho, 'Despacho de sal por jornada (planta)')}${jTabla(d.jornadas.acopio, 'Acopio de sal por jornada (puerto)')}</div>
-    <div class="grid g2">
-      <div class="card"><div class="card-h"><h3>Viajes por transportista y unidad</h3></div>
-        <p class="muted small" style="margin:0 0 8px">Empresas y placas ordenadas de mayor a menor número de viajes (hoja RESUMEN 3).</p>
-        ${pintarViajesUnidad(d.unidades)}</div>
-      <div class="card"><div class="card-h"><h3>Unidades por vuelta</h3></div>
-        <p class="muted small" style="margin:0 0 8px">Cantidad de unidades que llegaron a cada vuelta (1ª vuelta = todas las unidades activas). La suma es el total de viajes.</p>
-        <div class="chart-box"><canvas id="ch-vueltas"></canvas></div>
-        ${tabla([{ t: '# Vueltas', k: 'vueltas' }, { t: 'Cant. unidades', k: 'cantidad', n: 1, d: 0 }], d.unidades.distribucion, { foot: ['Total viajes', num(d.unidades.total_viajes ?? d.unidades.distribucion.reduce((a, x) => a + x.cantidad, 0), 0)] })}</div>
+    <div class="kpis">
+      <div class="kpi"><div class="l">TN despachadas</div><div class="v">${num(tD.tn)}</div><div class="s">${num(tD.v, 0)} viajes · ${jD.length} jornadas</div></div>
+      <div class="kpi"><div class="l">TN acopiadas</div><div class="v">${num(tA.tn)}</div><div class="s">${num(tA.v, 0)} viajes · ${jA.length} jornadas</div></div>
+      <div class="kpi"><div class="l">Mejor jornada despacho</div><div class="v">${num(mD?.tn)}</div><div class="s">${mD ? `${fecha(mD.fecha)} · ${esc(mD.jornada)} · ${mD.viajes} viajes` : '—'}</div></div>
+      <div class="kpi"><div class="l">Mejor jornada acopio</div><div class="v">${num(mA?.tn)}</div><div class="s">${mA ? `${fecha(mA.fecha)} · ${esc(mA.jornada)} · ${mA.viajes} viajes` : '—'}</div></div>
+      <div class="kpi"><div class="l">Prom. TN por jornada</div><div class="v">${num(jA.length ? tA.tn / jA.length : null)}</div><div class="s">acopio · despacho ${num(jD.length ? tD.tn / jD.length : null)}</div></div>
+      <div class="kpi"><div class="l">Unidades activas</div><div class="v">${num(u.unidades_activas, 0)}</div><div class="s">${num(u.unidades_activas ? u.total_viajes / u.unidades_activas : null, 1)} viajes por unidad</div></div>
+      <div class="kpi"><div class="l">Atención ≤ 30 min</div><div class="v">${tt.total ? `${num(((tt[R[0]] || 0) / tt.total) * 100, 1)} %` : '—'}</div><div class="s">${num(tt[R[0]] || 0, 0)} de ${num(tt.total || 0, 0)} viajes</div></div>
     </div>
-    <div class="card"><div class="card-h"><h3>Tiempo de atención en puerto (por día de recepción: salida del puerto)</h3></div>${tabla([
-      { t: 'Día', f: (x) => fecha(x.dia) }, ...R.map((r) => ({ t: r, k: r, n: 1, d: 0 })), { t: 'Total viajes', k: 'total', n: 1, d: 0 },
-    ], d.tiempos, { foot: ['Total', ...R.map((r) => num(tt[r] || 0, 0)), num(tt.total || 0, 0)] })}</div>`;
+    <div class="grid g2">
+      ${jCard('ch-jd', 'Despacho de sal por jornada', 'planta · REPORTE HUACHO', jD, tD)}
+      ${jCard('ch-ja', 'Acopio de sal por jornada', 'puerto · REPORTE CSPCP', jA, tA)}
+    </div>
+    <div class="grid g2">
+      <div class="card"><div class="card-h"><h3>Viajes por transportista y unidad</h3><span class="muted small">mayor a menor · hoja RESUMEN 3</span></div>
+        ${pintarViajesUnidad(u)}</div>
+      <div class="grid" style="align-content:start">
+        <div class="card"><div class="card-h"><h3>Unidades por vuelta</h3><span class="muted small">unidades que llegaron a cada vuelta</span></div>
+          <div class="chart-box md"><canvas id="ch-vueltas"></canvas></div>
+          <div class="table-wrap" style="margin-top:10px"><table class="trans">
+            <thead><tr><th># Vuelta</th>${[...u.distribucion].reverse().map((x) => `<th>${x.vueltas}ª</th>`).join('')}<th>Total</th></tr></thead>
+            <tbody><tr><td><strong>Unidades</strong></td>${[...u.distribucion].reverse().map((x) => `<td class="num" style="text-align:center">${x.cantidad}</td>`).join('')}<td class="num" style="text-align:center"><strong>${num(u.total_viajes, 0)}</strong></td></tr></tbody>
+          </table></div></div>
+        <div class="card"><div class="card-h"><h3>Participación por transportista</h3><span class="muted small">viajes realizados</span></div>
+          <div class="chart-box sm"><canvas id="ch-part"></canvas></div></div>
+      </div>
+    </div>
+    <div class="grid g21">
+      <div class="card"><div class="card-h"><h3>Tiempo de atención en puerto</h3><span class="muted small">por día de recepción (salida del puerto)</span></div>
+        <div class="chart-box sm"><canvas id="ch-tiempos"></canvas></div>
+        ${tabla([
+          { t: 'Día', f: (x) => fecha(x.dia) }, ...R.map((r, i) => ({ t: r, k: r, n: 1, d: 0, bar: true, color: ['#10b981', '#f59e0b', '#ef4444'][i] })), { t: 'Total viajes', k: 'total', n: 1, d: 0 },
+        ], d.tiempos, { foot: ['Total', ...R.map((r) => num(tt[r] || 0, 0)), num(tt.total || 0, 0)] })}</div>
+      <div class="card"><div class="card-h"><h3>Distribución de atención</h3><span class="muted small">total de la operación</span></div>
+        <div class="chart-box md"><canvas id="ch-rangos"></canvas></div>
+        ${fichas(R.map((r, i) => ({ l: r, v: num(tt[r] || 0, 0), s: tt.total ? `${num(((tt[r] || 0) / tt.total) * 100, 1)} % de los viajes` : '', k: ['#10b981', '#f59e0b', '#ef4444'][i] })), { min: 120 })}</div>
+    </div>`;
   const c = colores();
-  const dist = [...d.unidades.distribucion].sort((a, b) => a.vueltas - b.vueltas);
+  const jChart = (id, fs) => chart($(`#${id}`), {
+    type: 'bar',
+    data: { labels: fs.map((x) => `${fecha(x.fecha).slice(0, 5)} ${x.jornada.slice(0, 5)}`), datasets: [{ label: 'TN', data: fs.map((x) => x.tn), backgroundColor: fs.map((x) => JC[x.jornada] || c.serie[0]) }] },
+    options: { plugins: { legend: { display: false }, tooltip: { callbacks: { title: (it) => `${fecha(fs[it[0].dataIndex].fecha)} · ${fs[it[0].dataIndex].jornada}`, label: (x) => `${num(x.raw)} TN · ${fs[x.dataIndex].viajes} viajes` } } },
+      scales: { x: { ticks: { maxRotation: 0, autoSkip: true, font: { size: 10 } }, grid: { display: false } }, y: { beginAtZero: true } } },
+  });
+  jChart('ch-jd', jD); jChart('ch-ja', jA);
+  const dist = [...u.distribucion].sort((a, b) => a.vueltas - b.vueltas);
   chart($('#ch-vueltas'), {
     type: 'bar',
-    data: { labels: dist.map((x) => `${x.vueltas}ª`), datasets: [{ label: 'Unidades', data: dist.map((x) => x.cantidad), backgroundColor: c.serie[2], borderRadius: 4 }] },
-    options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } },
+    data: { labels: dist.map((x) => `${x.vueltas}ª`), datasets: [{ label: 'Unidades', data: dist.map((x) => x.cantidad), backgroundColor: c.serie[2] }] },
+    options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } }, x: { grid: { display: false } } } },
+  });
+  const gs = u.grupos || [];
+  chart($('#ch-part'), {
+    type: 'bar',
+    data: { labels: gs.map((g) => g.transportista), datasets: [{ label: 'Viajes', data: gs.map((g) => g.viajes), backgroundColor: gs.map((_, i) => c.serie[i % c.serie.length]) }] },
+    options: { indexAxis: 'y', plugins: { legend: { display: false }, tooltip: { callbacks: { label: (x) => `${x.raw} viajes · ${num((x.raw / (u.total_viajes || 1)) * 100, 1)} % · ${gs[x.dataIndex].unidades.length} unidades` } } }, scales: { x: { beginAtZero: true }, y: { grid: { display: false } } } },
+  });
+  chart($('#ch-tiempos'), {
+    type: 'bar',
+    data: { labels: d.tiempos.map((x) => fecha(x.dia)), datasets: R.map((r, i) => ({ label: r, data: d.tiempos.map((x) => x[r]), backgroundColor: [c.ok, c.warn, c.bad][i] })) },
+    options: { plugins: { legend: { position: 'bottom' } }, scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, beginAtZero: true } } },
+  });
+  chart($('#ch-rangos'), {
+    type: 'doughnut',
+    data: { labels: R, datasets: [{ data: R.map((r) => tt[r] || 0), backgroundColor: [c.ok, c.warn, c.bad], borderWidth: 0, hoverOffset: 8 }] },
+    options: { cutout: '68%', plugins: { legend: { position: 'bottom' } } },
   });
 }
 
@@ -489,9 +544,11 @@ export async function vResumenes(view) {
 function pintarViajesUnidad(u) {
   const grupos = u.grupos || [];
   if (!grupos.length) return '<div class="empty">Sin viajes</div>';
-  const filas = grupos.map((g) => `<tr class="grp"><td><strong>${esc(g.transportista)}</strong></td><td class="num"><strong>${num(g.unidades.length, 0)} und.</strong></td><td class="num"><strong>${num(g.viajes, 0)}</strong></td><td class="num"><strong>${num(g.tn)}</strong></td></tr>`
-    + g.unidades.map((x) => `<tr><td style="padding-left:22px">${esc(x.placa)}</td><td class="num">${x.conteo}</td><td class="num">${num(x.viajes, 0)}</td><td class="num">${num(x.tn)}</td></tr>`).join('')).join('');
-  return `<div class="table-wrap" style="max-height:640px"><table><thead><tr><th>Transporte / placa</th><th class="num">Conteo</th><th class="num"># Viajes</th><th class="num">TN</th></tr></thead>
+  const maxV = Math.max(1, ...grupos.flatMap((g) => g.unidades.map((x) => x.viajes)));
+  const COL = ['#2563eb', '#10b981', '#8b5cf6', '#f97316', '#06b6d4', '#ec4899', '#eab308', '#ef4444'];
+  const filas = grupos.map((g, gi) => `<tr class="grp"><td><strong>${esc(g.transportista)}</strong></td><td class="num"><strong>${num(g.unidades.length, 0)} und.</strong></td><td class="num"><strong>${num(g.viajes, 0)}</strong></td><td class="num"><strong>${num(g.tn)}</strong></td></tr>`
+    + g.unidades.map((x) => `<tr><td style="padding-left:22px">${esc(x.placa)}</td><td class="num">${x.conteo}</td><td class="num cbar"><div class="dbar" style="--w:${((x.viajes / maxV) * 100).toFixed(1)}%;--bc:${COL[gi % COL.length]}"><span>${num(x.viajes, 0)}</span></div></td><td class="num">${num(x.tn)}</td></tr>`).join('')).join('');
+  return `<div class="table-wrap" style="max-height:560px"><table><thead><tr><th>Transporte / placa</th><th class="num">Conteo</th><th class="num"># Viajes</th><th class="num">TN</th></tr></thead>
     <tbody>${filas}</tbody>
     <tfoot><tr><td>Total general · unidades activas</td><td class="num">${num(u.unidades_activas, 0)} und.</td><td class="num">${num(u.total_viajes, 0)}</td><td class="num">${num(grupos.reduce((a, g) => a + g.tn, 0))}</td></tr></tfoot></table></div>`;
 }
@@ -504,42 +561,53 @@ export async function vPlanificacion(view, ctx) {
   const edit = puedeEscribir();
   // Cuadro de viajes: con las unidades indicadas (por defecto, las unidades en lista)
   const rv = roundTripViajes(p.unidades_viajes ?? d.unidades_en_lista, p.round_trip_min);
-  view.innerHTML = `<div class="grid g2">
-    <div class="card"><h3>Tiempo estimado de acopio</h3><div class="table-wrap" style="margin-top:10px"><table><tbody>
-      <tr><td>TN total</td><td class="num">${num(p.tn_total)}</td></tr><tr><td>TN por unidad</td><td class="num">${num(p.tn_x_unidad)}</td></tr>
-      <tr><td>Viajes total</td><td class="num">${num(p.acopio.viajes_total, 0)}</td></tr><tr><td>Prom. viajes por hora</td><td class="num">${num(p.viajes_x_hora, 0)}</td></tr>
-      <tr><td>Horas total</td><td class="num">${horas(p.acopio.horas)}</td></tr><tr><td>Días</td><td class="num">${num(p.acopio.dias, 2)}</td></tr>
-      <tr><td>Jornadas por día</td><td class="num">${num(p.jornadas_x_dia, 0)}</td></tr>
-      <tr><td>Jornadas total</td><td class="num">${num(p.acopio.jornadas_total, 0)}</td></tr>
-      <tr><td>Inicio</td><td class="num">${fechaHora(p.acopio.inicio)}</td></tr><tr><td><strong>Término estimado</strong></td><td class="num"><strong>${fechaHora(p.acopio.termino)}</strong></td></tr>
-    </tbody></table></div></div>
-    <div class="card"><h3>Tiempo estimado de embarque</h3><div class="table-wrap" style="margin-top:10px"><table><tbody>
-      <tr><td>TN total</td><td class="num">${num(p.tn_total)}</td></tr><tr><td>TN por hora</td><td class="num">${num(p.tn_x_hora_embarque)}</td></tr>
-      <tr><td>Horas total</td><td class="num">${horas(p.embarque.horas)}</td></tr><tr><td>Días</td><td class="num">${num(p.embarque.dias, 2)}</td></tr>
-      <tr><td>Jornadas por día</td><td class="num">${num(p.jornadas_x_dia, 0)}</td></tr>
-      <tr><td>Jornadas total</td><td class="num">${num(p.embarque.jornadas_total, 0)}</td></tr>
-      <tr><td>Inicio</td><td class="num">${fechaHora(p.embarque.inicio)}</td></tr><tr><td><strong>Término estimado</strong></td><td class="num"><strong>${fechaHora(p.embarque.termino)}</strong></td></tr>
-    </tbody></table></div></div>
-    <div class="card"><h3>Round trip promedio de unidades</h3><div class="table-wrap" style="margin-top:10px"><table><tbody>
-      ${p.round_trip.map((x) => `<tr><td>${esc(x.etapa)}</td><td class="num">${horas((x.min || 0) / 60)}</td></tr>`).join('')}
-      <tr><td><strong>Total round trip</strong></td><td class="num"><strong>${horas(p.round_trip_min / 60)}</strong></td></tr>
-      <tr><td>Prom. viajes por hora</td><td class="num">${num(p.viajes_x_hora, 0)}</td></tr>
-      <tr><td>Unidades mínimas para el acopio</td><td class="num">${p.unidades_min}</td></tr>
-      <tr><td><strong>Unidades necesarias (+50 %)</strong></td><td class="num"><strong>${p.unidades_necesarias}</strong></td></tr>
-      <tr><td>Unidades en lista</td><td class="num">${d.unidades_en_lista}</td></tr>
-      <tr><td>Unidades participantes</td><td class="num">${d.totales.unidades_activas}</td></tr>
-    </tbody></table></div></div>
-    <div class="card"><h3>Round trip promedio de viajes</h3>
-      <p class="muted small" style="margin:4px 0 0">Con la cantidad de unidades disponibles, cuántos viajes por hora se logran con el round trip.</p>
-      <div class="table-wrap" style="margin-top:10px"><table><tbody>
-      ${p.round_trip.map((x) => `<tr><td>${esc(x.etapa)}</td><td class="num">${horas((x.min || 0) / 60)}</td></tr>`).join('')}
-      <tr><td><strong>Total round trip</strong></td><td class="num"><strong>${horas(p.round_trip_min / 60)}</strong></td></tr>
-      <tr><td><strong>Prom. viajes por hora</strong></td><td class="num"><strong>${num(rv.viajes_x_hora, 0)}</strong></td></tr>
-      <tr><td>Unidades mínimas para el acopio${p.unidades_viajes == null ? ' <span class="muted small">(unidades en lista)</span>' : ''}</td><td class="num">${num(rv.unidades, 0)}</td></tr>
-      <tr><td><strong>Unidades necesarias (+50 %)</strong></td><td class="num"><strong>${num(rv.necesarias, 0)}</strong></td></tr>
-      <tr><td>Unidades en lista</td><td class="num">${d.unidades_en_lista}</td></tr>
-      <tr><td>Unidades participantes</td><td class="num">${d.totales.unidades_activas}</td></tr>
-    </tbody></table></div></div>
+  const ETC = ['#2563eb', '#06b6d4', '#0ea5e9', '#8b5cf6', '#a855f7', '#f97316', '#f59e0b', '#ec4899', '#10b981'];
+  const rtTot = p.round_trip_min || 1;
+  view.innerHTML = `
+  <div class="kpis">
+    <div class="kpi"><div class="l">TN programadas</div><div class="v">${num(p.tn_total)}</div><div class="s">${num(p.tn_x_unidad)} TN por unidad</div></div>
+    <div class="kpi"><div class="l">Viajes estimados</div><div class="v">${num(p.acopio.viajes_total, 0)}</div><div class="s">${num(p.viajes_x_hora, 0)} viajes por hora</div></div>
+    <div class="kpi"><div class="l">Acopio estimado</div><div class="v">${horas(p.acopio.horas)} h</div><div class="s">${num(p.acopio.dias, 2)} días · ${num(p.acopio.jornadas_total, 0)} jornadas</div></div>
+    <div class="kpi"><div class="l">Término de acopio</div><div class="v" style="font-size:19px">${fechaHora(p.acopio.termino)}</div><div class="s">inicio ${fechaHora(p.acopio.inicio)}</div></div>
+    <div class="kpi"><div class="l">Embarque estimado</div><div class="v">${horas(p.embarque.horas)} h</div><div class="s">${num(p.tn_x_hora_embarque, 0)} TN por hora</div></div>
+    <div class="kpi"><div class="l">Round trip</div><div class="v">${horas(p.round_trip_min / 60)} h</div><div class="s">${p.round_trip.length} etapas</div></div>
+    <div class="kpi"><div class="l">Unidades necesarias</div><div class="v">${num(p.unidades_necesarias, 0)}</div><div class="s">${num(d.unidades_en_lista, 0)} en lista · ${num(d.totales.unidades_activas, 0)} participantes</div></div>
+  </div>
+  <div class="grid g2">
+    <div class="card"><div class="card-h"><h3>Tiempo estimado de acopio</h3><span class="muted small">puerto CSPCP</span></div>
+      ${fichas([
+        { l: 'TN total', v: num(p.tn_total) }, { l: 'TN por unidad', v: num(p.tn_x_unidad) }, { l: 'Viajes total', v: num(p.acopio.viajes_total, 0) },
+        { l: 'Prom. viajes por hora', v: num(p.viajes_x_hora, 0) }, { l: 'Horas total', v: horas(p.acopio.horas) }, { l: 'Días', v: num(p.acopio.dias, 2) },
+        { l: 'Jornadas por día', v: num(p.jornadas_x_dia, 0) }, { l: 'Jornadas total', v: num(p.acopio.jornadas_total, 0) },
+        { l: 'Inicio', v: fechaHora(p.acopio.inicio), k: '#10b981' }, { l: 'Término estimado', v: fechaHora(p.acopio.termino), fuerte: true, k: '#10b981' },
+      ], { min: 140 })}</div>
+    <div class="card"><div class="card-h"><h3>Tiempo estimado de embarque</h3><span class="muted small">a la nave</span></div>
+      ${fichas([
+        { l: 'TN total', v: num(p.tn_total) }, { l: 'TN por hora', v: num(p.tn_x_hora_embarque) }, { l: 'Horas total', v: horas(p.embarque.horas) },
+        { l: 'Días', v: num(p.embarque.dias, 2) }, { l: 'Jornadas por día', v: num(p.jornadas_x_dia, 0) }, { l: 'Jornadas total', v: num(p.embarque.jornadas_total, 0) },
+        { l: 'Inicio', v: fechaHora(p.embarque.inicio), k: '#8b5cf6' }, { l: 'Término estimado', v: fechaHora(p.embarque.termino), fuerte: true, k: '#8b5cf6' },
+      ], { min: 140 })}</div>
+  </div>
+  <div class="card"><div class="card-h"><h3>Round trip promedio</h3><span class="muted small">Total ${horas(p.round_trip_min / 60)} h · Salinas Huacho ⇄ Puerto CSPCP</span></div>
+    <div class="rt-linea" role="img" aria-label="Etapas del round trip">${p.round_trip.map((x, i) => `<i style="flex:${Math.max(0.001, (x.min || 0) / rtTot)};background:${ETC[i % ETC.length]};animation-delay:${i * 60}ms" title="${esc(x.etapa)}: ${horas((x.min || 0) / 60)}">${(x.min || 0) / rtTot > 0.08 ? horas((x.min || 0) / 60) : ''}</i>`).join('')}</div>
+    <div class="rt-leyenda">${p.round_trip.map((x, i) => `<span style="--k:${ETC[i % ETC.length]}">${esc(x.etapa)}<b>${horas((x.min || 0) / 60)}</b></span>`).join('')}</div>
+    <div class="grid g2" style="margin-top:14px">
+      <div><h3 style="margin-bottom:8px">Round trip promedio de unidades</h3>
+        <p class="card-sub" style="margin:0 0 8px">Con los viajes por hora planificados, cuántas unidades se necesitan.</p>
+        ${fichas([
+          { l: 'Prom. viajes por hora', v: num(p.viajes_x_hora, 0), k: '#2563eb' }, { l: 'Unidades mínimas para el acopio', v: num(p.unidades_min, 0), k: '#2563eb' },
+          { l: 'Unidades necesarias (+50 %)', v: num(p.unidades_necesarias, 0), fuerte: true, k: '#2563eb' },
+          { l: 'Unidades en lista', v: num(d.unidades_en_lista, 0) }, { l: 'Unidades participantes', v: num(d.totales.unidades_activas, 0) },
+        ], { min: 150 })}</div>
+      <div><h3 style="margin-bottom:8px">Round trip promedio de viajes</h3>
+        <p class="card-sub" style="margin:0 0 8px">Con las unidades disponibles, cuántos viajes por hora se logran.</p>
+        ${fichas([
+          { l: `Unidades mínimas para el acopio${p.unidades_viajes == null ? ' (en lista)' : ''}`, v: num(rv.unidades, 0), k: '#f97316' },
+          { l: 'Prom. viajes por hora', v: num(rv.viajes_x_hora, 0), fuerte: true, k: '#f97316' },
+          { l: 'Unidades necesarias (+50 %)', v: num(rv.necesarias, 0), fuerte: true, k: '#f97316' },
+          { l: 'Unidades en lista', v: num(d.unidades_en_lista, 0) }, { l: 'Unidades participantes', v: num(d.totales.unidades_activas, 0) },
+        ], { min: 150 })}</div>
+    </div>
   </div>
   ${edit ? `<div class="card"><div class="card-h"><h3>Parámetros de planificación</h3></div>
     <form id="f-par" class="form">

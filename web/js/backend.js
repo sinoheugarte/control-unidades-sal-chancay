@@ -133,8 +133,11 @@ const ADMIN = () => exige('admin');
 async function datosOp(id) {
   const D = await leer(await opFile(id));
   if (!D?.operacion) throw err(404, 'Operación no encontrada');
+  // La fila "Total" de la hoja LISTA del Excel se importaba como unidad (tracto numérico, sin conductor)
+  if (D.unidades?.some(esFilaTotal)) D.unidades = D.unidades.filter((u) => !esFilaTotal(u));
   return D;
 }
+const esFilaTotal = (u) => /^\d+$/.test(String(u.tracto || '')) && !u.dni && !u.ap_paterno && !u.nombre1;
 function nombreT(T, id) { return T.find((t) => t.id === id)?.nombre_comercial ?? null; }
 /**
  * Viajes del REPORTE HUACHO (con guía, sin N° de reporte fijado a mano): el día y la jornada de despacho salen de la
