@@ -450,6 +450,10 @@ function resumenTiempos(vs) {
 }
 
 /** Planificación previa (hoja PREACOPIO). */
+/** Nombres de las etapas del round trip: Otuma → Salinas Huacho; Puerto → Puerto CSPCP. */
+function nombreEtapa(s) {
+  return String(s || '').replace(/\bOtuma\b/gi, 'Salinas Huacho').replace(/\bPuerto\b(?!\s+CSPCP)/gi, 'Puerto CSPCP');
+}
 function preacopio(op) {
   let p = {};
   try { p = typeof op.params === 'string' ? JSON.parse(op.params || '{}') : (op.params || {}); } catch { p = {}; }
@@ -461,11 +465,11 @@ function preacopio(op) {
   const viajesTotal = Math.ceil(tn / tnUnidad);
   const hrsAcopio = roundUp(viajesTotal / vph, 2);
   const hrsEmb = roundUp(tn / tph, 2);
-  const roundTrip = Array.isArray(p.round_trip) && p.round_trip.length ? p.round_trip : [
+  const roundTrip = (Array.isArray(p.round_trip) && p.round_trip.length ? p.round_trip : [
     { etapa: 'Ingreso a Puerto', min: 4 }, { etapa: 'Descarga', min: 3 }, { etapa: 'Salida de Puerto', min: 4 },
     { etapa: 'Viaje a Otuma', min: 70 }, { etapa: 'Ingreso a Otuma', min: 5 }, { etapa: 'Carga en Otuma', min: 10 },
     { etapa: 'Salida Otuma', min: 10 }, { etapa: 'Viaje a Puerto', min: 70 }, { etapa: 'Ingreso a Puerto', min: 4 },
-  ];
+  ]).map((x) => ({ ...x, etapa: nombreEtapa(x.etapa) }));
   const rtMin = roundTrip.reduce((s, x) => s + (Number(x.min) || 0), 0);
   const unidMin = Math.ceil((rtMin / 60) * vph);
   const ini = toMs(p.inicio_acopio), iniE = toMs(p.inicio_embarque);

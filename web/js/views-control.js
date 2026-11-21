@@ -505,14 +505,16 @@ export async function vPlanificacion(view, ctx) {
   view.innerHTML = `<div class="grid g3">
     <div class="card"><h3>Tiempo estimado de acopio</h3><div class="table-wrap" style="margin-top:10px"><table><tbody>
       <tr><td>TN total</td><td class="num">${num(p.tn_total)}</td></tr><tr><td>TN por unidad</td><td class="num">${num(p.tn_x_unidad)}</td></tr>
-      <tr><td>Viajes total</td><td class="num">${num(p.acopio.viajes_total, 0)}</td></tr><tr><td>Prom. viajes por hora</td><td class="num">${num(p.viajes_x_hora, 2)}</td></tr>
+      <tr><td>Viajes total</td><td class="num">${num(p.acopio.viajes_total, 0)}</td></tr><tr><td>Prom. viajes por hora</td><td class="num">${num(p.viajes_x_hora, 0)}</td></tr>
       <tr><td>Horas total</td><td class="num">${horas(p.acopio.horas)}</td></tr><tr><td>Días</td><td class="num">${num(p.acopio.dias, 2)}</td></tr>
+      <tr><td>Jornadas por día</td><td class="num">${num(p.jornadas_x_dia, 0)}</td></tr>
       <tr><td>Jornadas total</td><td class="num">${num(p.acopio.jornadas_total, 0)}</td></tr>
       <tr><td>Inicio</td><td class="num">${fechaHora(p.acopio.inicio)}</td></tr><tr><td><strong>Término estimado</strong></td><td class="num"><strong>${fechaHora(p.acopio.termino)}</strong></td></tr>
     </tbody></table></div></div>
     <div class="card"><h3>Tiempo estimado de embarque</h3><div class="table-wrap" style="margin-top:10px"><table><tbody>
       <tr><td>TN total</td><td class="num">${num(p.tn_total)}</td></tr><tr><td>TN por hora</td><td class="num">${num(p.tn_x_hora_embarque)}</td></tr>
       <tr><td>Horas total</td><td class="num">${horas(p.embarque.horas)}</td></tr><tr><td>Días</td><td class="num">${num(p.embarque.dias, 2)}</td></tr>
+      <tr><td>Jornadas por día</td><td class="num">${num(p.jornadas_x_dia, 0)}</td></tr>
       <tr><td>Jornadas total</td><td class="num">${num(p.embarque.jornadas_total, 0)}</td></tr>
       <tr><td>Inicio</td><td class="num">${fechaHora(p.embarque.inicio)}</td></tr><tr><td><strong>Término estimado</strong></td><td class="num"><strong>${fechaHora(p.embarque.termino)}</strong></td></tr>
     </tbody></table></div></div>
@@ -528,7 +530,7 @@ export async function vPlanificacion(view, ctx) {
   ${edit ? `<div class="card"><div class="card-h"><h3>Parámetros de planificación</h3></div>
     <form id="f-par" class="form">
       <label>TN por unidad<input name="tn_x_unidad" type="number" step="0.1" value="${p.tn_x_unidad}"></label>
-      <label>Prom. viajes por hora<input name="viajes_x_hora" type="number" step="0.1" value="${p.viajes_x_hora}"></label>
+      <label>Prom. viajes por hora<input name="viajes_x_hora" type="number" step="1" min="1" value="${p.viajes_x_hora}"></label>
       <label>Jornadas por día<input name="jornadas_x_dia" type="number" min="1" value="${p.jornadas_x_dia}"></label>
       <label>TN por hora (embarque)<input name="tn_x_hora_embarque" type="number" value="${p.tn_x_hora_embarque}"></label>
       <label>Inicio acopio<input name="inicio_acopio" type="datetime-local" value="${toInputDT(p.acopio.inicio)}"></label>
