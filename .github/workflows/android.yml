@@ -1,0 +1,75 @@
+name: App Android (APK)
+
+# Compila la app nativa de Android (Capacitor) y publica el instalador en "Releases".
+on:
+  push:
+    branches: [main]
+    paths: ['movil/**', '.github/workflows/android.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Dependencias y sincronización de Capacitor
+        working-directory: movil
+        run: |
+          npm ci
+          npx cap sync android
+      - name: Llave de firma (si está configurada en los secretos)
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KS_B64" ]; then echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/control-sal.jks"; echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/control-sal.jks" >> "$GITHUB_ENV"; echo "FIRMADA=si" >> "$GITHUB_ENV"; else echo "FIRMADA=no" >> "$GITHUB_ENV"; fi
+      - name: Compilar APK y AAB
+        working-directory: movil/android
+        env:
+          VERSION_CODE: ${{ github.run_number }}
+          VERSION_NAME: 1.0.${{ github.run_number }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          chmod +x gradlew
+          if [ "$FIRMADA" = "si" ]; then
+            ./gradlew --no-daemon assembleRelease bundleRelease
+            cp app/build/outputs/apk/release/app-release.apk ../../ControlSal.apk
+            cp app/build/outputs/bundle/release/app-release.aab ../../ControlSal-GooglePlay.aab
+          else
+            ./gradlew --no-daemon assembleDebug
+            cp app/build/outputs/apk/debug/app-debug.apk ../../ControlSal.apk
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ControlSal-android
+          path: |
+            ControlSal.apk
+            ControlSal-GooglePlay.aab
+          if-no-files-found: ignore
+      - name: Publicar en Releases (enlace fijo para descargar en el teléfono)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NOTAS="App Control Sal para Android · versión 1.0.${{ github.run_number }} · firma: $FIRMADA. Descargue ControlSal.apk en el teléfono e instálelo."
+          ARCH="ControlSal.apk"; [ -f ControlSal-GooglePlay.aab ] && ARCH="$ARCH ControlSal-GooglePlay.aab"
+          if gh release view android --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit android --repo "$GITHUB_REPOSITORY" --notes "$NOTAS" --title "App Android · Control Sal"
+            gh release upload android $ARCH --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create android $ARCH --repo "$GITHUB_REPOSITORY" --title "App Android · Control Sal" --notes "$NOTAS" --target "$GITHUB_SHA"
+          fi

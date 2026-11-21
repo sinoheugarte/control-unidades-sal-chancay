@@ -316,7 +316,7 @@ activarFechaHora24(document.body);
 /* ---------- App instalable (PWA) ---------- */
 if ('serviceWorker' in navigator && !'__V__'.includes('_V_')) navigator.serviceWorker.register('sw.js').catch(() => { /* sin soporte */ });
 let avisoInstalar = null;
-const instalada = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const instalada = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true || !!window.Capacitor?.isNativePlatform?.();
 const esIOS = () => /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); avisoInstalar = e; document.querySelectorAll('.b-instalar').forEach((b) => { b.hidden = false; }); });
 window.addEventListener('appinstalled', () => { avisoInstalar = null; document.querySelectorAll('.b-instalar').forEach((b) => { b.hidden = true; }); toast('Aplicación instalada. Ábrala desde el ícono "Control Sal".'); });

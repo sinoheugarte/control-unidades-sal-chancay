@@ -1,0 +1,43 @@
+{
+  "appId": "pe.pacificodespachos.controlsal",
+  "appName": "Control Sal",
+  "webDir": "www",
+  "server": {
+    "url": "https://sinoheugarte.github.io/control-unidades-sal-chancay/",
+    "cleartext": false,
+    "allowNavigation": [
+      "sinoheugarte.github.io",
+      "login.microsoftonline.com",
+      "*.microsoftonline.com",
+      "login.live.com",
+      "*.msauth.net",
+      "*.msftauth.net",
+      "aadcdn.msftauth.net",
+      "graph.microsoft.com",
+      "*.sharepoint.com",
+      "fonts.googleapis.com",
+      "fonts.gstatic.com"
+    ]
+  },
+  "android": {
+    "backgroundColor": "#050b18",
+    "allowMixedContent": false
+  },
+  "ios": {
+    "backgroundColor": "#050b18",
+    "contentInset": "always"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 1200,
+      "backgroundColor": "#050b18",
+      "showSpinner": false,
+      "androidScaleType": "CENTER_CROP"
+    },
+    "StatusBar": {
+      "style": "DARK",
+      "backgroundColor": "#0b1424",
+      "overlaysWebView": false
+    }
+  }
+}

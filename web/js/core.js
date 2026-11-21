@@ -150,8 +150,20 @@ export function sinOperacion() {
     <a class="btn primary" href="#/operaciones">Ir a Operaciones</a></div>`;
 }
 
+/** ¿Corre dentro de la app nativa (Android / iOS, Capacitor)? */
+export const esNativa = () => !!window.Capacitor?.isNativePlatform?.();
+const aBase64 = (blob) => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1]); r.onerror = rej; r.readAsDataURL(blob); });
+/** App nativa: guarda el archivo en el teléfono y abre el menú para abrirlo (Excel, PDF…) o compartirlo. */
+async function guardarNativo(blob, nombre) {
+  const { Filesystem, Share } = window.Capacitor.Plugins;
+  const seguro = String(nombre).replace(/[\\/:*?"<>|]+/g, '-');
+  const r = await Filesystem.writeFile({ path: seguro, data: await aBase64(blob), directory: 'CACHE' });
+  try { await Share.share({ title: seguro, url: r.uri, dialogTitle: 'Abrir o compartir el archivo' }); } catch { /* el usuario cerró el menú */ }
+}
+
 /** Descarga un Blob generado en el navegador. */
 export function descargarBlob(blob, nombre) {
+  if (esNativa()) { guardarNativo(blob, nombre).catch((e) => toast(`No se pudo guardar el archivo: ${e.message}`, true)); return; }
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = nombre;
   document.body.appendChild(a); a.click(); a.remove();
@@ -163,10 +175,7 @@ export async function descargar(url) {
   try {
     toast('Generando archivo…');
     const { blob, nombre } = await request(url.replace(/^\/api/, ''));
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob); a.download = nombre;
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+    descargarBlob(blob, nombre);
   } catch (e) { toast(e.message, true); }
 }
 

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Control Sal</string>
+    <string name="title_activity_main">Control Sal</string>
+    <string name="package_name">pe.pacificodespachos.controlsal</string>
+    <string name="custom_url_scheme">pe.pacificodespachos.controlsal</string>
+</resources>
