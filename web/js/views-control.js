@@ -261,7 +261,7 @@ export async function vTransportistas(view, ctx) {
     })}</div>
   <div class="card"><div class="card-h"><div><h2>Detallado por vueltas (TN)</h2>
       <p class="muted small" style="margin:4px 0 0">Calculado hasta completar las <strong>${num(tab.operacion?.tn_programadas)} TN programadas</strong>: cada vuelta = unidades solicitadas × TN prom. por unidad (acumulado);
-      en la última vuelta, de más a menos unidades, cada transportista que cabe completo en lo que falta suma su vuelta entera y el saldo lo completa el de más unidades entre los que no cupieron.
+      en la última vuelta, de más a menos unidades, cada transportista suma lo que falta (hasta su vuelta completa) y, cubierto lo programado, los siguientes ya no hacen esa vuelta.
       TOTAL TN = "Total aprox. TN". Las vueltas en <strong>negrita</strong> fueron fijadas a mano.</p></div></div>
     ${tabla([
       { t: 'Razón social', f: (x) => `<strong>${esc(x.razon_social)}</strong>` },

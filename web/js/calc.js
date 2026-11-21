@@ -275,8 +275,8 @@ function vueltasPlan(p) {
  * Vueltas hasta completar las TN programadas de la operación, repartidas entre los transportistas:
  *  - Capacidad por vuelta de cada empresa = unidades solicitadas × TN prom. por unidad.
  *  - Se completan las vueltas que caben en las TN programadas (cada vuelta suma la capacidad de todas).
- *  - Última vuelta: de más a menos unidades, quien cabe completo en lo que falta suma su vuelta entera;
- *    el saldo lo completa el de más unidades entre los que no cupieron (así el total es exacto).
+ *  - Última vuelta: de más a menos unidades, cada transportista suma lo que falta (hasta su vuelta completa);
+ *    cubierto lo programado, los siguientes ya no hacen esa vuelta (así el total es exacto).
  *  - Cada columna de vuelta es acumulada (como en el Excel) y TOTAL TN = valor de la última vuelta.
  * Las empresas con vueltas escritas a mano conservan sus valores y se descuentan de lo programado.
  * Devuelve Map(transportista_id → { vueltas, total, viajes }).
@@ -299,18 +299,18 @@ function planVueltas(participantes, tnProgramadas) {
   let k = Math.floor((prog + 1e-9) / C);
   let R = r3(prog - k * C);
   if (R < 0.0005) R = 0;
-  // Última vuelta (lógica del Excel): de más a menos unidades, cada transportista que cabe completo en lo que
-  // falta suma su vuelta entera; el saldo lo completa el de más unidades entre los que no cupieron.
+  // Última vuelta: en orden de más a menos unidades, cada transportista suma lo que falta para completar lo
+  // programado (como máximo su vuelta completa); cuando se cubre, los siguientes ya no hacen esa vuelta.
   const ult = new Map(auto.map((p) => [p.transportista_id, { tn: 0 }]));
   if (R > 0) {
     const orden = auto.filter((p) => cap(p) > 0)
       .sort((a, b) => (b.unidades_solicitadas || 0) - (a.unidades_solicitadas || 0) || cap(b) - cap(a));
-    let falta = R, saldo = null;
+    let falta = R;
     for (const p of orden) {
-      if (cap(p) <= falta + 1e-9) { ult.get(p.transportista_id).tn = cap(p); falta = r3(falta - cap(p)); }
-      else if (!saldo) saldo = p;
+      if (falta <= 0) break;
+      const tn = Math.min(cap(p), falta);
+      ult.get(p.transportista_id).tn = r3(tn); falta = r3(falta - tn);
     }
-    if (falta > 0) ult.get((saldo || orden[0]).transportista_id).tn = r3(ult.get((saldo || orden[0]).transportista_id).tn + falta);
   }
   const nV = k + (R > 0 ? 1 : 0);
   for (const p of auto) {
