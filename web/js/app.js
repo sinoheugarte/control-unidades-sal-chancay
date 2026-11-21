@@ -232,7 +232,7 @@ async function capturarPantallas(keys) {
       view.innerHTML = '';
       try { await RUTAS[k].v(view, { rerender: () => {} }); } catch (e) { view.innerHTML = `<div class="alert bad">${esc(e.message)}</div>`; }
       await espera(450);
-      secciones.push({ titulo: RUTAS[k].t, html: fragmentoDe(view) });
+      secciones.push({ titulo: RUTAS[k].t, html: fragmentoDe(view), ico: ICON[k], c: COLOR[k] });
     }
   } finally {
     if (window.Chart) Chart.defaults.animation = animAntes;

@@ -33,7 +33,8 @@ export function fragmentoDe(el) {
     img.style.cssText = 'width:100%;height:100%;object-fit:contain';
     c.replaceWith(img);
   });
-  // Fuera: controles, barras de filtros, filas ocultas por el filtro
+  // Fuera: formularios de edición (p. ej. parámetros), controles, barras de filtros, filas ocultas por el filtro
+  copia.querySelectorAll('form').forEach((f) => { const c = f.closest('.card'); (c && c !== copia ? c : f).remove(); });
   copia.querySelectorAll('button, .btn, .tbar, tr.tfil, .no-print, input[type=file], dialog, [data-fx]').forEach((x) => x.remove());
   copia.querySelectorAll('tr[hidden]').forEach((x) => x.remove());
   // Controles: sólo se muestran los filtros que están aplicados
@@ -68,13 +69,25 @@ html,body{overflow-x:auto}body{padding:0;min-width:0}.rep{max-width:none;margin:
 .chart-box img{display:block}.rep-h{display:flex;align-items:center;gap:14px;margin-bottom:16px;padding:16px 18px;border-radius:16px;background:var(--grad);color:#fff;box-shadow:var(--shadow-lg)}
 .rep-h h1{font-size:20px}.rep-h small{display:block;opacity:.85;font-weight:500}.rep-f{margin-top:18px;color:var(--muted);font-size:12px;text-align:center}
 .content{padding:0}.content>*,.dbar::before,.bar>i{animation:none!important}
-.rep-nav{position:sticky;top:0;z-index:20;display:flex;flex-wrap:wrap;gap:6px;padding:8px;margin:0 0 14px;border-radius:14px;background:color-mix(in srgb,var(--surface) 85%,transparent);backdrop-filter:blur(12px);box-shadow:var(--shadow)}
-.rep-nav a{padding:6px 12px;border-radius:9px;font-weight:650;font-size:12.5px;text-decoration:none;color:var(--text);background:var(--surface-2)}
-.rep-nav a:hover{background:var(--primary-soft);color:var(--primary)}
-.rep-sec{scroll-margin-top:70px;margin-bottom:26px}.rep-st{font-size:17px;margin:4px 0 12px;padding-left:10px;border-left:4px solid var(--primary)}</style></head>
+.rep-sec{margin-bottom:26px}.rep-st{font-size:17px;margin:4px 0 12px;padding-left:10px;border-left:4px solid var(--c,var(--primary));display:flex;align-items:center;gap:10px}
+/* Varias pestañas: menú lateral; se muestra sólo la pestaña elegida (sin scripts, con :target) */
+.rep-cuerpo{display:grid;grid-template-columns:236px minmax(0,1fr);gap:18px;align-items:start}
+.rep-lat{position:sticky;top:12px;display:grid;gap:4px;padding:10px;border-radius:16px;background:linear-gradient(180deg,var(--side-2),var(--side));box-shadow:var(--shadow-lg)}
+.rep-lat .sep{margin:2px 8px 6px;font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--side-ink);opacity:.6}
+.rep-lat a{display:flex;align-items:center;gap:11px;padding:7px 10px;border-radius:11px;color:var(--side-ink);text-decoration:none;font-weight:600;position:relative}
+.rep-lat a:hover{background:var(--side-active);color:#fff}
+.rep-lat .ico,.rep-st .ico{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;flex:none;color:#fff;background:linear-gradient(145deg,var(--c),color-mix(in srgb,var(--c) 75%,#000));box-shadow:0 4px 10px -3px color-mix(in srgb,var(--c) 70%,transparent)}
+.rep-lat .ico svg,.rep-st .ico svg{width:17px;height:17px}
+.rep-tabs .rep-sec{display:none}.rep-tabs .rep-sec:target{display:block}
+.rep-tabs:not(:has(.rep-sec:target)) .rep-sec:first-of-type{display:block}
+@media(max-width:900px){.rep-cuerpo{grid-template-columns:1fr}.rep-lat{position:static;grid-template-columns:repeat(auto-fill,minmax(170px,1fr))}}
+@media print{.rep-lat{display:none}.rep-cuerpo{display:block}.rep-tabs .rep-sec{display:block!important}}
+${secciones.length > 1 ? secciones.map((x, i) => `.rep-cuerpo:has(#s${i + 1}:target) .rep-lat a[href="#s${i + 1}"]${i === 0 ? `,.rep-cuerpo:not(:has(.rep-sec:target)) .rep-lat a[href="#s1"]` : ''}{background:var(--side-active);color:#fff;box-shadow:inset 3px 0 0 var(--c)}`).join('\n') : ''}</style></head>
 <body><div class="rep"><div class="rep-h"><div><h1>${esc(titulo)}</h1><small>${esc(empresa)}${opNombre() ? ` · ${esc(opNombre())}` : ''} · Generado ${ahora()}</small></div></div>
-${secciones.length > 1 ? `<nav class="rep-nav">${secciones.map((x, i) => `<a href="#s${i + 1}">${esc(x.titulo)}</a>`).join('')}</nav>` : ''}
-${secciones.map((x, i) => `<section id="s${i + 1}" class="rep-sec">${secciones.length > 1 ? `<h2 class="rep-st">${esc(x.titulo)}</h2>` : ''}<div class="content">${x.html}</div></section>`).join('')}
+${secciones.length > 1 ? `<div class="rep-cuerpo">
+  <nav class="rep-lat" aria-label="Pestañas compartidas"><div class="sep">Pestañas compartidas</div>${secciones.map((x, i) => `<a href="#s${i + 1}" style="--c:${x.c || '#2563eb'}"><span class="ico">${x.ico || ''}</span><span>${esc(x.titulo)}</span></a>`).join('')}</nav>
+  <div class="rep-tabs">${secciones.map((x, i) => `<section id="s${i + 1}" class="rep-sec" style="--c:${x.c || '#2563eb'}"><h2 class="rep-st"><span class="ico">${x.ico || ''}</span>${esc(x.titulo)}</h2><div class="content">${x.html}</div></section>`).join('')}</div>
+</div>` : secciones.map((x) => `<section class="rep-sec"><div class="content">${x.html}</div></section>`).join('')}
 <div class="rep-f">Control de Unidades · Despacho · Acopio · Embarque — reporte de solo lectura</div></div></body></html>`;
   return new Blob([html], { type: 'text/html;charset=utf-8' });
 }
@@ -183,8 +196,11 @@ export async function vVer(view) {
       <div class="btns"><button class="btn sm fx" id="v-desc" data-fx="html">${ICO.html}Descargar HTML</button>
       <button class="btn sm" id="v-nueva">Abrir en otra pestaña</button>${webUrl ? `<a class="btn sm" href="${esc(webUrl)}" target="_blank" rel="noopener">SharePoint</a>` : ''}</div></div>
     <iframe id="v-frame" title="${esc(nombre)}" sandbox="allow-same-origin allow-popups" style="display:block;width:100%;height:calc(100vh - 150px);border:0;background:var(--bg)"></iframe></div>`;
-  view.querySelector('#v-frame').srcdoc = texto;
   const blob = () => new Blob([texto], { type: 'text/html;charset=utf-8' });
+  // Como documento propio (blob) para que el menú lateral del reporte cambie de pestaña dentro del visor
+  const u = URL.createObjectURL(blob());
+  view.querySelector('#v-frame').src = u;
+  window.addEventListener('hashchange', () => URL.revokeObjectURL(u), { once: true });
   view.querySelector('#v-desc').onclick = () => descargarBlob(blob(), `${nombre}.html`);
   view.querySelector('#v-nueva').onclick = () => { const u = URL.createObjectURL(blob()); window.open(u, '_blank', 'noopener'); setTimeout(() => URL.revokeObjectURL(u), 60000); };
 }
