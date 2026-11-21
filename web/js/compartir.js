@@ -194,7 +194,7 @@ export async function vVer(view) {
     <div class="card-h" style="padding:12px 16px;margin:0;border-bottom:1px solid var(--border)">
       <div><h2>${esc(nombre)}</h2><div class="muted small">Reporte compartido · solo lectura</div></div>
       <div class="btns"><button class="btn sm fx" id="v-desc" data-fx="html">${ICO.html}Descargar HTML</button>
-      <button class="btn sm" id="v-nueva">Abrir en otra pestaña</button>${webUrl ? `<a class="btn sm" href="${esc(webUrl)}" target="_blank" rel="noopener">SharePoint</a>` : ''}</div></div>
+      <button class="btn sm" id="v-nueva">Abrir en otra pestaña</button>${webUrl && state.user?.rol !== 'invitado' ? `<a class="btn sm" href="${esc(webUrl)}" target="_blank" rel="noopener">SharePoint</a>` : ''}</div></div>
     <iframe id="v-frame" title="${esc(nombre)}" sandbox="allow-same-origin allow-popups" style="display:block;width:100%;height:calc(100vh - 150px);border:0;background:var(--bg)"></iframe></div>`;
   const blob = () => new Blob([texto], { type: 'text/html;charset=utf-8' });
   // Como documento propio (blob) para que el menú lateral del reporte cambie de pestaña dentro del visor
