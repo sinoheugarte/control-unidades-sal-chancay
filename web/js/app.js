@@ -205,6 +205,10 @@ function shell(root, ruta) {
     title: 'Mi cuenta',
     body: `<p><strong>${esc(state.user.nombre)}</strong><br><span class="muted">${esc(state.user.email)}</span></p>
       <p>Rol en la aplicación: <span class="pill info">${esc(state.user.rol)}</span></p>
+      ${esInvitado() ? `<div class="alert" style="margin-bottom:10px">Esta cuenta <strong>no está registrada</strong> como usuario: sólo puede ver reportes compartidos.
+        Si debería ver las operaciones, verifique que ingresó con la misma cuenta que en su PC o pida a un administrador que la registre en <em>Usuarios</em>.</div>` : ''}
+      ${esTransp() || esInvitado() ? '' : `<p class="small muted" style="margin:0 0 10px">Operaciones visibles: <strong>${state.ops.length}</strong> ·
+        Datos en <strong>${esc(G.getCfg().spSite.replace(/^https:\/\//, ''))}</strong> / ${esc(G.getCfg().carpeta)} · Versión ${esc(VERSION_APP)}</p>`}
       ${state.user.transportista ? `<p>Empresa: <strong>${esc(state.user.transportista.razon_social)}</strong> · RUC ${esc(state.user.transportista.ruc)}</p>
         <p class="muted small">Usted sólo ve los viajes y unidades de su empresa.</p>`
         : `<p class="muted small">Los datos se guardan en SharePoint: <a href="${esc(await G.urlCarpeta())}" target="_blank" rel="noopener">abrir carpeta</a>.</p>`}`,
