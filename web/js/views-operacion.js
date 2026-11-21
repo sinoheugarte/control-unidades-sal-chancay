@@ -19,6 +19,7 @@ export async function vTablero(view) {
       <button class="btn sm" id="b-print">Imprimir</button>
       <button class="btn sm" id="b-xls">Exportar detalle</button>
       ${puedeEscribir() ? `<button class="btn sm ${op.estado === 'FINALIZADA' ? '' : 'primary'}" id="b-fin">${op.estado === 'FINALIZADA' ? 'Regenerar presentación / reenviar' : 'Finalizar operación'}</button>` : ''}
+      ${op.estado === 'FINALIZADA' && puedeEscribir() ? '<button class="btn sm primary" id="b-informe">✨ Informe para el cliente</button>' : ''}
       ${op.estado === 'FINALIZADA' && esAdmin() ? '<button class="btn sm" id="b-reabrir">Reabrir</button>' : ''}</div></div>
       ${op.estado === 'FINALIZADA' ? `<div class="alert ok" style="margin-top:6px">Finalizada ${op.finalizada_en ? `el ${fechaHora(op.finalizada_en)}` : ''}${op.finalizada_por ? ` por ${esc(op.finalizada_por)}` : ''}.
         ${op.presentacion ? `Presentación: ${[['pptx', 'PowerPoint'], ['html', 'HTML'], ['video', 'Video']].filter(([k]) => op.presentacion[k]).map(([k, l]) => `<a href="${esc(op.presentacion[k])}" target="_blank" rel="noopener">${l}</a>`).join(' · ')}` : ''}
@@ -53,6 +54,10 @@ export async function vTablero(view) {
 
   $('#b-print').onclick = () => print();
   $('#b-fin')?.addEventListener('click', async () => { const { abrirFinalizar } = await import('./finalizar.js?v=__V__'); abrirFinalizar(op, () => { window.dispatchEvent(new CustomEvent('app:ops', { detail: { id: op.id } })); }); });
+  $('#b-informe')?.addEventListener('click', async (e) => {
+    const b = e.currentTarget; b.disabled = true; toast('Preparando el análisis de la operación…');
+    try { const { abrirInforme } = await import('./informe-ui.js?v=__V__'); await abrirInforme(op); } catch (err) { toast(err.message, true); } finally { b.disabled = false; }
+  });
   $('#b-reabrir')?.addEventListener('click', async () => {
     if (!(await confirmar(`¿Reabrir la operación ${op.nave} · Orden ${op.orden}? Volverá a estado EN CURSO.`))) return;
     await api(`/operaciones/${op.id}/reabrir`, { method: 'POST' }); window.dispatchEvent(new CustomEvent('app:ops', { detail: { id: op.id } }));
