@@ -594,7 +594,7 @@ export function valorCelda(v, k, tipo) {
   if (tipo === 'h') return x / 1440;
   return x;
 }
-const FMT = { f: 'dd/mm/yyyy', dt: 'dd/mm/yyyy hh:mm:ss', h: '[h]:mm:ss', n: '#,##0.00', i: '0' };
+const FMT = { f: 'dd/mm/yyyy', dt: 'dd/mm/yyyy hh:mm:ss', h: '[h]:mm:ss', n: '#,##0.00', i: '0', t: '#,##0.000' };
 
 const AZUL = 'FF1F4E79';
 const borde = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
@@ -776,9 +776,9 @@ export async function exportarUnidades(op, t, unidades) {
  */
 /* ---------------- RESUMEN ANUAL ---------------- */
 export const COLS_RESUMEN_T = [
-  ['RAZON SOCIAL', 'razon_social', 36], ['RUC', 'ruc', 13], ['UNIDADES SOLICITADAS', 'unidades_solicitadas', 12, 'i'], ['TN PROM. X UNIDAD', 'tn_prom_unidad', 10, 'i'],
-  ['VIAJES APROX.', 'viajes_aprox', 10, 'i'], ['TOTAL APROX. TN', 'tn_aprox', 11, 'i'], ['VIAJES REALIZADOS', 'viajes_realizados', 11, 'i'],
-  ['TOTAL FINAL TN HUACHO', 'tn_huacho', 13, 'n'], ['TOTAL FINAL TN CSPCP', 'tn_cspcp', 13, 'n'], ['OBSERVACION', 'observacion', 26],
+  ['RAZON SOCIAL', 'razon_social', 36], ['RUC', 'ruc', 13], ['UNIDADES SOLICITADAS', 'unidades_solicitadas', 12, 'i'], ['TN PROM. X UNIDAD', 'tn_prom_unidad', 10, 't'],
+  ['VIAJES APROX.', 'viajes_aprox', 10, 'i'], ['TOTAL APROX. TN', 'tn_aprox', 11, 't'], ['VIAJES REALIZADOS', 'viajes_realizados', 11, 'i'],
+  ['TOTAL FINAL TN HUACHO', 'tn_huacho', 13, 't'], ['TOTAL FINAL TN CSPCP', 'tn_cspcp', 13, 't'], ['OBSERVACION', 'observacion', 26],
 ];
 /** Libro como "RESUMEN DE OPERACIONES ACOPIO DE SAL … <AÑO>": hoja RESUMEN + una hoja por nave. */
 export async function exportarResumenAnual(anio, ops, { soloTabla = false } = {}) {
@@ -795,10 +795,10 @@ export async function exportarResumenAnual(anio, ops, { soloTabla = false } = {}
       o.resumen?.fin_acopio ? new Date(C.toMs(o.resumen.fin_acopio)) : null, o.tot.tn_acopio]);
     for (let c = 2; c <= 6; c++) { row.getCell(c).border = borde; row.getCell(c).font = { size: 10 }; }
     row.getCell(2).alignment = { horizontal: 'center' };
-    row.getCell(4).numFmt = FMT.f; row.getCell(5).numFmt = FMT.f; row.getCell(6).numFmt = FMT.n;
+    row.getCell(4).numFmt = FMT.f; row.getCell(5).numFmt = FMT.f; row.getCell(6).numFmt = FMT.t;
   });
   const t = ws.addRow([null, null, 'TOTAL', null, null, rd(ops.reduce((s, o) => s + o.tot.tn_acopio, 0))]);
-  t.font = { bold: true }; t.getCell(6).numFmt = FMT.n;
+  t.font = { bold: true }; t.getCell(6).numFmt = FMT.t;
   for (let c = 2; c <= 6; c++) t.getCell(c).border = borde;
   if (soloTabla) return blob(wb);
   const usados = new Set([ws.name]);
@@ -809,7 +809,7 @@ export async function exportarResumenAnual(anio, ops, { soloTabla = false } = {}
     const h = wb.addWorksheet(nombre, { pageSetup: { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, paperSize: 9 } });
     h.getColumn(1).width = 2; COLS_RESUMEN_T.forEach((c, i) => { h.getColumn(i + 2).width = c[2]; });
     h.getCell('B1').value = `${o.nave} · ORDEN ${o.orden}`; h.getCell('B1').font = { bold: true, size: 13, color: { argb: AZUL } };
-    h.getCell('B2').value = `Acopio: ${o.resumen?.inicio_acopio ? C.fmtDT(C.toMs(o.resumen.inicio_acopio)).slice(0, 10) : '—'} al ${o.resumen?.fin_acopio ? C.fmtDT(C.toMs(o.resumen.fin_acopio)).slice(0, 10) : '—'} · TN acopiada ${o.tot.tn_acopio}`;
+    h.getCell('B2').value = `Acopio: ${o.resumen?.inicio_acopio ? C.fmtDT(C.toMs(o.resumen.inicio_acopio)).slice(0, 10) : '—'} al ${o.resumen?.fin_acopio ? C.fmtDT(C.toMs(o.resumen.fin_acopio)).slice(0, 10) : '—'} · TN acopiada ${Number(o.tot.tn_acopio || 0).toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })}`;
     h.getRow(4).values = [null, ...COLS_RESUMEN_T.map((c) => c[0])];
     cabecera(h.getRow(4));
     for (const r of o.filas) {
@@ -818,7 +818,7 @@ export async function exportarResumenAnual(anio, ops, { soloTabla = false } = {}
     }
     const s = (k) => rd(o.filas.reduce((a, x) => a + (Number(x[k]) || 0), 0));
     const tr = h.addRow([null, 'TOTAL ', o.filas.filter((x) => x.ruc).length, s('unidades_solicitadas'), '-', s('viajes_aprox'), s('tn_aprox'), s('viajes_realizados'), s('tn_huacho'), s('tn_cspcp')]);
-    tr.font = { bold: true, size: 9 }; tr.getCell(9).numFmt = FMT.n; tr.getCell(10).numFmt = FMT.n;
+    tr.font = { bold: true, size: 9 }; [8, 9, 10].forEach((c) => { tr.getCell(c).numFmt = FMT.t; }); [4, 6, 7].forEach((c) => { tr.getCell(c).numFmt = '#,##0'; }); tr.getCell(5).alignment = { horizontal: 'right' };
   }
   return blob(wb);
 }

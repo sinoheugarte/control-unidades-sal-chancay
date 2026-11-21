@@ -62,10 +62,10 @@ export async function vResumenAnual(view, ctx) {
     body.innerHTML = `
       <div class="kpis">
         <div class="kpi"><div class="l">Operaciones</div><div class="v">${ops.length}</div><div class="s">${ops.filter((o) => estadoDe(o) === 'FINALIZADA').length} finalizadas</div></div>
-        <div class="kpi"><div class="l">TN sal acopiada (CSPCP)</div><div class="v">${num(sum('tn_acopio'))}</div></div>
-        <div class="kpi"><div class="l">TN despachada (Huacho)</div><div class="v">${num(sum('tn_despacho'))}</div></div>
+        <div class="kpi"><div class="l">TN sal acopiada (CSPCP)</div><div class="v">${num(sum('tn_acopio'), 3)}</div></div>
+        <div class="kpi"><div class="l">TN despachada (Huacho)</div><div class="v">${num(sum('tn_despacho'), 3)}</div></div>
         <div class="kpi"><div class="l">Viajes realizados</div><div class="v">${num(sum('viajes'), 0)}</div></div>
-        <div class="kpi"><div class="l">Promedio por nave</div><div class="v">${num(ops.length ? sum('tn_acopio') / ops.length : 0)}</div><div class="s">TN acopiadas</div></div>
+        <div class="kpi"><div class="l">Promedio por nave</div><div class="v">${num(ops.length ? sum('tn_acopio') / ops.length : 0, 3)}</div><div class="s">TN acopiadas</div></div>
         <div class="kpi"><div class="l">Transportistas</div><div class="v">${nT}</div><div class="s">con viajes en ${f.anio}</div></div>
       </div>
       <div class="grid g2">
@@ -81,7 +81,7 @@ export async function vResumenAnual(view, ctx) {
         <div class="table-wrap" style="max-height:none"><table>
           <thead><tr><th class="no-print"></th><th>N°</th><th>NAVE</th><th>FECHA INICIO ACOPIO</th><th>FECHA FINAL ACOPIO</th><th class="num">TN SAL ACOPIADA</th><th class="no-print"></th></tr></thead>
           <tbody>${ops.map((o, i) => filaOp(o, i, tot[i])).join('') || '<tr><td colspan="7" class="empty">Ninguna operación coincide con los filtros</td></tr>'}</tbody>
-          <tfoot><tr><td class="no-print"></td><td></td><td>TOTAL</td><td></td><td></td><td class="num">${num(sum('tn_acopio'))}</td><td class="no-print"></td></tr></tfoot>
+          <tfoot><tr><td class="no-print"></td><td></td><td>TOTAL</td><td></td><td></td><td class="num">${num(sum('tn_acopio'), 3)}</td><td class="no-print"></td></tr></tfoot>
         </table></div></div>`;
     graficos(ops, tot);
     $('#r-exp').onclick = () => { ops.forEach((o) => f.abiertas.add(o.id)); pintar(); };
@@ -91,10 +91,10 @@ export async function vResumenAnual(view, ctx) {
 
   const colsT = [
     { t: 'Razón social', f: (t) => `<strong>${esc(t.razon_social)}</strong>` }, { t: 'RUC', k: 'ruc' },
-    { t: 'Unidades solicitadas', k: 'unidades_solicitadas', n: 1, d: 0 }, { t: 'TN prom. x unidad', k: 'tn_prom_unidad', n: 1 },
-    { t: 'Viajes aprox.', k: 'viajes_aprox', n: 1, d: 0 }, { t: 'Total aprox. TN', k: 'tn_aprox', n: 1, d: 0 },
-    { t: 'Viajes realizados', k: 'viajes_realizados', n: 1, d: 0 }, { t: 'Total final TN Huacho', k: 'tn_huacho', n: 1 },
-    { t: 'Total final TN CSPCP', k: 'tn_cspcp', n: 1 }, { t: 'Observación', f: (t) => esc(t.observacion || '') },
+    { t: 'Unidades solicitadas', k: 'unidades_solicitadas', n: 1, d: 0 }, { t: 'TN prom. x unidad', k: 'tn_prom_unidad', n: 1, d: 3 },
+    { t: 'Viajes aprox.', k: 'viajes_aprox', n: 1, d: 0 }, { t: 'Total aprox. TN', k: 'tn_aprox', n: 1, d: 3 },
+    { t: 'Viajes realizados', k: 'viajes_realizados', n: 1, d: 0 }, { t: 'Total final TN Huacho', k: 'tn_huacho', n: 1, d: 3 },
+    { t: 'Total final TN CSPCP', k: 'tn_cspcp', n: 1, d: 3 }, { t: 'Observación', f: (t) => esc(t.observacion || '') },
   ];
   function filaOp(o, i, t) {
     const ab = f.abiertas.has(o.id);
@@ -104,11 +104,11 @@ export async function vResumenAnual(view, ctx) {
         <td class="no-print"><button class="btn sm" data-tog="${o.id}" aria-expanded="${ab}" aria-label="Ver transportistas de ${esc(o.nave)}">${ab ? '▾' : '▸'}</button></td>
         <td>${i + 1}</td><td><strong>${esc(o.nave)}</strong></td>
         <td>${fecha(o.resumen?.inicio_acopio)}</td><td>${fecha(o.resumen?.fin_acopio)}</td>
-        <td class="num"><strong>${num(t.tn_acopio)}</strong></td>
+        <td class="num"><strong>${num(t.tn_acopio, 3)}</strong></td>
         <td class="no-print">${o.origen === 'resumen' ? '' : `<button class="btn sm" data-abrir="${o.id}">Abrir</button>`}</td></tr>
       ${ab ? `<tr><td></td><td colspan="6" style="white-space:normal;background:var(--surface-2)">
         <div class="muted small" style="margin-bottom:6px">Orden ${esc(o.orden)} · ${esc(estadoDe(o))} · ${num(t.viajes, 0)} viajes</div>
-        ${tabla(colsT, ts, { empty: 'Sin cuadro de transportistas', foot: ['TOTAL', String(ts.filter((x) => x.ruc).length), num(s('unidades_solicitadas'), 0), '-', num(s('viajes_aprox'), 0), num(s('tn_aprox'), 0), num(s('viajes_realizados'), 0), num(s('tn_huacho')), num(s('tn_cspcp')), ''] })}
+        ${tabla(colsT, ts, { empty: 'Sin cuadro de transportistas', foot: ['TOTAL', String(ts.filter((x) => x.ruc).length), num(s('unidades_solicitadas'), 0), '-', num(s('viajes_aprox'), 0), num(s('tn_aprox'), 3), num(s('viajes_realizados'), 0), num(s('tn_huacho'), 3), num(s('tn_cspcp'), 3), ''] })}
       </td></tr>` : ''}`;
   }
 
@@ -117,7 +117,7 @@ export async function vResumenAnual(view, ctx) {
     const ch1 = chart($('#c-nave'), {
       type: 'bar',
       data: { labels: ops.map((o) => o.nave), datasets: [{ label: 'TN acopiada', data: tot.map((t) => t.tn_acopio), backgroundColor: c.serie[0], borderRadius: 4 }] },
-      options: { plugins: { legend: { display: false }, tooltip: { callbacks: { label: (x) => `${num(x.raw)} TN` } } }, scales: { y: { beginAtZero: true } },
+      options: { plugins: { legend: { display: false }, tooltip: { callbacks: { label: (x) => `${num(x.raw, 3)} TN` } } }, scales: { y: { beginAtZero: true } },
         onClick: (e, els) => { if (els[0]) { const o = ops[els[0].index]; f.abiertas.add(o.id); pintar(); document.querySelector(`[data-fila="${o.id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }); } } },
     });
     const porMes = Array(12).fill(0);
@@ -125,7 +125,7 @@ export async function vResumenAnual(view, ctx) {
     chart($('#c-mes'), {
       type: 'bar',
       data: { labels: MESES, datasets: [{ label: 'TN', data: porMes, backgroundColor: c.serie[2], borderRadius: 4 }] },
-      options: { plugins: { legend: { display: false }, tooltip: { callbacks: { label: (x) => `${num(x.raw)} TN` } } }, scales: { y: { beginAtZero: true } } },
+      options: { plugins: { legend: { display: false }, tooltip: { callbacks: { label: (x) => `${num(x.raw, 3)} TN` } } }, scales: { y: { beginAtZero: true } } },
     });
     const porT = new Map();
     ops.forEach((o) => filasT(o).forEach((t) => { if (!t.tn_cspcp) return; const e = porT.get(kT(t)) || { rs: t.razon_social, tn: 0 }; e.tn += t.tn_cspcp; porT.set(kT(t), e); }));
@@ -134,7 +134,7 @@ export async function vResumenAnual(view, ctx) {
     chart($('#c-tra'), {
       type: 'bar',
       data: { labels: lt.map((x) => x[1].rs), datasets: [{ label: 'TN', data: lt.map((x) => x[1].tn), backgroundColor: lt.map(([ruc]) => (f.transp && ruc !== f.transp ? c.grid : c.serie[1])), borderRadius: 4 }] },
-      options: { indexAxis: 'y', plugins: { legend: { display: false }, tooltip: { callbacks: { label: (x) => `${num(x.raw)} TN · ${num((x.raw / totT) * 100, 1)} %` } } },
+      options: { indexAxis: 'y', plugins: { legend: { display: false }, tooltip: { callbacks: { label: (x) => `${num(x.raw, 3)} TN · ${num((x.raw / totT) * 100, 1)} %` } } },
         onClick: (e, els) => { if (els[0]) { const ruc = lt[els[0].index][0]; f.transp = f.transp === ruc ? '' : ruc; ctx.rerender(); } } },
     });
     const rucs = lt.map((x) => x[0]);
