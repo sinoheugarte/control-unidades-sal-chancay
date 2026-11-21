@@ -240,7 +240,8 @@ export async function vTransportistas(view, ctx) {
   view.innerHTML = `
   ${tab ? `<div class="card"><div class="card-h"><h2>Participación en la operación</h2>
       <div class="btns"><button class="btn" id="b-all-xls">Todos los reportes (Excel)</button><button class="btn" id="b-all-pdf">Todos los reportes (PDF)</button>
-      ${edit ? '<button class="btn" id="b-part">+ Agregar transportista</button>' : ''}</div></div>
+      ${edit ? `<label class="btn" title="Carga UNIDADES SOLICITADAS, TN PROM. X UNIDAD y OBSERVACION desde la hoja TRANSPORTISTAS del libro de control">Cargar unidades solicitadas (Excel)
+        <input type="file" id="f-part" accept=".xlsx,.xlsm,.xls" hidden></label><button class="btn" id="b-part">+ Agregar transportista</button>` : ''}</div></div>
     ${tabla([
       // Columnas de la hoja TRANSPORTISTAS del Excel (C a N; TRANSPORTE, columna B, sigue oculta)
       { t: 'Razón social', f: (x) => `<strong>${esc(x.razon_social)}</strong>` }, { t: 'RUC', k: 'ruc' },
@@ -279,6 +280,17 @@ export async function vTransportistas(view, ctx) {
 
   $('#b-new')?.addEventListener('click', () => registrarTransportistaModal(ctx.rerender));
   $('#b-hab')?.addEventListener('click', () => registrarHabituales(ctx.rerender));
+  $('#f-part')?.addEventListener('change', async (e) => {
+    const file = e.target.files[0]; if (!file) return;
+    const fd = new FormData(); fd.append('archivo', file);
+    toast('Leyendo la hoja TRANSPORTISTAS…');
+    try {
+      const r = await api(`/operaciones/${state.opId}/importar/participacion`, { method: 'POST', form: fd });
+      toast(`Unidades solicitadas cargadas: ${r.actualizadas.join(' · ') || 'ninguna'}`);
+      if (r.no_registradas.length) toast(`Sin registrar en el maestro (RUC no encontrado): ${r.no_registradas.join(', ')}`, true);
+      ctx.rerender();
+    } catch (err) { toast(err.message, true); } finally { e.target.value = ''; }
+  });
   $('#b-part')?.addEventListener('click', () => partModal(null, todos.filter((t) => !res.some((r) => r.transportista_id === t.id)), ctx.rerender));
   view.addEventListener('click', (e) => {
     const t = e.target.closest('[data-t]')?.dataset.t;

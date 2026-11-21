@@ -630,6 +630,43 @@ ruta('POST', '/importar/libro', async (p, b, form) => {
  * LISTA de transportistas, conductores y unidades: uno o varios archivos (en una o varias cargas).
  * Se integran a la lista de la operación sin duplicar; las empresas nuevas (por RUC) se crean en el maestro.
  */
+/** Participación (UNIDADES SOLICITADAS, TN PROM. X UNIDAD, OBSERVACION) desde la hoja TRANSPORTISTAS del libro. */
+ruta('POST', '/operaciones/:id/importar/participacion', async ({ id }, b, form) => {
+  ESCRIBE();
+  const f = form?.get('archivo');
+  if (!f || !f.size) throw err(400, 'Adjunte el libro Excel con la hoja TRANSPORTISTAS');
+  const { filas } = X.leerParticipacion(await X.cargarLibro(f));
+  if (!filas.length) throw err(400, 'La hoja TRANSPORTISTAS no tiene empresas con RUC');
+  // Empresa por RUC; si no, por razón social (las creadas desde el REPORTE HUACHO no traen RUC: se les completa)
+  let T;
+  await mutar(INDICE, (I) => {
+    for (const x of filas) {
+      if (I.transportistas.some((t) => t.ruc === x.ruc)) continue;
+      const t = x.razon_social && I.transportistas.find((y) => !y.ruc && X.mismoNombre(y.razon_social, x.razon_social));
+      if (t) t.ruc = x.ruc;
+    }
+    T = I.transportistas;
+  });
+  const res = { actualizadas: [], sin_participar: [], no_registradas: [] };
+  await mutarOp(id, (D) => {
+    for (const x of filas) {
+      const t = T.find((y) => y.ruc === x.ruc);
+      const p0 = t && D.op_transportistas.find((p) => p.transportista_id === t.id);
+      // Empresas con 0 unidades que no están en la operación (p. ej. "NO PARTICIPO") no se agregan
+      if (!t) { if (x.unidades_solicitadas) res.no_registradas.push(x.razon_social || x.ruc); continue; }
+      if (!p0 && !x.unidades_solicitadas) { res.sin_participar.push(t.nombre_comercial); continue; }
+      X.asegurarParticipacion(D, t.id);
+      const p = D.op_transportistas.find((y) => y.transportista_id === t.id);
+      Object.assign(p, { unidades_solicitadas: x.unidades_solicitadas, tn_prom_unidad: x.tn_prom_unidad || p.tn_prom_unidad || 33,
+        observacion: x.observacion ?? p.observacion, reporte_confirmado: x.reporte_confirmado || p.reporte_confirmado || 0,
+        vueltas_manual: Object.keys(x.vueltas_manual || {}).length ? x.vueltas_manual : (p.vueltas_manual || {}) });
+      res.actualizadas.push(`${t.nombre_comercial}: ${x.unidades_solicitadas}`);
+    }
+    historial(D, 'importar_participacion', { archivo: f.name, actualizadas: res.actualizadas.length });
+  });
+  return res;
+});
+
 ruta('POST', '/operaciones/:id/importar/lista', async ({ id }, b, form) => {
   ESCRIBE();
   const archivos = (form?.getAll('archivo') || []).filter((f) => f && f.size);
