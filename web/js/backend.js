@@ -303,7 +303,15 @@ ruta('POST', '/operaciones', async (p, b) => {
   const o = opDesdeBody(b);
   if (!o.nave || !o.orden) throw err(400, 'Nave y orden son obligatorios');
   o.tn_programadas = o.tn_programadas || 0;
-  return crearOperacion(o);
+  // La operación nueva empieza con las unidades solicitadas predeterminadas de cada transportista
+  const I = await leer(INDICE, true);
+  const D = opVacia();
+  for (const [tid, p] of Object.entries(I.participacion_predeterminada || {})) {
+    if (!I.transportistas.some((t) => t.id === Number(tid)) || !(p.unidades_solicitadas > 0)) continue;
+    D.op_transportistas.push({ transportista_id: Number(tid), unidades_solicitadas: p.unidades_solicitadas, tn_prom_unidad: p.tn_prom_unidad || 33,
+      tn_asignadas: null, vueltas_manual: {}, reporte_confirmado: 0, observacion: null });
+  }
+  return crearOperacion(o, D);
 });
 ruta('PUT', '/operaciones/:id', async ({ id }, b) => {
   ESCRIBE();
@@ -497,6 +505,15 @@ ruta('PUT', '/operaciones/:id/transportistas/:tid', async ({ id, tid }, b) => {
       reporte_confirmado: b.reporte_confirmado ? 1 : 0, observacion: S(b.observacion),
     });
   });
+  // Unidades solicitadas y TN prom. quedan como predeterminado para las operaciones nuevas
+  if (b.predeterminado) {
+    await mutar(INDICE, (I) => {
+      I.participacion_predeterminada = I.participacion_predeterminada || {};
+      const u = N(b.unidades_solicitadas) || 0;
+      if (u > 0) I.participacion_predeterminada[Number(tid)] = { unidades_solicitadas: u, tn_prom_unidad: N(b.tn_prom_unidad) || 33 };
+      else delete I.participacion_predeterminada[Number(tid)];
+    });
+  }
   return { ok: true };
 });
 ruta('DELETE', '/operaciones/:id/transportistas/:tid', async ({ id, tid }) => {

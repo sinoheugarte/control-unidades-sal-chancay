@@ -328,6 +328,7 @@ function partModal(p, disponibles, done) {
       <label>Unidades solicitadas<input name="unidades_solicitadas" type="number" min="0" value="${p.unidades_solicitadas ?? 0}"></label>
       <label>TN prom. por unidad<input name="tn_prom_unidad" type="number" step="0.1" min="1" value="${p.tn_prom_unidad ?? 33}"></label>
       <label class="check"><input type="checkbox" name="reporte_confirmado" ${p.reporte_confirmado ? 'checked' : ''}> Reporte confirmado</label>
+      <label class="check full"><input type="checkbox" name="predeterminado" checked> Usar estas unidades solicitadas y TN prom. como predeterminado al crear una operación nueva</label>
       <div class="full"><h3 style="margin:8px 0 2px">Detallado por vueltas (TN)</h3>
         <p class="muted small" style="margin:0">Deje en blanco para el cálculo automático (unidades × TN prom. × n, hasta la 10ª vuelta). Escriba un valor para fijarlo a mano, como en el Excel (p. ej. la 11ª vuelta).</p></div>
       ${NOMBRES_VUELTA.map((nom, i) => {
