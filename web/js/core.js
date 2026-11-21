@@ -194,7 +194,8 @@ export function colores() {
 
 const charts = new Set();
 export function chart(canvas, config) {
-  if (!window.Chart || !canvas) return null;
+  if (!canvas) return null;
+  if (!window.Chart) { console.error('[gráficos] Chart.js no está cargado: no se puede dibujar', canvas.id); return null; }
   const c = colores();
   Chart.defaults.color = c.texto;
   Chart.defaults.borderColor = c.grid;
@@ -211,11 +212,31 @@ export function chart(canvas, config) {
   // Si el lienzo ya tenía un gráfico (pantalla pintada dos veces), se reemplaza sin error
   const previo = Chart.getChart?.(canvas);
   if (previo) { previo.destroy(); charts.delete(previo); }
-  const ch = new Chart(canvas, { ...config, options: { responsive: true, maintainAspectRatio: false, ...config.options } });
+  let ch;
+  try { ch = new Chart(canvas, { ...config, options: { responsive: true, maintainAspectRatio: false, ...config.options } }); }
+  catch (err) { console.error('[gráficos] error al dibujar', canvas.id, err); return null; }
   charts.add(ch);
   // El navegador puede borrar el lienzo para ahorrar memoria (pestaña en segundo plano): al restaurarlo se redibuja
   canvas.addEventListener('contextrestored', () => { try { ch.update('none'); } catch { /* */ } });
   return ch;
+}
+/** Revisa los gráficos visibles: si alguno quedó en blanco o sin dibujar lo redibuja.
+    Devuelve los lienzos que no tienen gráfico (para volver a pintar la vista). */
+export function revisarGraficos(root = document.getElementById('view')) {
+  if (!root || !window.Chart) return [];
+  const sinGrafico = [];
+  root.querySelectorAll('.chart-box canvas').forEach((cv) => {
+    const ch = Chart.getChart(cv);
+    if (!ch) { sinGrafico.push(cv.id || '?'); return; }
+    if (!charts.has(ch)) charts.add(ch);
+    const r = cv.getBoundingClientRect();
+    if (r.width && r.height && (cv.width < 2 || cv.height < 2 || !ch.chartArea || ch.chartArea.width < 2)) {
+      console.warn('[gráficos] lienzo sin tamaño, se redibuja', cv.id, cv.width, cv.height);
+      try { ch.resize(); ch.update('none'); } catch (e) { console.error('[gráficos]', cv.id, e); }
+    }
+  });
+  if (sinGrafico.length) console.warn('[gráficos] sin dibujar:', sinGrafico.join(', '));
+  return sinGrafico;
 }
 /** Libera los gráficos que ya no están en pantalla (todos = true: también los visibles). */
 export function destruirGraficos(todos = false) {

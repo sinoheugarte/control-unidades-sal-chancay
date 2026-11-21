@@ -1,4 +1,4 @@
-import { state, api, esc, toast, $, $$, modal, destruirGraficos, redibujarGraficos, esAdmin, activarFechaHora24, activarOndas, activarTablas, activarEquilibrio } from './core.js?v=__V__';
+import { state, api, esc, toast, $, $$, modal, destruirGraficos, redibujarGraficos, revisarGraficos, esAdmin, activarFechaHora24, activarOndas, activarTablas, activarEquilibrio } from './core.js?v=__V__';
 import { mostrarIntro } from './intro.js?v=__V__';
 import { activarExportes, ICO as FX, descargarHTML, vVer, fragmentoDe, elegirPantallas } from './compartir.js?v=__V__';
 import { vTablero, vViajes, vRegistro } from './views-operacion.js?v=__V__';
@@ -326,8 +326,21 @@ async function render() {
     [...view.children].forEach((el, i) => el.style.setProperty('--i', Math.min(i, 8)));
     void view.offsetWidth;
     view.classList.add('entra'); view.classList.toggle('atras', !!atras);
-    setTimeout(() => { if (id === renderId) { view.classList.remove('entra', 'atras'); redibujarGraficos(); } }, 1100);
-  } else setTimeout(redibujarGraficos, 60);
+    setTimeout(() => { if (id === renderId) { view.classList.remove('entra', 'atras'); redibujarGraficos(); autorreparar(id); } }, 1100);
+  } else setTimeout(() => { redibujarGraficos(); autorreparar(id); }, 60);
+}
+// Si después de mostrar la pantalla queda algún gráfico sin dibujar, se vuelve a pintar la vista (una vez)
+let reparando = false;
+function autorreparar(id) {
+  setTimeout(() => {
+    if (id !== renderId) return;
+    const faltan = revisarGraficos();
+    if (faltan.length && !reparando) {
+      reparando = true;
+      console.warn('[gráficos] se vuelve a pintar la pantalla para completar los gráficos');
+      render().finally(() => { setTimeout(() => { reparando = false; }, 3000); });
+    }
+  }, 400);
 }
 
 activarFechaHora24(document.body);
