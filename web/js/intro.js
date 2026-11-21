@@ -5,11 +5,11 @@ const DURACION = 20500;
 
 const CSS = `
 .ix{position:fixed;inset:0;z-index:1000;overflow:hidden;cursor:pointer;color:#fff;background:#02060f;font-family:Inter,system-ui,sans-serif;
-  transition:opacity .9s ease,transform 1.1s cubic-bezier(.32,.72,0,1),filter .9s ease}
-.ix.fuera{opacity:0;transform:scale(1.12);filter:blur(10px);pointer-events:none}
+  transition:opacity .9s ease,transform 1.1s cubic-bezier(.32,.72,0,1)}
+.ix.fuera{opacity:0;transform:scale(1.08);pointer-events:none}
 .ix canvas{position:absolute;inset:0;width:100%;height:100%}
-.ix .aur{position:absolute;inset:-20%;filter:blur(70px);opacity:.75}
-.ix .aur i{position:absolute;border-radius:50%;mix-blend-mode:screen;animation:ix-flota 9s ease-in-out infinite alternate}
+.ix .aur{position:absolute;inset:-20%;opacity:.8}
+.ix .aur i{position:absolute;border-radius:50%}
 .ix .aur i:nth-child(1){width:55vmax;height:55vmax;left:5%;top:0;background:radial-gradient(circle,#1d4ed8,transparent 65%)}
 .ix .aur i:nth-child(2){width:50vmax;height:50vmax;right:0;top:10%;background:radial-gradient(circle,#06b6d4,transparent 65%);animation-delay:-3s}
 .ix .aur i:nth-child(3){width:45vmax;height:45vmax;left:30%;bottom:-10%;background:radial-gradient(circle,#7c3aed,transparent 65%);animation-delay:-6s}
@@ -74,14 +74,14 @@ const CSS = `
 /* Escena 3: título */
 .ix .tit{position:absolute;left:0;right:0;top:24%;text-align:center;pointer-events:none}
 .ix .tit h1{margin:0;font-size:clamp(30px,5.6vw,76px);font-weight:900;letter-spacing:-.04em;line-height:1}
-.ix .tit h1 span{display:inline-block;opacity:0;transform:translateY(40px) rotateX(70deg);filter:blur(8px);
+.ix .tit h1 span{display:inline-block;opacity:0;transform:translateY(40px) rotateX(70deg);
   background:linear-gradient(90deg,#fff 0%,#bae6fd 30%,#c4b5fd 60%,#fff 90%);background-size:300% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;
   animation:ix-letra 1s cubic-bezier(.22,1,.36,1) forwards,ix-shimmer 3s linear 16s infinite}
-@keyframes ix-letra{to{opacity:1;transform:none;filter:none}}
+@keyframes ix-letra{to{opacity:1;transform:none}}
 @keyframes ix-shimmer{to{background-position:-300% 0}}
 .ix .tit .sub{display:flex;justify-content:center;gap:clamp(10px,2vw,26px);margin-top:16px;flex-wrap:wrap}
 .ix .tit .sub b{display:inline-flex;align-items:center;gap:8px;padding:8px 16px;border-radius:99px;font-size:clamp(11px,1.3vw,15px);letter-spacing:.18em;text-transform:uppercase;font-weight:750;
-  background:rgba(255,255,255,.08);box-shadow:inset 0 0 0 1px rgba(255,255,255,.18),0 10px 30px -10px rgba(14,165,233,.6);backdrop-filter:blur(10px);
+  background:rgba(15,23,42,.55);box-shadow:inset 0 0 0 1px rgba(255,255,255,.18),0 10px 30px -10px rgba(14,165,233,.6);
   opacity:0;transform:translateY(16px) scale(.9);animation:ix-chip .7s cubic-bezier(.34,1.56,.64,1) forwards}
 .ix .tit .sub b i{width:9px;height:9px;border-radius:50%;background:var(--c);box-shadow:0 0 12px var(--c)}
 @keyframes ix-chip{to{opacity:1;transform:none}}
@@ -95,7 +95,7 @@ const CSS = `
 @keyframes ix-prog{from{transform:scaleX(0)}to{transform:scaleX(1)}}
 .ix .controles{position:absolute;right:18px;bottom:16px;display:flex;gap:8px;opacity:0;animation:ix-aparece .6s ease .8s forwards}
 .ix .controles button{font:inherit;font-size:12px;font-weight:650;letter-spacing:.04em;color:#e2e8f0;cursor:pointer;padding:8px 15px;border-radius:99px;border:0;
-  background:rgba(255,255,255,.09);box-shadow:inset 0 0 0 1px rgba(255,255,255,.18);backdrop-filter:blur(10px);transition:background-color .2s ease,transform .15s ease}
+  background:rgba(15,23,42,.6);box-shadow:inset 0 0 0 1px rgba(255,255,255,.18);transition:background-color .2s ease,transform .15s ease}
 .ix .controles button:hover{background:rgba(255,255,255,.18)}.ix .controles button:active{transform:scale(.95)}
 .ix .controles .snd.on{background:rgba(56,189,248,.25);box-shadow:inset 0 0 0 1px rgba(56,189,248,.6)}
 @media (prefers-reduced-motion:reduce){.ix *,.ix *::before,.ix *::after{animation-duration:1ms!important;animation-delay:0s!important;animation-iteration-count:1!important}}
@@ -166,23 +166,27 @@ const LOGO = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2
 /* Partículas: estrellas que titilan y granos de sal que suben con brillo */
 function particulas(canvas, reducido) {
   const ctx = canvas.getContext('2d');
-  const dpr = Math.min(2, window.devicePixelRatio || 1);
   let w = 0, h = 0;
-  const ajustar = () => { w = canvas.clientWidth; h = canvas.clientHeight; canvas.width = w * dpr; canvas.height = h * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); };
+  const ajustar = () => { w = canvas.clientWidth; h = canvas.clientHeight; canvas.width = w; canvas.height = h; };
   ajustar();
-  const N = reducido ? 60 : Math.min(260, Math.round((w * h) / 7000));
-  const ps = Array.from({ length: N }, () => ({ x: Math.random() * w, y: Math.random() * h, r: Math.random() * 1.8 + 0.3, v: Math.random() * 0.5 + 0.1, f: Math.random() * Math.PI * 2, c: Math.random() < 0.7 ? '255,255,255' : Math.random() < 0.5 ? '125,211,252' : '196,181,253' }));
+  // Sprite de brillo por color (se dibuja una vez y se reutiliza: mucho más liviano que shadowBlur)
+  const sprite = (rgb) => { const c = document.createElement('canvas'); c.width = c.height = 32; const g = c.getContext('2d');
+    const gr = g.createRadialGradient(16, 16, 0, 16, 16, 16); gr.addColorStop(0, `rgba(${rgb},1)`); gr.addColorStop(.25, `rgba(${rgb},.55)`); gr.addColorStop(1, `rgba(${rgb},0)`);
+    g.fillStyle = gr; g.fillRect(0, 0, 32, 32); return c; };
+  const SP = [sprite('255,255,255'), sprite('125,211,252'), sprite('196,181,253')];
+  const N = reducido ? 40 : Math.min(130, Math.round((w * h) / 14000));
+  const ps = Array.from({ length: N }, () => ({ x: Math.random() * w, y: Math.random() * h, r: Math.random() * 5 + 3, v: Math.random() * 0.45 + 0.1, f: Math.random() * Math.PI * 2, s: SP[Math.random() < 0.7 ? 0 : Math.random() < 0.5 ? 1 : 2] }));
   let vivo = true; const t0 = performance.now();
   const paso = (t) => {
     if (!vivo) return;
     const e = (t - t0) / 1000;
     ctx.clearRect(0, 0, w, h);
     for (const p of ps) {
-      if (!reducido) { p.y -= p.v; p.x += Math.sin(e + p.f) * 0.15; if (p.y < -5) { p.y = h + 5; p.x = Math.random() * w; } }
-      const a = 0.35 + 0.65 * Math.abs(Math.sin(e * 1.6 + p.f));
-      ctx.beginPath(); ctx.fillStyle = `rgba(${p.c},${a})`; ctx.shadowBlur = p.r * 6; ctx.shadowColor = `rgba(${p.c},${a})`;
-      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill();
+      if (!reducido) { p.y -= p.v; p.x += Math.sin(e + p.f) * 0.15; if (p.y < -10) { p.y = h + 10; p.x = Math.random() * w; } }
+      ctx.globalAlpha = 0.3 + 0.7 * Math.abs(Math.sin(e * 1.6 + p.f));
+      ctx.drawImage(p.s, p.x - p.r, p.y - p.r, p.r * 2, p.r * 2);
     }
+    ctx.globalAlpha = 1;
     requestAnimationFrame(paso);
   };
   requestAnimationFrame(paso);
@@ -218,9 +222,10 @@ function musica(t0) {
     g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + ataque); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     o.connect(lp).connect(g).connect(destino); o.start(t); o.stop(t + dur + 0.05);
   };
+  const RUIDO = ctx.createBuffer(1, ctx.sampleRate * 2.5, ctx.sampleRate);
+  { const d = RUIDO.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; }
   const ruido = (t, dur, vol, frec, q = 0.8, sube = null) => {
-    const b = ctx.createBuffer(1, ctx.sampleRate * dur, ctx.sampleRate); const d = b.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-    const s = ctx.createBufferSource(); s.buffer = b; const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = frec; bp.Q.value = q;
+    const s = ctx.createBufferSource(); s.buffer = RUIDO; const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = frec; bp.Q.value = q;
     if (sube) bp.frequency.exponentialRampToValueAtTime(sube, t + dur);
     const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + dur * 0.3); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     s.connect(bp).connect(g).connect(bus); s.start(t); s.stop(t + dur);
