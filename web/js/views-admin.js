@@ -12,7 +12,18 @@ export async function vOperaciones(view, ctx) {
   const ops = await api('/operaciones');
   const edit = puedeEscribir();
   const anios = [...new Set(ops.map(anioDe).filter(Boolean))].sort().reverse();
-  view.innerHTML = `<div class="card"><div class="card-h"><div><h2>Operaciones (nave / orden)</h2>
+  const fin = ops.filter((o) => ['FINALIZADA', 'CERRADA'].includes(o.estado)).length;
+  const tnAc = ops.reduce((a, o) => a + (Number(o.resumen?.tn_acopio) || 0), 0);
+  const vj = ops.reduce((a, o) => a + (Number(o.n_viajes) || Number(o.resumen?.viajes) || 0), 0);
+  view.innerHTML = `<div class="kpis">
+      <div class="kpi"><div class="l">Operaciones</div><div class="v">${num(ops.length, 0)}</div><div class="s">${anios.length ? `${anios[anios.length - 1]} – ${anios[0]}` : '—'}</div></div>
+      <div class="kpi"><div class="l">En curso</div><div class="v">${num(ops.length - fin, 0)}</div><div class="s">operaciones activas</div></div>
+      <div class="kpi"><div class="l">Finalizadas</div><div class="v">${num(fin, 0)}</div><div class="s">${ops.length ? num((fin / ops.length) * 100, 1) : 0} % del total</div>
+        <div class="bar ok"><i style="width:${ops.length ? (fin / ops.length) * 100 : 0}%"></i></div></div>
+      <div class="kpi"><div class="l">Viajes registrados</div><div class="v">${num(vj, 0)}</div><div class="s">todas las operaciones</div></div>
+      <div class="kpi"><div class="l">TN acopiadas</div><div class="v">${num(tnAc)}</div><div class="s">todas las operaciones</div></div>
+    </div>
+    <div class="card"><div class="card-h"><div><h2>Operaciones (nave / orden)</h2>
       <p class="muted small" style="margin:4px 0 0">Cada operación es un reporte independiente, como cada libro Excel, guardado en SharePoint con el nombre del reporte. Búsquela para abrirla o editarla; para una nave nueva use <strong>+ Nueva operación</strong>.</p></div>
       ${edit ? '<div class="btns"><a class="btn" href="#/importar">Importar libro Excel</a><button class="btn primary" id="b-new">+ Nueva operación</button></div>' : ''}</div>
     <div class="btns" style="margin-bottom:12px">

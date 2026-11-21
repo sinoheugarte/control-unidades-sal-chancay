@@ -1,5 +1,6 @@
 import { state, api, esc, toast, $, $$, modal, destruirGraficos, esAdmin, activarFechaHora24, activarOndas, activarTablas, activarEquilibrio } from './core.js?v=__V__';
 import { mostrarIntro } from './intro.js?v=__V__';
+import { activarExportes, ICO as FX, descargarHTML, compartir } from './compartir.js?v=__V__';
 import { vTablero, vViajes, vRegistro } from './views-operacion.js?v=__V__';
 import { vReportes, vTransportistas, vUnidades, vResumenes, vPlanificacion, vReporteTransportista } from './views-control.js?v=__V__';
 import { vOperaciones, vImportar, vUsuarios } from './views-admin.js?v=__V__';
@@ -164,6 +165,8 @@ function shell(root, ruta) {
         <h1 id="titulo"></h1>
         <div class="grow"></div>
         ${esTransp() ? '' : '<label style="min-width:220px" class="no-print"><span class="hidden">Operación</span><select id="op-sel" aria-label="Operación activa"></select></label>'}
+        <button class="btn sm fx" id="b-html" data-fx="html" title="Descargar esta pantalla como página HTML">${FX.html}<span class="who">HTML</span></button>
+        ${esTransp() ? '' : `<button class="btn sm fx" id="b-link" data-fx="link" title="Crear un enlace de esta pantalla para compartir por correo">${FX.link}<span class="who">Compartir</span></button>`}
         <button class="btn sm" id="tema" title="Cambiar tema claro/oscuro">Tema</button>
         <button class="btn sm" id="perfil" title="Mi cuenta: cambiar contraseña"><span class="who">${esc(state.user.nombre)} · </span>${esc(state.user.rol)}</button>
         <button class="btn sm" id="salir">Salir</button>
@@ -177,6 +180,9 @@ function shell(root, ruta) {
     setOp(Number(e.target.value)); render();
   });
   $('#menu').addEventListener('click', () => $('#side').classList.toggle('open'));
+  const tituloPag = () => $('#titulo')?.textContent.trim() || 'Reporte';
+  $('#b-html').addEventListener('click', () => descargarHTML($('#view'), tituloPag()));
+  $('#b-link')?.addEventListener('click', () => compartir($('#view'), tituloPag()));
   $('#side').addEventListener('click', (e) => { if (e.target.closest('a')) $('#side').classList.remove('open'); });
   $('#salir').addEventListener('click', () => { B.cerrarSesion(); state.user = null; shellDe = null; location.hash = '#/login'; });
   $('#tema').addEventListener('click', () => {
@@ -256,6 +262,7 @@ activarFechaHora24(document.body);
 activarOndas(document);
 activarTablas(document.body);
 activarEquilibrio(document.body);
+activarExportes(document.body);
 mostrarIntro();
 
 // Aviso de nueva versión publicada (evita trabajar con una copia antigua guardada en el navegador)

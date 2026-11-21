@@ -118,7 +118,7 @@ export function tabla(cols, filas, { foot, empty = 'Sin registros', rowAttr } = 
     const txt = c.f ? c.f(r) : c.n ? num(r[c.k], c.d ?? 3) : esc(r[c.k] ?? '—');
     if (!c.bar || !max[i]) return txt;
     const v = Number(c.k ? r[c.k] : c.v?.(r)) || 0;
-    return `<div class="dbar" style="--w:${Math.max(0, Math.min(100, (v / max[i]) * 100)).toFixed(1)}%${c.color ? `;--bc:${c.color}` : ''}"><span>${txt}</span></div>`;
+    return `<div class="dbar" style="--w:${Math.max(0, Math.min(1, v / max[i])).toFixed(3)}${c.color ? `;--bc:${c.color}` : ''}"><span>${txt}</span></div>`;
   };
   return `<div class="table-wrap"><table>
     <thead><tr>${cols.map((c) => `<th class="${c.n ? 'num' : ''}">${esc(c.t)}</th>`).join('')}</tr></thead>

@@ -1,6 +1,6 @@
 import {
   state, api, esc, num, pct, fecha, fechaHora, minutos, toInputDT, ahoraInput, hoyInput, normPlaca,
-  statusPill, rangoPill, toast, $, modal, confirmar, tabla, sinOperacion, puedeEscribir, esAdmin, chart, colores, descargar, fichas,
+  statusPill, rangoPill, toast, $, modal, confirmar, tabla, sinOperacion, puedeEscribir, esAdmin, chart, colores, descargar, fichas, jornadaPill,
 } from './core.js?v=__V__';
 import { turnoDe } from './calc.js?v=__V__';
 
@@ -131,7 +131,7 @@ export async function vViajes(view, ctx) {
   if (!state.opId) { view.innerHTML = sinOperacion(); return; }
   const [viajes, transp] = await Promise.all([api(`/operaciones/${state.opId}/viajes`), api(`/operaciones/${state.opId}/transportistas`)]);
   const fechas = [...new Set(viajes.map((v) => v.fecha_despacho))].sort();
-  view.innerHTML = `<div class="card">
+  view.innerHTML = `<div class="kpis" id="kv"></div><div class="card">
     <div class="card-h">
       <div class="btns">
         <input id="q" type="search" placeholder="Buscar placa, guía o ticket…" style="width:240px" value="${esc(filtros.q)}" aria-label="Buscar">
@@ -153,10 +153,21 @@ export async function vViajes(view, ctx) {
     const fil = viajes.filter((v) => (!q || [v.placa, v.guia, v.ticket].some((x) => String(x || '').toUpperCase().includes(q)))
       && (!filtros.t || String(v.transportista_id) === filtros.t) && (!filtros.s || v.status === filtros.s) && (!filtros.f || v.fecha_despacho === filtros.f));
     const sum = (k) => fil.reduce((s, v) => s + (Number(v[k]) || 0), 0);
+    // Indicadores de lo filtrado (se actualizan con los filtros)
+    const desc = fil.filter((v) => v.status === 'DESCARGADO');
+    const conT = fil.filter((v) => v.tiempo_min != null);
+    $('#kv').innerHTML = `
+      <div class="kpi"><div class="l">Viajes</div><div class="v">${num(fil.length, 0)}</div><div class="s">${fil.length === viajes.length ? 'toda la operación' : `de ${num(viajes.length, 0)} (filtrado)`}</div></div>
+      <div class="kpi"><div class="l">TN Huacho</div><div class="v">${num(sum('peso_origen'))}</div><div class="s">${num(fil.length ? sum('peso_origen') / fil.length : null)} por viaje</div></div>
+      <div class="kpi"><div class="l">TN CSPCP</div><div class="v">${num(desc.reduce((a, v) => a + (v.peso_destino_calc || 0), 0))}</div><div class="s">${desc.length} descargados</div></div>
+      <div class="kpi"><div class="l">Diferencia</div><div class="v">${num(sum('diferencia'))}</div><div class="s">Huacho − CSPCP</div></div>
+      <div class="kpi"><div class="l">Por descargar</div><div class="v">${num(fil.filter((v) => v.status === 'FALTA DESCARGAR').length, 0)}</div><div class="s">${fil.filter((v) => v.status === 'TN DEVUELTAS').length} devueltos</div></div>
+      <div class="kpi"><div class="l">Atención promedio</div><div class="v">${conT.length ? minutos(Math.round(conT.reduce((a, v) => a + v.tiempo_min, 0) / conT.length)) : '—'}</div><div class="s">en puerto (h:mm)</div></div>
+      <div class="kpi"><div class="l">Unidades</div><div class="v">${num(new Set(fil.map((v) => v.placa)).size, 0)}</div><div class="s">${num(new Set(fil.map((v) => v.transportista_id)).size, 0)} transportistas</div></div>`;
     $('#tbl').innerHTML = tabla([
-      { t: 'Día despacho', f: (v) => fecha(v.fecha_despacho) }, { t: 'Jornada despacho', k: 'jornada_despacho' }, { t: 'Nro. viaje', k: 'nro' },
+      { t: 'Día despacho', f: (v) => fecha(v.fecha_despacho) }, { t: 'Jornada despacho', f: (v) => jornadaPill(v.jornada_despacho) }, { t: 'Nro. viaje', k: 'nro' },
       { t: 'Transporte', k: 'transportista_nombre' }, { t: 'Placa', f: (v) => `<strong>${esc(v.placa)}</strong>` }, { t: 'Guía R. Huacho', k: 'guia' },
-      { t: 'Peso TN x unid Huacho', k: 'peso_origen', n: 1 }, { t: 'Día recepción', f: (v) => fecha(v.fecha_recepcion) }, { t: 'Jornada recepción', k: 'jornada_recepcion' },
+      { t: 'Peso TN x unid Huacho', k: 'peso_origen', n: 1 }, { t: 'Día recepción', f: (v) => fecha(v.fecha_recepcion) }, { t: 'Jornada recepción', f: (v) => jornadaPill(v.jornada_recepcion) },
       { t: 'Ticket CSPCP', k: 'ticket' }, { t: 'Peso TN x unid CSPCP', k: 'peso_destino_calc', n: 1 },
       { t: 'Diferencia Huacho - CSPCP', k: 'diferencia', n: 1 }, { t: 'Cant. acum. TN', k: 'acumulado', n: 1 }, { t: 'Cant. rest. TN', k: 'restante', n: 1 },
       { t: 'Tipo de viaje', k: 'tipo' }, { t: 'Hora ingreso CSPCP', f: (v) => fechaHora(v.ingreso_en) }, { t: 'Hora salida CSPCP', f: (v) => fechaHora(v.salida_en) },

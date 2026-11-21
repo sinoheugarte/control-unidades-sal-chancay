@@ -239,8 +239,22 @@ export async function vTransportistas(view, ctx) {
   ]);
   const res = tab?.transportistas || [];
   const tot = (k) => res.reduce((s, x) => s + (Number(x[k]) || 0), 0);
+  const part = res.filter((x) => x.viajes_realizados > 0 || x.unidades_solicitadas > 0);
+  const conf = part.filter((x) => x.reporte_confirmado).length;
   view.innerHTML = `
-  ${tab ? `<div class="card"><div class="card-h"><h2>Participación en la operación</h2>
+  ${tab ? `<div class="kpis">
+      <div class="kpi"><div class="l">Transportistas</div><div class="v">${num(part.length, 0)}</div><div class="s">${num(res.length, 0)} asignados · ${num(todos.length, 0)} en el maestro</div></div>
+      <div class="kpi"><div class="l">Unidades solicitadas</div><div class="v">${num(tot('unidades_solicitadas'), 0)}</div><div class="s">${num(tot('unidades_en_lista'), 0)} en lista · ${num(tot('unidades_activas'), 0)} activas</div></div>
+      <div class="kpi"><div class="l">Viajes</div><div class="v">${num(tot('viajes_realizados'), 0)}</div><div class="s">de ${num(tot('viajes_aprox'), 0)} aprox. (${tot('viajes_aprox') ? num((tot('viajes_realizados') / tot('viajes_aprox')) * 100, 1) : '—'} %)</div>
+        <div class="bar"><i style="width:${Math.min(100, tot('viajes_aprox') ? (tot('viajes_realizados') / tot('viajes_aprox')) * 100 : 0)}%"></i></div></div>
+      <div class="kpi"><div class="l">TN final</div><div class="v">${num(tot('tn_final'))}</div><div class="s">de ${num(tot('tn_aprox'))} aprox.</div>
+        <div class="bar"><i style="width:${Math.min(100, tot('tn_aprox') ? (tot('tn_final') / tot('tn_aprox')) * 100 : 0)}%"></i></div></div>
+      <div class="kpi"><div class="l">Reportes confirmados</div><div class="v">${conf} / ${part.length}</div><div class="s">${part.length - conf ? `${part.length - conf} pendientes` : 'todos confirmados'}</div>
+        <div class="bar ok"><i style="width:${part.length ? (conf / part.length) * 100 : 0}%"></i></div></div>
+    </div>
+    <div class="card"><div class="card-h"><h3>Avance por transportista</h3><span class="muted small">TN final vs. TN aprox. planificadas</span></div>
+      <div class="chart-box" style="height:${Math.max(160, 40 + part.length * 34)}px"><canvas id="ch-avt"></canvas></div></div>
+  <div class="card"><div class="card-h"><h2>Participación en la operación</h2>
       <div class="btns"><button class="btn" id="b-all-xls">Todos los reportes (Excel)</button><button class="btn" id="b-all-pdf">Todos los reportes (PDF)</button>
       ${edit ? '<button class="btn" id="b-part">+ Agregar transportista</button>' : ''}</div></div>
     ${tabla([
@@ -283,6 +297,17 @@ export async function vTransportistas(view, ctx) {
       { t: '', f: (x) => (edit ? `<button class="btn sm" data-t="${x.id}">Editar</button>` : '') },
     ], todos, { empty: 'No hay transportistas registrados' })}</div>`;
 
+  if ($('#ch-avt')) {
+    const c = colores();
+    chart($('#ch-avt'), {
+      type: 'bar',
+      data: { labels: part.map((x) => x.nombre_comercial), datasets: [
+        { label: 'TN aprox.', data: part.map((x) => x.tn_aprox), backgroundColor: c.grid },
+        { label: 'TN final', data: part.map((x) => x.tn_final), backgroundColor: part.map((_, i) => c.serie[i % c.serie.length]) },
+      ] },
+      options: { indexAxis: 'y', plugins: { legend: { position: 'bottom' }, tooltip: { callbacks: { label: (x) => `${x.dataset.label}: ${num(x.raw)} TN` } } }, scales: { x: { beginAtZero: true }, y: { grid: { display: false } } } },
+    });
+  }
   $('#b-new')?.addEventListener('click', () => registrarTransportistaModal(ctx.rerender));
   $('#b-hab')?.addEventListener('click', () => registrarHabituales(ctx.rerender));
   $('#b-part')?.addEventListener('click', () => partModal(null, todos.filter((t) => !res.some((r) => r.transportista_id === t.id)), ctx.rerender));
@@ -367,7 +392,22 @@ export async function vUnidades(view, ctx) {
   const edit = puedeEscribir();
   const [us, transp, tab] = await Promise.all([api(`/operaciones/${state.opId}/unidades`), api('/transportistas'), api(`/operaciones/${state.opId}/tablero`)]);
   const viajesPor = new Map(tab.unidades.unidades.map((u) => [u.placa, u]));
-  view.innerHTML = `<div class="card"><div class="card-h">
+  const sinViajes = us.filter((u) => !viajesPor.get(u.tracto)).length;
+  const porT = new Map();
+  for (const u of us) { const k = u.transportista_nombre || 'SIN EMPRESA'; const o = porT.get(k) || { lista: 0, activas: 0 }; o.lista++; if (viajesPor.get(u.tracto)) o.activas++; porT.set(k, o); }
+  const pt = [...porT.entries()].sort((a, b) => b[1].lista - a[1].lista);
+  view.innerHTML = `<div class="grid g12">
+    <div class="kpis" style="align-content:start">
+      <div class="kpi"><div class="l">Unidades en lista</div><div class="v">${num(us.length, 0)}</div><div class="s">${pt.length} transportistas</div></div>
+      <div class="kpi"><div class="l">Unidades activas</div><div class="v">${num(tab.totales.unidades_activas, 0)}</div><div class="s">con viajes en la operación</div>
+        <div class="bar ok"><i style="width:${us.length ? Math.min(100, (tab.totales.unidades_activas / us.length) * 100) : 0}%"></i></div></div>
+      <div class="kpi"><div class="l">Sin viajes</div><div class="v">${num(sinViajes, 0)}</div><div class="s">en lista, aún sin despachos</div></div>
+      <div class="kpi"><div class="l">Conductores con DNI</div><div class="v">${num(us.filter((u) => u.dni).length, 0)}</div><div class="s">${num(us.filter((u) => u.brevete).length, 0)} con brevete</div></div>
+    </div>
+    <div class="card"><div class="card-h"><h3>Unidades por transportista</h3><span class="muted small">en lista vs. activas</span></div>
+      <div class="chart-box" style="height:${Math.max(150, 40 + pt.length * 30)}px"><canvas id="ch-ut"></canvas></div></div>
+  </div>
+  <div class="card"><div class="card-h">
       <div class="btns"><input id="q" type="search" placeholder="Buscar placa, DNI o conductor…" value="${esc(qU)}" style="width:260px" aria-label="Buscar">
       <span class="muted">${us.length} unidades en lista · ${tab.totales.unidades_activas} activas</span></div>
       ${edit ? '<div class="btns"><button class="btn" id="b-copiar">Copiar lista de otra operación</button><button class="btn" id="b-imp-lista">Importar lista (uno o varios archivos)</button><button class="btn primary" id="b-new">+ Nueva unidad</button></div>' : ''}</div><div id="tbl"></div></div>`;
@@ -383,6 +423,11 @@ export async function vUnidades(view, ctx) {
     ], fil, { empty: us.length ? 'Sin coincidencias' : 'La lista está vacía. Agregue unidades o importe la hoja LISTA.' });
   };
   pintar();
+  { const c = colores();
+    chart($('#ch-ut'), { type: 'bar', data: { labels: pt.map(([k]) => k), datasets: [
+      { label: 'En lista', data: pt.map(([, o]) => o.lista), backgroundColor: c.serie[0] },
+      { label: 'Activas', data: pt.map(([, o]) => o.activas), backgroundColor: c.serie[2] },
+    ] }, options: { indexAxis: 'y', plugins: { legend: { position: 'bottom' } }, scales: { x: { beginAtZero: true, ticks: { precision: 0 } }, y: { grid: { display: false } } } } }); }
   $('#q').addEventListener('input', (e) => { qU = e.target.value; pintar(); });
   $('#b-new')?.addEventListener('click', () => unidadModal(null, transp, ctx.rerender));
   $('#b-copiar')?.addEventListener('click', () => {
@@ -547,7 +592,7 @@ function pintarViajesUnidad(u) {
   const maxV = Math.max(1, ...grupos.flatMap((g) => g.unidades.map((x) => x.viajes)));
   const COL = ['#2563eb', '#10b981', '#8b5cf6', '#f97316', '#06b6d4', '#ec4899', '#eab308', '#ef4444'];
   const filas = grupos.map((g, gi) => `<tr class="grp"><td><strong>${esc(g.transportista)}</strong></td><td class="num"><strong>${num(g.unidades.length, 0)} und.</strong></td><td class="num"><strong>${num(g.viajes, 0)}</strong></td><td class="num"><strong>${num(g.tn)}</strong></td></tr>`
-    + g.unidades.map((x) => `<tr><td style="padding-left:22px">${esc(x.placa)}</td><td class="num">${x.conteo}</td><td class="num cbar"><div class="dbar" style="--w:${((x.viajes / maxV) * 100).toFixed(1)}%;--bc:${COL[gi % COL.length]}"><span>${num(x.viajes, 0)}</span></div></td><td class="num">${num(x.tn)}</td></tr>`).join('')).join('');
+    + g.unidades.map((x) => `<tr><td style="padding-left:22px">${esc(x.placa)}</td><td class="num">${x.conteo}</td><td class="num cbar"><div class="dbar" style="--w:${(x.viajes / maxV).toFixed(3)};--bc:${COL[gi % COL.length]}"><span>${num(x.viajes, 0)}</span></div></td><td class="num">${num(x.tn)}</td></tr>`).join('')).join('');
   return `<div class="table-wrap" style="max-height:560px"><table><thead><tr><th>Transporte / placa</th><th class="num">Conteo</th><th class="num"># Viajes</th><th class="num">TN</th></tr></thead>
     <tbody>${filas}</tbody>
     <tfoot><tr><td>Total general · unidades activas</td><td class="num">${num(u.unidades_activas, 0)} und.</td><td class="num">${num(u.total_viajes, 0)}</td><td class="num">${num(grupos.reduce((a, g) => a + g.tn, 0))}</td></tr></tfoot></table></div>`;
