@@ -271,11 +271,80 @@ function vueltasPlan(p) {
   return { vueltas, total: r3(total) };
 }
 
-/** Resumen por transportista (hoja TRANSPORTISTAS). */
-function resumenTransportistas(vs, participantes, unidades) {
+/**
+ * Vueltas hasta completar las TN programadas de la operación, repartidas entre los transportistas:
+ *  - Capacidad por vuelta de cada empresa = unidades solicitadas × TN prom. por unidad.
+ *  - Se completan las vueltas que caben en las TN programadas (cada vuelta suma la capacidad de todas).
+ *  - Lo que falta va en la última vuelta en viajes enteros (como máximo uno por unidad), repartidos en
+ *    proporción a la capacidad de cada empresa; el último viaje se ajusta para que el total sea exacto.
+ *  - Cada columna de vuelta es acumulada (como en el Excel) y TOTAL TN = valor de la última vuelta.
+ * Las empresas con vueltas escritas a mano conservan sus valores y se descuentan de lo programado.
+ * Devuelve Map(transportista_id → { vueltas, total, viajes }).
+ */
+function planVueltas(participantes, tnProgramadas) {
+  const out = new Map();
+  const auto = [];
+  let prog = Number(tnProgramadas) || 0;
+  for (const p of participantes) {
+    if (Object.keys(p.vueltas_manual || {}).length || !prog) {
+      const pl = vueltasPlan(p);
+      out.set(p.transportista_id, { ...pl, viajes: p.tn_prom_unidad ? Math.ceil(pl.total / p.tn_prom_unidad) : 0 });
+      if (prog && Object.keys(p.vueltas_manual || {}).length) prog -= pl.total;
+    } else auto.push(p);
+  }
+  const cap = (p) => r3((p.unidades_solicitadas || 0) * (p.tn_prom_unidad || 0));
+  const C = auto.reduce((s, p) => s + cap(p), 0);
+  const vacio = () => ({ vueltas: Array.from({ length: N_VUELTAS }, () => ({ tn: null, manual: false })), total: 0, viajes: 0 });
+  if (C <= 0 || prog <= 0) { auto.forEach((p) => out.set(p.transportista_id, vacio())); return out; }
+  let k = Math.floor((prog + 1e-9) / C);
+  let R = r3(prog - k * C);
+  if (R < 0.0005) R = 0;
+  // Última vuelta: viajes enteros por proporción de capacidad (mayor déficit primero)
+  const ult = new Map(auto.map((p) => [p.transportista_id, { viajes: 0, tn: 0 }]));
+  if (R > 0) {
+    let asignado = 0, ultimo = null;
+    const meta = new Map(auto.map((p) => [p.transportista_id, p.tn_prom_unidad ? (R * cap(p)) / C / p.tn_prom_unidad : 0]));
+    while (asignado < R - 1e-9) {
+      let mejor = null, def = -Infinity;
+      for (const p of auto) {
+        const u = ult.get(p.transportista_id);
+        if (!cap(p) || u.viajes >= (p.unidades_solicitadas || 0)) continue;
+        const d = meta.get(p.transportista_id) - u.viajes;
+        if (d > def) { def = d; mejor = p; }
+      }
+      if (!mejor) break;
+      const u = ult.get(mejor.transportista_id);
+      u.viajes++; u.tn = r3(u.tn + mejor.tn_prom_unidad); asignado = r3(asignado + mejor.tn_prom_unidad); ultimo = mejor;
+    }
+    // El exceso del último viaje se descuenta a la empresa con más TN en esa vuelta
+    let exceso = r3(asignado - R);
+    if (exceso > 0) {
+      const mayor = [...ult.entries()].sort((a, b) => b[1].tn - a[1].tn)[0][1];
+      mayor.tn = r3(mayor.tn - exceso);
+    }
+    void ultimo;
+  }
+  const nV = k + (R > 0 ? 1 : 0);
+  for (const p of auto) {
+    const c = cap(p), u = ult.get(p.transportista_id);
+    const final = r3(c * k + u.tn);
+    const vueltas = Array.from({ length: N_VUELTAS }, (_, i) => {
+      const n = i + 1;
+      if (n > nV || !c) return { tn: null, manual: false };
+      if (n === N_VUELTAS && nV > N_VUELTAS) return { tn: final, manual: false }; // más de 15 vueltas: la 15ª lleva el total
+      return { tn: n <= k ? r3(c * n) : final, manual: false };
+    });
+    out.set(p.transportista_id, { vueltas, total: final, viajes: (p.unidades_solicitadas || 0) * k + u.viajes });
+  }
+  return out;
+}
+
+/** Resumen por transportista (hoja TRANSPORTISTAS). tnProgramadas: TN programadas de la operación. */
+function resumenTransportistas(vs, participantes, unidades, tnProgramadas = 0) {
+  const planes = planVueltas(participantes, tnProgramadas);
   return participantes.map((p) => {
     const mios = vs.filter((v) => v.transportista_id === p.transportista_id);
-    const plan = vueltasPlan(p);
+    const plan = planes.get(p.transportista_id);
     const tnAprox = plan.total;
     const vueltasMax = mios.reduce((m, v) => Math.max(m, v.vuelta), 0);
     return {
@@ -283,7 +352,7 @@ function resumenTransportistas(vs, participantes, unidades) {
       unidades_en_lista: unidades.filter((u) => u.transportista_id === p.transportista_id).length,
       tn_aprox: r3(tnAprox),
       vueltas: plan.vueltas,
-      viajes_aprox: p.tn_prom_unidad ? Math.ceil(tnAprox / p.tn_prom_unidad) : 0,
+      viajes_aprox: plan.viajes,
       unidades_activas: new Set(mios.map((v) => v.placa)).size,
       viajes_realizados: mios.length,
       viajes_pendientes: mios.filter((v) => v.status === STATUS.PENDIENTE).length,
@@ -305,7 +374,7 @@ function resumenOperacion(vs, op, participantes, unidades) {
   const desc = vs.filter((v) => v.status === STATUS.DESCARGADO);
   const fechasAcopio = desc.map((v) => (v.ingreso_en || v.fecha_recepcion || '').slice(0, 10)).filter(Boolean).sort();
   const fechasDesp = vs.map((v) => v.fecha_despacho).filter(Boolean).sort();
-  const rt = resumenTransportistas(vs, participantes, unidades);
+  const rt = resumenTransportistas(vs, participantes, unidades, op?.tn_programadas);
   return {
     viajes: vs.length,
     unidades: new Set(vs.map((v) => v.placa)).size,
@@ -432,5 +501,5 @@ export {
   JORNADAS, RANGOS, STATUS,
   normPlaca, toMs, fmtDT, normDT, normDate, jornadaDe, turnoDe, rangoDe, r3,
   enriquecerViajes, totales, tablaReportes, tablaEmbarque,
-  resumenTransportistas, vueltasPlan, resumenOperacion, anioOperacion, resumenJornadas, resumenUnidades, resumenTiempos, preacopio,
+  resumenTransportistas, vueltasPlan, planVueltas, resumenOperacion, anioOperacion, resumenJornadas, resumenUnidades, resumenTiempos, preacopio,
 };

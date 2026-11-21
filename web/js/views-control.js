@@ -260,7 +260,9 @@ export async function vTransportistas(view, ctx) {
         num(tot('unidades_activas'), 0), num(tot('viajes_realizados'), 0), num(tot('tn_final'))],
     })}</div>
   <div class="card"><div class="card-h"><div><h2>Detallado por vueltas (TN)</h2>
-      <p class="muted small" style="margin:4px 0 0">1ª vuelta = unidades solicitadas × TN prom. por unidad · vueltas 2-10 = 1ª vuelta × n · las vueltas en <strong>negrita</strong> fueron ingresadas a mano · TOTAL TN = mayor valor (es el "Total aprox. TN").</p></div></div>
+      <p class="muted small" style="margin:4px 0 0">Calculado hasta completar las <strong>${num(tab.operacion?.tn_programadas)} TN programadas</strong>: cada vuelta = unidades solicitadas × TN prom. por unidad (acumulado);
+      lo que falta después de la última vuelta completa se reparte en viajes enteros en proporción a las unidades de cada transportista, y el último viaje se ajusta para cuadrar exacto.
+      TOTAL TN = "Total aprox. TN". Las vueltas en <strong>negrita</strong> fueron fijadas a mano.</p></div></div>
     ${tabla([
       { t: 'Razón social', f: (x) => `<strong>${esc(x.razon_social)}</strong>` },
       ...NOMBRES_VUELTA.map((nom, i) => ({ t: nom, n: 1, f: (x) => { const v = x.vueltas[i]; return v.tn === null ? '' : v.manual ? `<strong>${num(v.tn)}</strong>` : num(v.tn); } })),
@@ -268,7 +270,7 @@ export async function vTransportistas(view, ctx) {
       ...(edit ? [{ t: '', f: (x) => `<button class="btn sm" data-part="${x.transportista_id}">Editar</button>` }] : []),
     ], res, {
       empty: 'Ningún transportista asignado a la operación',
-      foot: ['Total', ...NOMBRES_VUELTA.map((_, i) => num(res.reduce((s, x) => s + (x.vueltas[i].tn || 0), 0))), num(tot('tn_aprox'))],
+      foot: ['Total', ...NOMBRES_VUELTA.map((_, i) => (res.some((x) => x.vueltas[i].tn !== null) ? num(res.reduce((s, x) => s + (x.vueltas[i].tn || 0), 0)) : '')), num(tot('tn_aprox'))],
     })}</div>` : sinOperacion()}
   <div class="card"><div class="card-h"><h2>Maestro de transportistas</h2>${edit ? '<div class="btns"><button class="btn" id="b-hab">Registrar transportistas habituales</button><button class="btn primary" id="b-new">+ Registrar transportista</button></div>' : ''}</div>
     ${tabla([
@@ -330,10 +332,11 @@ function partModal(p, disponibles, done) {
       <label class="check"><input type="checkbox" name="reporte_confirmado" ${p.reporte_confirmado ? 'checked' : ''}> Reporte confirmado</label>
       <label class="check full"><input type="checkbox" name="predeterminado" checked> Usar estas unidades solicitadas y TN prom. como predeterminado al crear una operación nueva</label>
       <div class="full"><h3 style="margin:8px 0 2px">Detallado por vueltas (TN)</h3>
-        <p class="muted small" style="margin:0">Deje en blanco para el cálculo automático (unidades × TN prom. × n, hasta la 10ª vuelta). Escriba un valor para fijarlo a mano, como en el Excel (p. ej. la 11ª vuelta).</p></div>
+        <p class="muted small" style="margin:0">Déjelas en blanco: la app las calcula hasta completar las TN programadas, repartidas entre los transportistas (en gris, el cálculo actual).
+          Si escribe un valor, las vueltas de esta empresa quedan fijas a mano y el resto de lo programado se reparte entre las demás.</p></div>
       ${NOMBRES_VUELTA.map((nom, i) => {
         const man = p.vueltas_manual?.[i + 1];
-        const auto = i < 10 ? Math.round((p.unidades_solicitadas || 0) * (p.tn_prom_unidad || 0) * (i + 1) * 100) / 100 : '';
+        const auto = p.vueltas?.[i] && !p.vueltas[i].manual && p.vueltas[i].tn !== null ? p.vueltas[i].tn : '';
         return `<label>${nom}<input name="v${i + 1}" type="number" step="0.01" min="0" value="${man ?? ''}" placeholder="${auto === '' ? '—' : auto}" data-n="${i + 1}"></label>`;
       }).join('')}
       <label class="full">Observación<input name="observacion" value="${esc(p.observacion || '')}"></label>
@@ -346,12 +349,7 @@ function partModal(p, disponibles, done) {
     },
   });
   const f = dlg.querySelector('form');
-  const actualizar = () => {
-    const base = (Number(f.unidades_solicitadas.value) || 0) * (Number(f.tn_prom_unidad.value) || 0);
-    f.querySelectorAll('[data-n]').forEach((el) => { const n = Number(el.dataset.n); if (n <= 10) el.placeholder = String(Math.round(base * n * 100) / 100); });
-  };
-  f.unidades_solicitadas.addEventListener('input', actualizar);
-  f.tn_prom_unidad.addEventListener('input', actualizar);
+  void f;
   $('#b-del', dlg)?.addEventListener('click', async () => {
     await api(`/operaciones/${state.opId}/transportistas/${p.transportista_id}`, { method: 'DELETE' }); dlg.close(); dlg.remove(); done();
   });

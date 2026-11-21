@@ -338,7 +338,7 @@ ruta('GET', '/operaciones/:id/tablero', async ({ id }) => {
   const unidades = unidadesDe(D, I);
   return {
     operacion: op, totales: C.totales(viajes, op, embarque), preacopio: C.preacopio(op),
-    transportistas: C.resumenTransportistas(viajes, participantes(D, I), unidades), jornadas: C.resumenJornadas(viajes),
+    transportistas: C.resumenTransportistas(viajes, participantes(D, I), unidades, op.tn_programadas), jornadas: C.resumenJornadas(viajes),
     unidades: C.resumenUnidades(viajes), tiempos: C.resumenTiempos(viajes),
     reportes_despacho: C.tablaReportes(viajes, op, D.reportes, 'despacho'), reportes_acopio: C.tablaReportes(viajes, op, D.reportes, 'acopio'),
     embarque, unidades_en_lista: unidades.length, ultimos: viajes.slice(-8).reverse(), resumen: calcularResumen(D, I),

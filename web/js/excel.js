@@ -483,12 +483,8 @@ export function importarLibro(wb, T, usuario) {
       const nc = str(cv(trs, `B${r}`)), rs = str(cv(trs, `C${r}`)), ruc = str(cv(trs, `D${r}`));
       if (!nc || !ruc || normH(rs) === 'TOTAL') continue;
       const t = upT(ruc, rs || nc, nc);
-      // Vueltas escritas a mano (P:AD sin fórmula) = valores manuales; las de fórmula se recalculan en la app.
+      // Las vueltas (P:AD) no se copian: la app las calcula hasta completar las TN programadas.
       const vueltas_manual = {};
-      for (let i = 0; i < 15; i++) {
-        const cell = trs.getCell(r, 16 + i);
-        if (typeof cell.value === 'number') vueltas_manual[i + 1] = cell.value;
-      }
       D.op_transportistas.push({ transportista_id: t.id, unidades_solicitadas: toNum(cv(trs, `E${r}`)) || 0, tn_prom_unidad: toNum(cv(trs, `G${r}`)) || 33,
         tn_asignadas: null, vueltas_manual, reporte_confirmado: cv(trs, `N${r}`) ? 1 : 0, observacion: null });
       const hoja = sh(nc) || wb.worksheets.find((w) => normH(cv(w, 'K10')) === normH(nc));
