@@ -1,6 +1,6 @@
 import { state, api, esc, toast, $, $$, modal, destruirGraficos, esAdmin, activarFechaHora24, activarOndas, activarTablas, activarEquilibrio } from './core.js?v=__V__';
 import { mostrarIntro } from './intro.js?v=__V__';
-import { activarExportes, ICO as FX, descargarHTML, compartir } from './compartir.js?v=__V__';
+import { activarExportes, ICO as FX, descargarHTML, compartir, vVer } from './compartir.js?v=__V__';
 import { vTablero, vViajes, vRegistro } from './views-operacion.js?v=__V__';
 import { vReportes, vTransportistas, vUnidades, vResumenes, vPlanificacion, vReporteTransportista } from './views-control.js?v=__V__';
 import { vOperaciones, vImportar, vUsuarios } from './views-admin.js?v=__V__';
@@ -38,6 +38,7 @@ const RUTAS = {
   operaciones: { t: 'Operaciones', v: vOperaciones },
   importar: { t: 'Importar datos', v: vImportar },
   usuarios: { t: 'Usuarios', v: vUsuarios, admin: true },
+  ver: { t: 'Reporte compartido', v: vVer },
   // Portal del transportista (sólo sus viajes y unidades)
   portal: { t: 'Mis viajes', v: vPortal, portal: true },
   'portal-unidades': { t: 'Mis unidades', v: vPortalUnidades, portal: true },
@@ -50,6 +51,7 @@ const NAV = [
 const NAV_PORTAL = [['Mi empresa', ['portal', 'portal-unidades']]];
 const esTransp = () => state.user?.rol === 'transportista';
 ICON.portal = ICON.viajes;
+ICON.ver = ICON.reportes;
 const COLOR = {
   tablero: '#2563eb', reportes: '#8b5cf6', resumenes: '#ec4899', viajes: '#0ea5e9', registro: '#10b981',
   planificacion: '#f59e0b', transportistas: '#f97316', unidades: '#14b8a6',
@@ -90,7 +92,8 @@ function vLogin(root, error = '') {
     try {
       await G.login();
       await iniciar();
-      location.hash = '#/tablero';
+      // Si llegó por un enlace (p. ej. un reporte compartido), se mantiene ese destino
+      if (!location.hash || /^#\/?login/.test(location.hash)) location.hash = '#/tablero';
       render();
     } catch (err) { $('#login-err').textContent = err.message; } finally { btn.disabled = false; }
   });

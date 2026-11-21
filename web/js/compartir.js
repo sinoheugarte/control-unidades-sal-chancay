@@ -35,9 +35,14 @@ export async function htmlDe(el, titulo) {
   // Fuera: controles, barras de filtros, filas ocultas por el filtro
   copia.querySelectorAll('button, .btn, .tbar, tr.tfil, .no-print, input[type=file], dialog, [data-fx]').forEach((x) => x.remove());
   copia.querySelectorAll('tr[hidden]').forEach((x) => x.remove());
-  copia.querySelectorAll('input, select, textarea').forEach((x) => {
+  // Controles: sólo se muestran los filtros que están aplicados
+  const origCtl = [...el.querySelectorAll('input, select, textarea')];
+  [...copia.querySelectorAll('input, select, textarea')].forEach((x, i) => {
+    const o = origCtl[i] || x;
+    const val = o.tagName === 'SELECT' ? (o.value ? o.selectedOptions[0]?.textContent : '') : (o.type === 'checkbox' || o.type === 'radio' || o.type === 'hidden' ? '' : o.value);
+    if (!val) { x.remove(); return; }
     const s = document.createElement('span');
-    s.textContent = x.tagName === 'SELECT' ? (x.selectedOptions[0]?.textContent || '') : x.value;
+    s.className = 'filtro-act'; s.textContent = `Filtro: ${val}`;
     x.replaceWith(s);
   });
   copia.querySelectorAll('.table-wrap').forEach((x) => { x.style.maxHeight = 'none'; });
@@ -49,7 +54,12 @@ export async function htmlDe(el, titulo) {
 <title>${esc(titulo)}${opNombre() ? ` · ${esc(opNombre())}` : ''}</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
 <style>${css}
-body{padding:0}.rep{max-width:1500px;margin:0 auto;padding:22px}.rep-h{display:flex;align-items:center;gap:14px;margin-bottom:16px;padding:16px 18px;border-radius:16px;background:var(--grad);color:#fff;box-shadow:var(--shadow-lg)}
+html,body{overflow-x:auto}body{padding:0;min-width:0}.rep{max-width:none;margin:0;padding:18px 20px}
+*,*::before,*::after{animation:none!important;transition:none!important}
+.content>*,.card,.kpi,.ficha{opacity:1!important;transform:none!important;filter:none!important}
+.table-wrap{max-height:82vh!important;overflow:auto!important}
+.filtro-act{display:inline-flex;gap:4px;padding:3px 9px;border-radius:99px;background:var(--primary-soft);color:var(--primary);font-size:12px;font-weight:650;margin-right:6px}
+.chart-box img{display:block}.rep-h{display:flex;align-items:center;gap:14px;margin-bottom:16px;padding:16px 18px;border-radius:16px;background:var(--grad);color:#fff;box-shadow:var(--shadow-lg)}
 .rep-h h1{font-size:20px}.rep-h small{display:block;opacity:.85;font-weight:500}.rep-f{margin-top:18px;color:var(--muted);font-size:12px;text-align:center}
 .content{padding:0}.content>*,.dbar::before,.bar>i{animation:none!important}</style></head>
 <body><div class="rep"><div class="rep-h"><div><h1>${esc(titulo)}</h1><small>${esc(empresa)}${opNombre() ? ` · ${esc(opNombre())}` : ''} · Generado ${ahora()}</small></div></div>
@@ -68,18 +78,21 @@ export async function descargarHTML(el, titulo) {
 export async function compartir(el, titulo) {
   if (state.user?.rol === 'transportista') { toast('Descargue el HTML y compártalo como archivo.', true); return; }
   toast('Generando el enlace para compartir…');
-  let url;
+  let url, urlSp;
   try {
     const d = new Date(); const p = (n) => String(n).padStart(2, '0');
     const ruta = `Compartidos/${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())} ${nombreArchivo(titulo)}.html`;
     await G.subirArchivo(ruta, await htmlDe(el, titulo), 'text/html');
-    url = await G.crearEnlace(ruta);
+    // El enlace abre el reporte dentro de la app (SharePoint no muestra páginas HTML; sólo las descarga)
+    url = `${G.appUrl()}#/ver?f=${encodeURIComponent(ruta)}`;
+    try { urlSp = await G.crearEnlace(ruta); } catch { urlSp = null; }
   } catch (e) { toast(`No se pudo crear el enlace: ${e.message}`, true); return; }
   const asunto = `${titulo}${opNombre() ? ` · ${opNombre()}` : ''}`;
   const dlg = modal({
     title: 'Compartir reporte', submitText: 'Enviar por correo', wide: true,
     body: `<p style="margin-top:0">Se guardó <strong>${esc(titulo)}</strong> en SharePoint (<em>Control Unidades Sal/Compartidos</em>).
-      El enlace es de <strong>solo lectura</strong> y lo pueden abrir los usuarios de su organización.</p>
+      El enlace abre el reporte en la aplicación, en <strong>solo lectura</strong>; quien lo reciba ingresa con su cuenta de Microsoft 365 de la organización.
+      ${urlSp ? `<br><span class="muted small">Archivo en SharePoint (para descargarlo): <a href="${esc(urlSp)}" target="_blank" rel="noopener">abrir</a></span>` : ''}</p>
       <div class="btns" style="flex-wrap:nowrap"><input id="fx-url" readonly value="${esc(url)}" style="flex:1"><button type="button" class="btn" id="fx-copiar">Copiar enlace</button>
       <a class="btn" href="${esc(url)}" target="_blank" rel="noopener">Abrir</a></div>
       <div class="form" style="margin-top:14px">
@@ -137,4 +150,22 @@ export function activarExportes(root = document.body) {
   scan();
   let pend = false;
   new MutationObserver(() => { if (pend) return; pend = true; requestAnimationFrame(() => { pend = false; scan(); }); }).observe(root, { childList: true, subtree: true });
+}
+
+/** Pantalla "Reporte compartido": muestra dentro de la app el HTML guardado en SharePoint. */
+export async function vVer(view) {
+  const f = new URLSearchParams(location.hash.split('?')[1] || '').get('f');
+  if (!f || !/^Compartidos\/[^/]+\.html$/.test(f)) { view.innerHTML = '<div class="alert bad">Enlace de reporte no válido.</div>'; return; }
+  const { texto, webUrl } = await G.leerTexto(f);
+  const nombre = f.split('/').pop().replace(/^\d{8}-\d{6}\s*/, '').replace(/\.html$/, '');
+  view.innerHTML = `<div class="card" style="padding:0;overflow:hidden">
+    <div class="card-h" style="padding:12px 16px;margin:0;border-bottom:1px solid var(--border)">
+      <div><h2>${esc(nombre)}</h2><div class="muted small">Reporte compartido · solo lectura</div></div>
+      <div class="btns"><button class="btn sm fx" id="v-desc" data-fx="html">${ICO.html}Descargar HTML</button>
+      <button class="btn sm" id="v-nueva">Abrir en otra pestaña</button>${webUrl ? `<a class="btn sm" href="${esc(webUrl)}" target="_blank" rel="noopener">SharePoint</a>` : ''}</div></div>
+    <iframe id="v-frame" title="${esc(nombre)}" sandbox="allow-same-origin allow-popups" style="display:block;width:100%;height:calc(100vh - 150px);border:0;background:var(--bg)"></iframe></div>`;
+  view.querySelector('#v-frame').srcdoc = texto;
+  const blob = () => new Blob([texto], { type: 'text/html;charset=utf-8' });
+  view.querySelector('#v-desc').onclick = () => descargarBlob(blob(), `${nombre}.html`);
+  view.querySelector('#v-nueva').onclick = () => { const u = URL.createObjectURL(blob()); window.open(u, '_blank', 'noopener'); setTimeout(() => URL.revokeObjectURL(u), 60000); };
 }

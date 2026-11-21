@@ -169,6 +169,19 @@ export async function leerJSON(nombre) {
   return { data, etag: meta.eTag };
 }
 
+/** Lee un archivo de texto (p. ej. un reporte HTML compartido). */
+export async function leerTexto(nombre) {
+  const ruta = await rutaItem(nombre);
+  const r = await g(ruta, { raw: true });
+  if (r.status === 404) throw Object.assign(new Error('El reporte compartido ya no existe en SharePoint'), { status: 404 });
+  if (!r.ok) throw Object.assign(new Error(`No se pudo leer el reporte (${r.status}). Pida a quien lo compartió que le dé acceso.`), { status: r.status });
+  const meta = await r.json();
+  const url = meta['@microsoft.graph.downloadUrl'];
+  const d = url ? await fetch(url) : await g(`${ruta}:/content`, { raw: true });
+  if (!d.ok) throw new Error(`No se pudo descargar el reporte (${d.status})`);
+  return { texto: await d.text(), webUrl: meta.webUrl };
+}
+
 /** Guarda un JSON. Con etag, falla con status 412 si otro usuario lo modificó antes. */
 export async function guardarJSON(nombre, data, etag) {
   const headers = { 'Content-Type': 'application/json' };
