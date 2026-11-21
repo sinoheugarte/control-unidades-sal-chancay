@@ -20,6 +20,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
   <link rel="stylesheet" href="css/app.css?v=__V__">
+  <!-- El aviso de instalación (Chrome/Edge) llega muy pronto: se guarda antes de que cargue la app -->
+  <script>window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); window.__avisoInstalar = e; });</script>
 </head>
 <body>
   <div id="app"></div>

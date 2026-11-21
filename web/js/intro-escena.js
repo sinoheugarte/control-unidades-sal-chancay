@@ -80,7 +80,7 @@ export function escena(canvas, t0, reducido) {
   const FRANJA = new Path2D('M1226 742 L2900 742 L2900 760 L1236 760 Q1230 752 1226 742 Z');
 
   const ajustar = () => {
-    dpr = Math.min(2, window.devicePixelRatio || 1);
+    dpr = Math.min(matchMedia('(pointer: coarse)').matches ? 1.5 : 2, window.devicePixelRatio || 1); // en celulares, menos píxeles: animación fluida
     W = canvas.clientWidth; H = canvas.clientHeight;
     canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
     s = Math.max(W / 1600, H / 1500);           // en teléfonos verticales la escena se agranda y la cámara sigue al camión

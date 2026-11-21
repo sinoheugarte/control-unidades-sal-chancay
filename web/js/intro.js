@@ -89,7 +89,7 @@ function particulas(canvas, reducido) {
     const gr = g.createRadialGradient(16, 16, 0, 16, 16, 16); gr.addColorStop(0, `rgba(${rgb},1)`); gr.addColorStop(.25, `rgba(${rgb},.55)`); gr.addColorStop(1, `rgba(${rgb},0)`);
     g.fillStyle = gr; g.fillRect(0, 0, 32, 32); return c; };
   const SP = [sprite('255,255,255'), sprite('125,211,252'), sprite('196,181,253')];
-  const N = reducido ? 40 : Math.min(130, Math.round((w * h) / 14000));
+  const N = reducido ? 40 : Math.min(matchMedia('(pointer: coarse)').matches ? 60 : 130, Math.round((w * h) / 14000));
   const ps = Array.from({ length: N }, () => ({ x: Math.random() * w, y: Math.random() * h, r: Math.random() * 5 + 3, v: Math.random() * 0.45 + 0.1, f: Math.random() * Math.PI * 2, s: SP[Math.random() < 0.7 ? 0 : Math.random() < 0.5 ? 1 : 2] }));
   let vivo = true; const t0 = performance.now();
   const paso = (t) => {
@@ -121,7 +121,7 @@ function musica(t0, ctx) {
   master.connect(comp).connect(ctx.destination);
   // Reverberación (respuesta al impulso generada con ruido decreciente)
   const rev = ctx.createConvolver();
-  const largo = ctx.sampleRate * 2.8; const ir = ctx.createBuffer(2, largo, ctx.sampleRate);
+  const largo = Math.round(ctx.sampleRate * 1.8); const ir = ctx.createBuffer(2, largo, ctx.sampleRate);
   for (let c = 0; c < 2; c++) { const d = ir.getChannelData(c); for (let i = 0; i < largo; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / largo, 2.6); }
   rev.buffer = ir; const revG = ctx.createGain(); revG.gain.value = 0.45; rev.connect(revG).connect(master);
   const bus = ctx.createGain(); bus.connect(master); bus.connect(rev);
@@ -158,7 +158,7 @@ function musica(t0, ctx) {
       const ini = b * BAR; if (ini + BAR < ya) return;
       const t = T(ini);
       // Pad: tres osciladores desafinados por nota
-      ac.slice(1).forEach((n) => [-7, 0, 7].forEach((dt) => nota('sawtooth', f(n), t, BAR + 0.6, 0.018, { ataque: 0.6, corte: 1400 + b * 120, detune: dt })));
+      ac.slice(1).forEach((n) => [-6, 6].forEach((dt) => nota('sawtooth', f(n), t, BAR + 0.6, 0.024, { ataque: 0.6, corte: 1400 + b * 120, detune: dt })));
       nota('sine', f(ac[0] - 12), t, BAR, 0.22, { ataque: 0.05, corte: 400 }); // bajo
       if (ini >= 3) { // arpegio y pulso desde que arranca el camión
         for (let k = 0; k < 8; k++) nota('triangle', f(ac[1 + (k % 4)] + 12), t + k * 0.25, 0.3, 0.05, { ataque: 0.01, corte: 3200 });
@@ -191,8 +191,11 @@ export function mostrarIntro() {
   const st = document.createElement('style'); st.textContent = CSS; document.head.appendChild(st);
   const AC = window.AudioContext || window.webkitAudioContext;
   if (reducido || !AC) return presentar(st, reducido, null);
-  let actx = null;
-  try { actx = new AC(); } catch { return presentar(st, reducido, null); }
+  // latencyHint 'playback': búfer de audio más grande, sin microcortes cuando la animación exige al procesador
+  const nuevoAudio = () => { try { return new AC({ latencyHint: 'playback' }); } catch { try { return new AC(); } catch { return null; } } };
+  // App nativa (Android): el sonido está permitido sin toque, arranca directo
+  if (window.Capacitor?.isNativePlatform?.()) { const a = nuevoAudio(); a?.resume?.().catch(() => {}); return presentar(st, reducido, a); }
+  // Web (PC y celular): portada "Toca para comenzar"; el toque habilita el sonido
   const tapa = document.createElement('div');
   tapa.className = 'ix tapa';
   tapa.innerHTML = `<div class="aur"><i></i><i></i><i></i></div>
@@ -205,20 +208,36 @@ export function mostrarIntro() {
   const arrancar = (conSonido) => {
     if (listo) return; listo = true;
     clearTimeout(tEspera);
-    if (conSonido) { try { actx.resume(); } catch { /* */ } }
-    presentar(st, reducido, actx);
+    let a = null;
+    if (conSonido) {
+      a = nuevoAudio();                       // creado dentro del toque: el navegador lo deja sonar
+      try { a?.resume(); } catch { /* */ }
+      desbloquearAudio();
+    } else a = nuevoAudio();                  // sin toque: queda en pausa hasta "Activar música"
+    presentar(st, reducido, a);
     tapa.classList.add('fuera');
     setTimeout(() => tapa.remove(), 1000);
   };
   tapa.addEventListener('click', (e) => {
-    if (e.target.closest('.skip')) { listo = true; clearTimeout(tEspera); tapa.classList.add('fuera'); try { actx.close(); } catch { /* */ } setTimeout(() => { tapa.remove(); st.remove(); }, 900); return; }
+    if (e.target.closest('.skip')) { listo = true; clearTimeout(tEspera); tapa.classList.add('fuera'); setTimeout(() => { tapa.remove(); st.remove(); }, 900); return; }
     arrancar(true);
   });
-  // Si el audio ya está permitido (app nativa / sitio con permiso), arranca sin esperar el toque
-  actx.resume().then(() => { if (actx.state === 'running') arrancar(false); }).catch(() => {});
-  setTimeout(() => { if (actx.state === 'running') arrancar(false); }, 250);
-  // Sin toque en 12 s: arranca igual (sin sonido; el botón "Activar música" sigue disponible)
-  const tEspera = setTimeout(() => arrancar(false), 12000);
+  // Sin toque en 15 s: arranca igual (sin sonido; el botón "Activar música" sigue disponible)
+  const tEspera = setTimeout(() => arrancar(false), 15000);
+}
+
+/* En celulares (sobre todo iPhone en modo silencio) el audio web queda mudo hasta que suena un elemento
+   <audio>: se reproduce un sonido vacío de 0,1 s dentro del toque para abrir la salida de audio. */
+function desbloquearAudio() {
+  try {
+    const n = 4410, buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
+    const w = (o, s) => [...s].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+    w(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); w(8, 'WAVE'); w(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, 44100, true); v.setUint32(28, 88200, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, 'data'); v.setUint32(40, n * 2, true);
+    const el = new Audio(URL.createObjectURL(new Blob([buf], { type: 'audio/wav' })));
+    el.setAttribute('playsinline', ''); el.volume = 0.01;
+    el.play().catch(() => {});
+  } catch { /* */ }
 }
 
 function presentar(st, reducido, actx) {
