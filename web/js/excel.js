@@ -110,35 +110,6 @@ export function resolverTransportista(T, D, nombre, placa) {
   }
   return null;
 }
-/**
- * Hoja TRANSPORTISTAS del libro de control: RUC, UNIDADES SOLICITADAS, TN PROM. X UNIDAD, OBSERVACION y
- * REPORTE CONFIRMADO de cada empresa (para cargar la participación de una operación ya creada).
- */
-/** Vueltas escritas a mano en la hoja TRANSPORTISTAS (columnas "1ERA VUELTA"… sin fórmula). */
-function vueltasManuales(ws, fila) {
-  let c0 = 16; // columna P en el libro original
-  for (let r = 1; r <= 10; r++) ws.getRow(r).eachCell((cell, col) => { if (/^1(ERA|RA)?\s*VUELTA$/.test(normH(val(cell)))) c0 = col; });
-  const m = {};
-  for (let i = 0; i < 15; i++) { const v = ws.getCell(fila, c0 + i).value; if (typeof v === 'number') m[i + 1] = v; }
-  return m;
-}
-export function leerParticipacion(wb) {
-  const found = findSheet(wb, [['RUC'], ['UNIDADES SOLICITADAS']], ['TRANSPORTISTAS']);
-  if (!found) throw new Error('No se encontró la hoja TRANSPORTISTAS (columnas "RUC" y "UNIDADES SOLICITADAS").');
-  const filas = [];
-  for (const r of found.rows) {
-    const ruc = str(r.get('RUC'))?.replace(/\D/g, '');
-    const rs = str(r.get('RAZON SOCIAL', 'RAZÓN SOCIAL'));
-    if (!ruc || !/^\d{11}$/.test(ruc) || normH(rs || '') === 'TOTAL') continue;
-    filas.push({
-      ruc, razon_social: rs, nombre_comercial: str(r.get('TRANSPORTE')),
-      unidades_solicitadas: toNum(r.get('UNIDADES SOLICITADAS')) || 0, tn_prom_unidad: toNum(r.get('TN PROM. X UNIDAD', 'TN PROM X UNIDAD')),
-      observacion: str(r.get('OBSERVACION', 'OBSERVACIÓN')), reporte_confirmado: r.get('REPORTE CONFIRMADO') ? 1 : 0,
-      vueltas_manual: vueltasManuales(found.ws, r._row),
-    });
-  }
-  return { hoja: found.ws.name, filas };
-}
 export function asegurarParticipacion(D, tid) {
   if (!tid || D.op_transportistas.some((p) => p.transportista_id === tid)) return;
   D.op_transportistas.push({ transportista_id: tid, unidades_solicitadas: 0, tn_prom_unidad: 33, tn_asignadas: null, vueltas_manual: {}, reporte_confirmado: 0, observacion: null });
