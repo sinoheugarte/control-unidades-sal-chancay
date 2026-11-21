@@ -70,13 +70,10 @@ test('planificación por vueltas (hoja TRANSPORTISTAS)', () => {
   assert.strictEqual(p.total, 13240);
 });
 
-test('planVueltas: completa las TN programadas en viajes enteros', () => {
-  const ps = [[1, 40], [2, 10], [3, 8], [4, 2], [5, 2]].map(([id, u]) => ({ transportista_id: id, unidades_solicitadas: u, tn_prom_unidad: 33 }));
+test('planVueltas: última vuelta como el Excel (más unidades primero, saldo al mayor que no cupo)', () => {
+  const ps = [[1, 40], [2, 8], [3, 10], [4, 2], [5, 2]].map(([id, u]) => ({ transportista_id: id, unidades_solicitadas: u, tn_prom_unidad: 33 }));
   const m = C.planVueltas(ps, 20060);
-  const tot = [...m.values()].reduce((s, x) => s + x.total, 0);
-  assert.strictEqual(Math.round(tot * 1000) / 1000, 20060);
-  assert.strictEqual([...m.values()].reduce((s, x) => s + x.viajes, 0), 608);
-  assert.strictEqual(m.get(1).vueltas[8].tn, 11880); // 9ª vuelta completa
-  assert.strictEqual(m.get(1).vueltas[10].tn, null); // no hay 11ª vuelta
-  for (const [, x] of m) assert.ok(x.viajes === Math.ceil(x.total / 33 - 1e-9));
+  assert.deepStrictEqual([1, 2, 3, 4, 5].map((i) => m.get(i).vueltas[9].tn), [13200, 2640, 3032, 594, 594]);
+  assert.strictEqual([...m.values()].reduce((s, x) => s + x.total, 0), 20060);
+  assert.strictEqual(m.get(1).vueltas[10].tn, null);
 });
