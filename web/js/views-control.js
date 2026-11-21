@@ -96,7 +96,8 @@ function pintarCortes(body, cortes, proceso, edit, ctx, pend) {
         <div class="s">${prog ? `${num(Math.min(100, ((u?.tn_total || 0) / prog) * 100), 1)} % de ${num(prog, 0)} TN` : ''}</div>
         ${prog ? `<div class="bar ${u?.tn_total >= prog ? 'ok' : ''}"><i style="width:${Math.min(100, ((u?.tn_total || 0) / prog) * 100)}%"></i></div>` : ''}</div>
       <div class="kpi"><div class="l">Reportes (cortes)</div><div class="v">${cortes.length}</div><div class="s">${u ? `último: ${fechaHora(u.fin)}` : ''}</div></div>
-      <div class="kpi"><div class="l">Ritmo promedio</div><div class="v">${num(tph)}</div><div class="s">TN por hora · ${num(u?.horas_total ? u.viajes_total / u.horas_total : null, 0)} unid./h</div></div>
+      <div class="kpi"><div class="l">Ritmo promedio</div><div class="v">${num(tph)}</div><div class="s">TN por hora</div></div>
+      <div class="kpi"><div class="l">Unidades por hora</div><div class="v">${num(u?.horas_total ? u.viajes_total / u.horas_total : null, 0)}</div><div class="s">promedio de viajes por hora</div></div>
       <div class="kpi"><div class="l">TN restantes</div><div class="v">${num(u?.tn_restantes)}</div><div class="s">${num(u?.viajes_est_rest, 0)} viajes estimados</div></div>
       <div class="kpi"><div class="l">Fecha est. término</div><div class="v" style="font-size:19px">${fechaHora(u?.fecha_est_termino)}</div><div class="s">faltan ${horas(u?.horas_est_rest)} h</div></div>
     </div>
