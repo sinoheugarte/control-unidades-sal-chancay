@@ -74,6 +74,8 @@ function pintarCortes(body, cortes, proceso, edit, ctx, pend) {
   const u = hechos[hechos.length - 1];
   const prog = state.ops.find((o) => o.id === state.opId)?.tn_programadas || 0;
   const tph = u && u.horas_total ? u.tn_total / u.horas_total : null;
+  // Columnas de los reportes siguientes (vacías), como en la hoja REPORTES del Excel
+  const vacios = Array.from({ length: Math.max(1, 8 - cortes.length) }, (_, i) => cortes.length + i + 1);
   const filas = [
     ['INICIO', (r) => fechaHora(r.inicio)], ['CIERRE', (r) => fechaHora(r.fin)],
     ['TN PARCIAL', (r) => num(r.tn_parcial), true], ['# VIAJES', (r) => num(r.viajes, 0)], ['# HORAS', (r) => horas(r.horas)],
@@ -107,11 +109,12 @@ function pintarCortes(body, cortes, proceso, edit, ctx, pend) {
       <div class="card"><div class="card-h"><h3>TN por reporte y acumulado</h3><span class="muted small">clic en una barra para ver sus viajes</span></div><div class="chart-box"><canvas id="c-tn"></canvas></div></div>
       <div class="card"><div class="card-h"><h3>Ritmo por reporte</h3><span class="muted small">unidades por hora y TN por unidad</span></div><div class="chart-box"><canvas id="c-ritmo"></canvas></div></div>
     </div>
-    <div class="table-wrap" style="max-height:none"><table class="matriz">
-      <thead><tr><th style="position:sticky;left:0;z-index:2">PROCESO DE ${P}</th>${cortes.map((r) => `<th class="num" style="text-align:center">
-        <button class="btn sm" data-ver="${r.numero}" title="Ver viajes de este reporte">${ordinal(r.numero)} REPORTE</button></th>`).join('')}</tr></thead>
-      <tbody>${filas.map(([l, f, fuerte]) => `<tr><th style="position:sticky;left:0;background:var(--surface-2)">${l}</th>${cortes.map((r) => `<td class="num" style="text-align:center">${fuerte ? `<strong>${f(r)}</strong>` : f(r)}</td>`).join('')}</tr>`).join('')}</tbody>
-      ${edit ? `<tfoot><tr><td style="position:sticky;left:0"></td>${cortes.map((r, i) => `<td style="text-align:center"><button class="btn sm" data-r="${r.id}">Editar cierre</button>${i === cortes.length - 1 ? ` <button class="btn sm danger" data-del="${r.id}">Eliminar</button>` : ''}</td>`).join('')}</tr></tfoot>` : ''}
+    <div class="table-wrap" style="max-height:none"><table class="matriz cortes" style="--n:${cortes.length + vacios.length}">
+      <colgroup><col class="c-lab">${[...cortes, ...vacios].map(() => '<col class="c-rep">').join('')}</colgroup>
+      <thead><tr><th class="lab">PROCESO DE ${P}</th>${cortes.map((r) => `<th class="rep">
+        <button class="btn sm" data-ver="${r.numero}" title="Ver viajes de este reporte">${ordinal(r.numero)} REPORTE</button></th>`).join('')}${vacios.map((n) => `<th class="rep vacio"><span>${ordinal(n)} REPORTE</span></th>`).join('')}</tr></thead>
+      <tbody>${filas.map(([l, f, fuerte]) => `<tr${fuerte ? ' class="fuerte"' : ''}><th class="lab">${l}</th>${cortes.map((r) => `<td class="rep">${f(r)}</td>`).join('')}${vacios.map(() => '<td class="rep vacio">·</td>').join('')}</tr>`).join('')}</tbody>
+      ${edit ? `<tfoot><tr><td class="lab"></td>${cortes.map((r, i) => `<td class="rep"><div class="btns" style="justify-content:center;flex-wrap:nowrap"><button class="btn sm" data-r="${r.id}" title="Editar la fecha y hora de cierre">Editar</button>${i === cortes.length - 1 ? `<button class="btn sm danger" data-del="${r.id}" title="Eliminar este reporte">Eliminar</button>` : ''}</div></td>`).join('')}${vacios.map((n, i) => `<td class="rep vacio">${i === 0 ? '<button class="btn sm primary" data-nuevo="1">+ Registrar</button>' : ''}</td>`).join('')}</tr></tfoot>` : ''}
     </table></div>`}`;
   if (cortes.length) {
     const c = colores();
@@ -139,6 +142,7 @@ function pintarCortes(body, cortes, proceso, edit, ctx, pend) {
     if (n) return verViajes(proceso, cortes.find((r) => r.numero === Number(n)));
     const ed = e.target.closest('[data-r]')?.dataset.r;
     if (ed) return corteModal(cortes.find((r) => r.id === Number(ed)), ctx.rerender, false);
+    if (e.target.closest('[data-nuevo]')) return corteModal({ tipo: proceso, numero: cortes.length + 1, inicio: u?.fin || null, fin: null }, ctx.rerender, true);
     const del = e.target.closest('[data-del]')?.dataset.del;
     if (del) {
       const r = cortes.find((x) => x.id === Number(del));

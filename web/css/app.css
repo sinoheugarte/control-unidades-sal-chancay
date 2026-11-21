@@ -465,3 +465,17 @@ table.trans td, table.trans th { padding: 6px 7px; }
 .btn.fx-html:hover:not([disabled]) { box-shadow: 0 0 0 1px color-mix(in srgb, #ea580c 45%, var(--border)), 0 4px 10px -4px rgba(234, 88, 12, .35); }
 .btn.fx-link:hover:not([disabled]) { box-shadow: 0 0 0 1px color-mix(in srgb, #2563eb 45%, var(--border)), 0 4px 10px -4px rgba(37, 99, 235, .35); }
 @media (prefers-reduced-motion: reduce) { .fx-ico { transition: none; } }
+
+/* Matriz de reportes (como la hoja REPORTES del Excel): columnas iguales y reportes siguientes vacíos */
+table.cortes { table-layout: fixed; width: max(100%, calc(200px + var(--n, 8) * 150px)); }
+table.cortes tfoot .btns { gap: 4px; }
+table.cortes col.c-lab { width: 200px; }
+table.cortes .lab { position: sticky; left: 0; z-index: 2; background: var(--surface-2); text-align: left; font-size: 10.5px; font-weight: 750; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); border-right: 1px solid var(--border); }
+table.cortes thead .lab { z-index: 3; }
+table.cortes .rep { text-align: center; font-variant-numeric: tabular-nums; border-right: 1px solid color-mix(in srgb, var(--border) 60%, transparent); }
+table.cortes thead .rep { background: color-mix(in srgb, var(--primary) 10%, var(--surface-2)); }
+table.cortes tr.fuerte td.rep { font-weight: 800; color: color-mix(in srgb, var(--primary) 70%, var(--text)); }
+table.cortes tr.fuerte .lab { color: var(--text); }
+table.cortes .rep.vacio { color: color-mix(in srgb, var(--muted) 50%, transparent); background: repeating-linear-gradient(135deg, transparent 0 8px, color-mix(in srgb, var(--surface-3) 45%, transparent) 8px 16px); }
+table.cortes thead .rep.vacio span { display: inline-block; padding: 3px 9px; border-radius: 8px; border: 1px dashed var(--border); font-size: 11px; font-weight: 700; color: var(--muted); }
+table.cortes tbody tr:hover td.rep:not(.vacio) { background: color-mix(in srgb, var(--primary) 8%, var(--surface)); }
