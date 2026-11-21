@@ -414,7 +414,7 @@ td .btns { gap: 4px; flex-wrap: nowrap; }
 .card-sub { color: var(--muted); font-size: 12px; margin: -6px 0 10px; }
 
 /* Barras de datos dentro de celdas (como las barras de datos del Excel) */
-td.cbar { min-width: 230px; }
+td.cbar { min-width: 150px; }
 .dbar { position: relative; display: flex; justify-content: flex-end; align-items: center; min-height: 20px; isolation: isolate; }
 .dbar::before {
   content: ""; position: absolute; left: 0; top: 3px; bottom: 3px; width: calc((100% - 11ch) * var(--w)); border-radius: 6px; z-index: -1;
@@ -584,9 +584,11 @@ table.cortes tbody tr:hover td.rep:not(.vacio) { background: color-mix(in srgb, 
   .top .who { display: none; }
 }
 
-/* Al girar el teléfono nada debe quedar más ancho que la pantalla
-   (si no, el visor de Android aleja el zoom y la app se ve "encogida") */
-html, body { max-width: 100%; overflow-x: hidden; }
-.layout, .main, .content { min-width: 0; max-width: 100%; }
-.chart-box { min-width: 0; max-width: 100%; }
+/* Las tarjetas y columnas pueden achicarse: una tabla ancha se desplaza dentro de su recuadro
+   (barra inferior) en lugar de ensanchar la página. Así nada queda oculto ni recortado. */
+.main, .content, .card, .content > *, .g12 > *, .g2 > *, .g21 > *, .g3 > *, .g4 > *, .g57 > *, .plan4 > *, .grid > * { min-width: 0; }
+.chart-box { min-width: 0; }
 .chart-box canvas { max-width: 100% !important; }
+/* Teléfonos: al girar, nada puede ensanchar la página (el visor de Android alejaría el zoom).
+   'clip' recorta sin crear un contenedor de desplazamiento (no rompe el menú fijo ni los encabezados). */
+@media (pointer: coarse) { html, body { overflow-x: clip; } }
