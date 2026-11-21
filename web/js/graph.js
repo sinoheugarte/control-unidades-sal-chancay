@@ -211,11 +211,11 @@ export async function asegurarCarpeta(ruta) {
 }
 
 /** Da permiso de sólo lectura sobre la carpeta a un correo (envía la invitación de SharePoint). */
-export async function compartirCarpeta(ruta, email, mensaje) {
+export async function compartirCarpeta(ruta, email, mensaje, { rol = 'read', invitar = true } = {}) {
   const id = await asegurarCarpeta(ruta);
   await g(`drives/${await drive()}/items/${id}/invite`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ recipients: [{ email }], roles: ['read'], requireSignIn: true, sendInvitation: true, message: mensaje }),
+    body: JSON.stringify({ recipients: [{ email }], roles: [rol], requireSignIn: true, sendInvitation: invitar, ...(invitar ? { message: mensaje } : {}) }),
   });
 }
 

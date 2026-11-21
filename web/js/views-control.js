@@ -231,6 +231,8 @@ function etapaModal(e, done) {
 /* =================== TRANSPORTISTAS =================== */
 export async function vTransportistas(view, ctx) {
   const edit = puedeEscribir();
+  // Trae las confirmaciones hechas por los transportistas desde su portal
+  if (edit && state.opId) { try { await api(`/operaciones/${state.opId}/confirmaciones/sincronizar`, { method: 'POST' }); } catch { /* sin conexión al portal */ } }
   const [todos, tab] = await Promise.all([
     api('/transportistas'),
     state.opId ? api(`/operaciones/${state.opId}/tablero`) : Promise.resolve(null),
@@ -250,7 +252,9 @@ export async function vTransportistas(view, ctx) {
       { t: 'Unidades activas', k: 'unidades_activas', n: 1, d: 0 },
       { t: 'Viajes realizados', k: 'viajes_realizados', n: 1, d: 0 }, { t: 'Total final TN', k: 'tn_final', n: 1 },
       { t: 'Observación', f: (x) => esc(x.observacion || x.observacion_calc || '') },
-      { t: 'Reporte confirmado', f: (x) => (x.reporte_confirmado ? '<span class="pill ok">Sí</span>' : '<span class="pill warn">No</span>') },
+      { t: 'Reporte confirmado', f: (x) => (x.reporte_confirmado
+        ? `<span class="pill ok" title="${esc(`Confirmado ${x.confirmado_origen === 'portal' ? 'desde el portal' : 'manualmente'}${x.confirmado_por ? ` por ${x.confirmado_por}` : ''}${x.confirmado_en ? ` el ${fechaHora(x.confirmado_en)}` : ''}${x.confirmado_obs ? ` · ${x.confirmado_obs}` : ''}`)}">Sí</span>${x.confirmado_en ? `<div class="muted small">${x.confirmado_origen === 'portal' ? 'Portal' : 'Manual'} · ${fechaHora(x.confirmado_en)}</div>` : ''}`
+        : '<span class="pill warn">No</span>') },
       { t: 'Reporte', f: (x) => (x.viajes_realizados ? `<div class="btns" style="flex-wrap:nowrap"><a class="btn sm" href="#/reporte-transportista?t=${x.transportista_id}">Ver</a>
           <button class="btn sm" data-xls="${x.transportista_id}">Excel</button><button class="btn sm" data-pdf="${x.transportista_id}">PDF</button></div>` : '<span class="muted">—</span>') },
       { t: '', f: (x) => (edit ? `<button class="btn sm" data-part="${x.transportista_id}">Editar</button>` : '') },
@@ -330,6 +334,7 @@ function partModal(p, disponibles, done) {
       <label>Unidades solicitadas<input name="unidades_solicitadas" type="number" min="0" value="${p.unidades_solicitadas ?? 0}"></label>
       <label>TN prom. por unidad<input name="tn_prom_unidad" type="number" step="0.1" min="1" value="${p.tn_prom_unidad ?? 33}"></label>
       <label class="check"><input type="checkbox" name="reporte_confirmado" ${p.reporte_confirmado ? 'checked' : ''}> Reporte confirmado</label>
+      ${p.reporte_confirmado && p.confirmado_en ? `<p class="full muted small" style="margin:-6px 0 0">Confirmado ${p.confirmado_origen === 'portal' ? 'por el transportista desde su portal' : 'manualmente'}${p.confirmado_por ? ` (${esc(p.confirmado_por)})` : ''} el ${fechaHora(p.confirmado_en)}${p.confirmado_obs ? ` · Obs.: ${esc(p.confirmado_obs)}` : ''}.</p>` : ''}
       <label class="check full"><input type="checkbox" name="predeterminado" checked> Usar estas unidades solicitadas y TN prom. como predeterminado al crear una operación nueva</label>
       <div class="full"><h3 style="margin:8px 0 2px">Detallado por vueltas (TN)</h3>
         <p class="muted small" style="margin:0">Déjelas en blanco: la app las calcula hasta completar las TN programadas, repartidas entre los transportistas (en gris, el cálculo actual).

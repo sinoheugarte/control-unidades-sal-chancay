@@ -1,5 +1,5 @@
 // Portal del transportista: sólo ve y descarga sus propios viajes y unidades.
-import { state, api, esc, num, fecha, statusPill, $, tabla, descargar } from './core.js?v=__V__';
+import { state, api, esc, num, fecha, fechaHora, statusPill, $, tabla, descargar, modal, toast } from './core.js?v=__V__';
 
 let opPortal = null;
 async function cabecera(view, titulo) {
@@ -33,6 +33,7 @@ export async function vPortal(view, ctx) {
       <div class="kpi"><div class="l">Por descargar</div><div class="v">${num(vs.filter((x) => x.status === 'FALTA DESCARGAR').length, 0)}</div></div>
       <div class="kpi"><div class="l">Unidades</div><div class="v">${num(new Set(vs.map((x) => x.placa)).size, 0)}</div><div class="s">${v.unidades.length} en lista</div></div>
     </div>
+    ${confirmacionHtml(v)}
     <div class="card">
       <div class="card-h"><div><h3>REPORTE DE SERVICIO TRANSPORTE</h3>
         <div class="muted small">${esc(op.nave)} · Orden ${esc(op.orden)} · ${esc(op.cliente || '')} · ${esc(op.punto_salida || '')} → ${esc(op.punto_llegada || '')} · DAM ${esc(op.dam || '—')}</div></div>
@@ -46,6 +47,24 @@ export async function vPortal(view, ctx) {
     </div>`;
   $('#b-xls').onclick = () => descargar(`/api/portal/op/${opPortal}/exportar/reporte-xlsx`);
   $('#b-pdf').onclick = () => descargar(`/api/portal/op/${opPortal}/exportar/reporte-pdf`);
+  $('#b-confirmar')?.addEventListener('click', () => modal({
+    title: 'Confirmar reporte', submitText: 'Confirmar',
+    body: `<p style="margin-top:0">Confirma que el reporte de <strong>${esc(op.nave)} · Orden ${esc(op.orden)}</strong> es conforme:
+      <strong>${num(vs.length, 0)} viajes</strong>, <strong>${num(sum('peso_origen'))} TN</strong> despachadas (Huacho) y
+      <strong>${num(vs.filter((x) => x.status === 'DESCARGADO').reduce((s, x) => s + (Number(x.peso_destino_calc) || 0), 0))} TN</strong> recibidas en CSPCP. Quedará registrado con su usuario, la fecha y la hora.</p>
+      <div class="form"><label class="full">Observación (opcional)<textarea name="observacion" rows="2"></textarea></label></div>`,
+    onSubmit: async (d) => { await api(`/portal/op/${opPortal}/confirmar`, { method: 'POST', body: d }); toast('Reporte confirmado. Gracias.'); ctx.rerender(); },
+  }));
+}
+
+/** Estado de la confirmación del reporte en el portal. */
+function confirmacionHtml(v) {
+  const c = v.mi_confirmacion || (v.confirmacion ? { en: v.confirmacion.en, nombre: v.confirmacion.por } : null);
+  if (c) return `<div class="alert ok">Reporte confirmado${c.nombre ? ` por ${esc(c.nombre)}` : ''}${c.en ? ` el ${fechaHora(c.en)}` : ''}${c.viajes != null ? ` (${num(c.viajes, 0)} viajes · ${num(c.tn_cspcp)} TN CSPCP)` : ''}.</div>`;
+  if (!v.viajes.length) return '';
+  return `<div class="alert" style="display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap">
+    <div>Revise sus viajes y, si está conforme, confirme el reporte de esta operación.</div>
+    <button class="btn primary sm" id="b-confirmar">Confirmar reporte</button></div>`;
 }
 
 export async function vPortalUnidades(view, ctx) {

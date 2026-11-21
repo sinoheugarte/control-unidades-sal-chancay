@@ -6,6 +6,9 @@ import { construirDiapositivas, pptxPresentacion, imagenesDiapositivas, htmlPres
 
 export async function abrirFinalizar(op, despues) {
   const { predeterminados, usuarios } = await api('/finalizacion/destinatarios');
+  // Transportistas con viajes cuyo reporte aún no está confirmado
+  try { await api(`/operaciones/${op.id}/confirmaciones/sincronizar`, { method: 'POST' }); } catch { /* */ }
+  const sinConfirmar = ((await api(`/operaciones/${op.id}/tablero`)).transportistas || []).filter((t) => t.viajes_realizados > 0 && !t.reporte_confirmado);
   const marcados = new Set(predeterminados);
   const extra = predeterminados.filter((e) => !usuarios.some((u) => u.email === e));
   const video = formatoVideo();
@@ -14,7 +17,10 @@ export async function abrirFinalizar(op, despues) {
     title: yaFinal ? `Regenerar y reenviar · ${op.nave} · Orden ${op.orden}` : `Finalizar operación · ${op.nave} · Orden ${op.orden}`,
     wide: true,
     submitText: yaFinal ? 'Generar y enviar' : 'Finalizar y enviar',
-    body: `<p class="muted" style="margin-top:0">Se generará la presentación de la operación, se guardará en SharePoint
+    body: `${sinConfirmar.length ? `<div class="alert" style="margin-bottom:12px"><strong>${sinConfirmar.length} transportista${sinConfirmar.length > 1 ? 's' : ''} sin reporte confirmado:</strong>
+        ${sinConfirmar.map((t) => `${esc(t.nombre_comercial)} (${t.viajes_realizados} viajes)`).join(' · ')}. Puede finalizar igual, o esperar su confirmación desde el portal o marcarla en Transportistas.</div>`
+        : '<div class="alert ok" style="margin-bottom:12px">Todos los transportistas con viajes tienen su reporte confirmado.</div>'}
+      <p class="muted" style="margin-top:0">Se generará la presentación de la operación, se guardará en SharePoint
       (<em>Control Unidades Sal/Presentaciones</em>), la operación quedará como <strong>FINALIZADA</strong> y se enviará un correo
       desde su cuenta de Microsoft 365 con el enlace a la app y a los archivos.</p>
       <h3 style="margin:14px 0 6px">Destinatarios</h3>

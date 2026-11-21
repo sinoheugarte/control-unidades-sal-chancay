@@ -513,10 +513,14 @@ ruta('PUT', '/operaciones/:id/transportistas/:tid', async ({ id, tid }, b) => {
     X.asegurarParticipacion(D, Number(tid));
     const vueltas_manual = {};
     for (let i = 1; i <= C.N_VUELTAS; i++) { const v = N(b[`v${i}`]); if (v !== null) vueltas_manual[i] = v; }
-    Object.assign(D.op_transportistas.find((p) => p.transportista_id === Number(tid)), {
+    const p = D.op_transportistas.find((x) => x.transportista_id === Number(tid));
+    const antes = !!p.reporte_confirmado;
+    Object.assign(p, {
       unidades_solicitadas: N(b.unidades_solicitadas) || 0, tn_prom_unidad: N(b.tn_prom_unidad) || 33, tn_asignadas: null, vueltas_manual,
       reporte_confirmado: b.reporte_confirmado ? 1 : 0, observacion: S(b.observacion),
     });
+    if (p.reporte_confirmado && !antes) Object.assign(p, { confirmado_en: ahora(), confirmado_por: yo.nombre || yo.email, confirmado_origen: 'manual' });
+    if (!p.reporte_confirmado) { delete p.confirmado_en; delete p.confirmado_por; delete p.confirmado_origen; delete p.confirmado_obs; }
   });
   // Unidades solicitadas y TN prom. quedan como predeterminado para las operaciones nuevas
   if (b.predeterminado) {
@@ -528,6 +532,32 @@ ruta('PUT', '/operaciones/:id/transportistas/:tid', async ({ id, tid }, b) => {
     });
   }
   return { ok: true };
+});
+/** Lee las confirmaciones que los transportistas dejaron desde su portal y las marca en la operación. */
+ruta('POST', '/operaciones/:id/confirmaciones/sincronizar', async ({ id }) => {
+  ESCRIBE();
+  const I = await leer(INDICE);
+  const D = await datosOp(id);
+  const us = (I.usuarios || []).filter((u) => u.rol === 'transportista' && u.activo !== false && u.transportista_id);
+  const nuevas = [];
+  for (const p of D.op_transportistas) {
+    if (p.reporte_confirmado && p.confirmado_origen === 'portal') continue;
+    for (const u of us.filter((x) => x.transportista_id === p.transportista_id)) {
+      let c = null;
+      try { c = (await G.leerJSON(archivoConfirmacion(u.email, id))).data; } catch { /* sin archivo */ }
+      if (c) { nuevas.push({ tid: p.transportista_id, c }); break; }
+    }
+  }
+  if (nuevas.length) {
+    await mutarOp(id, (D2) => {
+      for (const { tid, c } of nuevas) {
+        const p = D2.op_transportistas.find((x) => x.transportista_id === tid);
+        if (p) Object.assign(p, { reporte_confirmado: 1, confirmado_en: c.en, confirmado_por: c.nombre || c.email, confirmado_origen: 'portal', confirmado_obs: c.observacion || null });
+      }
+      historial(D2, 'confirmaciones_portal', nuevas.map((x) => x.c.email).join(', '));
+    });
+  }
+  return { nuevas: nuevas.length };
 });
 ruta('DELETE', '/operaciones/:id/transportistas/:tid', async ({ id, tid }) => {
   ESCRIBE();
@@ -997,8 +1027,10 @@ function vistaTransportista(D, I, tid) {
     operacion: { ...Object.fromEntries(CAMPOS_OP_PORTAL.map((k) => [k, op[k] ?? null])), nombre: nombreReporte(op) },
     transportista: t ? { id: t.id, ruc: t.ruc, razon_social: t.razon_social, nombre_comercial: t.nombre_comercial, contacto: t.contacto, telefono: t.telefono, emails: t.emails } : null,
     viajes, unidades,
+    confirmacion: confirmacionDe(D.op_transportistas.find((p) => p.transportista_id === tid)),
   };
 }
+const confirmacionDe = (p) => (p?.reporte_confirmado ? { en: p.confirmado_en || null, por: p.confirmado_por || null, origen: p.confirmado_origen || 'manual' } : null);
 async function escribirSiCambia(archivo, data) {
   const json = JSON.stringify(data);
   if (publicado.get(archivo) === json) return false;
@@ -1054,6 +1086,9 @@ async function activarPortal(email) {
   try {
     await G.compartirCarpeta(dir, email, `Pacífico Despachos le dio acceso al portal de transportistas de Control de Unidades (${t.nombre_comercial}). Ingrese en ${G.appUrl()}`);
   } catch (e) { aviso = `Los datos se publicaron, pero no se pudo dar el permiso en SharePoint: ${e.message}. Compártale la carpeta "${G.getCfg().carpeta}/${dir}" (sólo lectura) manualmente.`; }
+  // Subcarpeta donde el transportista deja la confirmación de sus reportes (única con permiso de escritura)
+  try { await G.compartirCarpeta(`${dir}/Confirmaciones`, email, '', { rol: 'write', invitar: false }); }
+  catch (e) { aviso = (aviso ? `${aviso} ` : '') + `No se pudo habilitar la confirmación de reportes desde el portal: ${e.message}.`; }
   return { ok: true, aviso };
 }
 /** Quita el acceso del usuario a su carpeta y marca el perfil como inactivo. */
@@ -1084,7 +1119,24 @@ async function vistaPortal(id) {
   if (!data) throw err(404, 'Operación no disponible');
   return data;
 }
-ruta('GET', '/portal/op/:id', async ({ id }) => vistaPortal(id));
+const archivoConfirmacion = (email, id) => `${portalDir(email)}/Confirmaciones/op-${Number(id)}.json`;
+ruta('GET', '/portal/op/:id', async ({ id }) => {
+  const v = await vistaPortal(id);
+  let mia = null;
+  try { mia = (await G.leerJSON(archivoConfirmacion(yo.email, id))).data || null; } catch { /* sin confirmación */ }
+  return { ...v, mi_confirmacion: mia };
+});
+/** El transportista confirma su reporte de la operación (queda registrado quién y cuándo, con las cifras confirmadas). */
+ruta('POST', '/portal/op/:id/confirmar', async ({ id }, b) => {
+  const v = await vistaPortal(id);
+  const suma = (k) => C.r3(v.viajes.reduce((s, x) => s + (Number(x[k]) || 0), 0));
+  const c = { operacion_id: Number(id), transportista_id: v.transportista?.id, email: yo.email, nombre: yo.nombre || yo.email, en: ahora(),
+    viajes: v.viajes.length, tn_huacho: suma('peso_origen'),
+    tn_cspcp: C.r3(v.viajes.filter((x) => x.status === C.STATUS.DESCARGADO).reduce((s, x) => s + (Number(x.peso_destino_calc) || 0), 0)), observacion: S(b.observacion) };
+  try { await G.guardarJSON(archivoConfirmacion(yo.email, id), c, null); }
+  catch (e) { throw err(403, `No se pudo guardar la confirmación (${e.message}). Pida a Pacífico Despachos que vuelva a habilitar su acceso al portal.`); }
+  return c;
+});
 ruta('GET', '/portal/op/:id/exportar/reporte-xlsx', async ({ id }) => {
   const v = await vistaPortal(id);
   return { blob: await X.exportarTransportista(v.operacion, v.transportista, v.viajes), nombre: `${v.operacion.nombre} - ${v.transportista.nombre_comercial}.xlsx` };
