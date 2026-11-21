@@ -535,7 +535,16 @@ ruta('DELETE', '/unidades/:uid', async ({ uid }) => {
 /* reportes y etapas */
 ruta('GET', '/operaciones/:id/reportes', async ({ id }) => {
   const { D, op, viajes, embarque } = await cargar(id);
-  return { despacho: C.tablaReportes(viajes, op, D.reportes, 'despacho'), acopio: C.tablaReportes(viajes, op, D.reportes, 'acopio'), embarque };
+  // Viajes que aún no caen en ningún reporte (posteriores al último cierre): se avisan en pantalla
+  const pend = (proceso) => {
+    const vs = proceso === 'despacho'
+      ? viajes.filter((v) => v.rep_despacho_calc == null && v.despacho_en)
+      : viajes.filter((v) => v.rep_acopio_calc == null && v.ingreso_en && v.status !== C.STATUS.PENDIENTE);
+    const hs = vs.map((v) => (proceso === 'despacho' ? v.despacho_en : v.ingreso_en)).sort();
+    return { viajes: vs.length, tn: C.r3(vs.reduce((s, v) => s + ((proceso === 'despacho' ? v.peso_origen : v.peso_destino_calc) || 0), 0)), desde: hs[0] || null, hasta: hs[hs.length - 1] || null };
+  };
+  return { despacho: C.tablaReportes(viajes, op, D.reportes, 'despacho'), acopio: C.tablaReportes(viajes, op, D.reportes, 'acopio'), embarque,
+    pendientes: { despacho: pend('despacho'), acopio: pend('acopio') } };
 });
 ruta('POST', '/operaciones/:id/reportes', async ({ id }, b) => {
   ESCRIBE();

@@ -21,7 +21,7 @@ export async function vReportes(view, ctx) {
   const acc = (r) => (edit ? `<button class="btn sm" data-r="${r.id}">Editar</button>` : '');
 
   if (tabRep !== 'embarque') {
-    pintarCortes(body, d[tabRep], tabRep, edit, ctx);
+    pintarCortes(body, d[tabRep], tabRep, edit, ctx, d.pendientes?.[tabRep]);
     return;
   } else {
     const e = d.embarque;
@@ -68,7 +68,7 @@ export const ordinal = (n) => `${n}${({ 1: 'er', 2: 'do', 3: 'er', 4: 'to', 5: '
   .replace(/^11er$/, '11mo').replace(/^12do$/, '12mo').replace(/^13er$/, '13er');
 
 /** PROCESO DE DESPACHO / ACOPIO: avance por cortes (como la hoja REPORTES). */
-function pintarCortes(body, cortes, proceso, edit, ctx) {
+function pintarCortes(body, cortes, proceso, edit, ctx, pend) {
   const P = proceso === 'despacho' ? 'DESPACHO' : 'ACOPIO';
   const hechos = cortes.filter((r) => r.tn_total !== null);
   const u = hechos[hechos.length - 1];
@@ -98,6 +98,11 @@ function pintarCortes(body, cortes, proceso, edit, ctx) {
       <div class="kpi"><div class="l">TN restantes</div><div class="v">${num(u?.tn_restantes)}</div><div class="s">${num(u?.viajes_est_rest, 0)} viajes estimados</div></div>
       <div class="kpi"><div class="l">Fecha est. término</div><div class="v" style="font-size:19px">${fechaHora(u?.fecha_est_termino)}</div><div class="s">faltan ${horas(u?.horas_est_rest)} h</div></div>
     </div>
+    ${pend?.viajes ? `<div class="alert" style="margin-bottom:16px;display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap">
+      <div><strong>${num(pend.viajes, 0)} viajes (${num(pend.tn)} TN)</strong> ${proceso === 'despacho' ? 'despachados' : 'recibidos en puerto'} después del cierre del último reporte
+        (${fechaHora(u?.fin)}) aún no están en ningún reporte de ${proceso}: van del ${fechaHora(pend.desde)} al ${fechaHora(pend.hasta)}.
+        En DETALLE se ven con «—» en # REPORTE ${P}. Registre el siguiente cierre para incluirlos.</div>
+      ${edit ? `<button class="btn primary sm" id="c-nuevo">+ Registrar ${ordinal(cortes.length + 1)} reporte</button>` : ''}</div>` : ''}
     <div class="grid g2" style="margin-bottom:16px">
       <div class="card"><div class="card-h"><h3>TN por reporte y acumulado</h3><span class="muted small">clic en una barra para ver sus viajes</span></div><div class="chart-box"><canvas id="c-tn"></canvas></div></div>
       <div class="card"><div class="card-h"><h3>Ritmo por reporte</h3><span class="muted small">unidades por hora y TN por unidad</span></div><div class="chart-box"><canvas id="c-ritmo"></canvas></div></div>
@@ -141,6 +146,7 @@ function pintarCortes(body, cortes, proceso, edit, ctx) {
       try { await api(`/reportes/${r.id}`, { method: 'DELETE' }); ctx.rerender(); } catch (err) { toast(err.message, true); }
     }
   });
+  $('#c-nuevo', body)?.addEventListener('click', () => corteModal({ tipo: proceso, numero: cortes.length + 1, inicio: u?.fin || null, fin: null }, ctx.rerender, true));
   $('#c-xls', body).onclick = async () => { const { exportarCortes } = await import('./excel.js?v=__V__'); const op = state.ops.find((o) => o.id === state.opId);
     descargarBlob(await exportarCortes(op, proceso, cortes, ordinal), `${op.nombre || `${op.nave} - ORDEN ${op.orden}`} - REPORTES ${P}.xlsx`); };
   $('#c-pdf', body).onclick = async () => { const { pdfCortes } = await import('./pdf.js?v=__V__'); const op = state.ops.find((o) => o.id === state.opId);
