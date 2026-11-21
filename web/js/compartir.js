@@ -22,7 +22,8 @@ const opNombre = () => { const o = state.ops.find((x) => x.id === state.opId); r
 const archivoSeguro = (s) => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w\- ·.]+/g, '').replace(/\s+/g, ' ').trim().slice(0, 120);
 
 /** Genera un HTML autónomo (estilos incluidos, gráficos como imágenes) del elemento indicado. */
-export async function htmlDe(el, titulo) {
+/** HTML limpio (sin controles, gráficos como imágenes) de un elemento de la pantalla. */
+export function fragmentoDe(el) {
   const copia = el.cloneNode(true);
   // Gráficos → imágenes
   const orig = [...el.querySelectorAll('canvas')];
@@ -47,6 +48,11 @@ export async function htmlDe(el, titulo) {
   });
   copia.querySelectorAll('.table-wrap').forEach((x) => { x.style.maxHeight = 'none'; });
   copia.classList.remove('sale', 'entra', 'atras');
+  return copia.classList.contains('content') ? copia.innerHTML : copia.outerHTML;
+}
+
+/** Documento HTML autónomo con una o varias secciones (pestañas de la app), con índice para saltar entre ellas. */
+export async function documento(titulo, secciones) {
   const tema = document.documentElement.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
   const css = await cssTexto();
   const empresa = 'PACIFICO DESPACHOS S.A.C.';
@@ -61,12 +67,19 @@ html,body{overflow-x:auto}body{padding:0;min-width:0}.rep{max-width:none;margin:
 .filtro-act{display:inline-flex;gap:4px;padding:3px 9px;border-radius:99px;background:var(--primary-soft);color:var(--primary);font-size:12px;font-weight:650;margin-right:6px}
 .chart-box img{display:block}.rep-h{display:flex;align-items:center;gap:14px;margin-bottom:16px;padding:16px 18px;border-radius:16px;background:var(--grad);color:#fff;box-shadow:var(--shadow-lg)}
 .rep-h h1{font-size:20px}.rep-h small{display:block;opacity:.85;font-weight:500}.rep-f{margin-top:18px;color:var(--muted);font-size:12px;text-align:center}
-.content{padding:0}.content>*,.dbar::before,.bar>i{animation:none!important}</style></head>
+.content{padding:0}.content>*,.dbar::before,.bar>i{animation:none!important}
+.rep-nav{position:sticky;top:0;z-index:20;display:flex;flex-wrap:wrap;gap:6px;padding:8px;margin:0 0 14px;border-radius:14px;background:color-mix(in srgb,var(--surface) 85%,transparent);backdrop-filter:blur(12px);box-shadow:var(--shadow)}
+.rep-nav a{padding:6px 12px;border-radius:9px;font-weight:650;font-size:12.5px;text-decoration:none;color:var(--text);background:var(--surface-2)}
+.rep-nav a:hover{background:var(--primary-soft);color:var(--primary)}
+.rep-sec{scroll-margin-top:70px;margin-bottom:26px}.rep-st{font-size:17px;margin:4px 0 12px;padding-left:10px;border-left:4px solid var(--primary)}</style></head>
 <body><div class="rep"><div class="rep-h"><div><h1>${esc(titulo)}</h1><small>${esc(empresa)}${opNombre() ? ` · ${esc(opNombre())}` : ''} · Generado ${ahora()}</small></div></div>
-<div class="content">${copia.classList.contains('content') ? copia.innerHTML : copia.outerHTML}</div>
+${secciones.length > 1 ? `<nav class="rep-nav">${secciones.map((x, i) => `<a href="#s${i + 1}">${esc(x.titulo)}</a>`).join('')}</nav>` : ''}
+${secciones.map((x, i) => `<section id="s${i + 1}" class="rep-sec">${secciones.length > 1 ? `<h2 class="rep-st">${esc(x.titulo)}</h2>` : ''}<div class="content">${x.html}</div></section>`).join('')}
 <div class="rep-f">Control de Unidades · Despacho · Acopio · Embarque — reporte de solo lectura</div></div></body></html>`;
   return new Blob([html], { type: 'text/html;charset=utf-8' });
 }
+
+export async function htmlDe(el, titulo) { return documento(titulo, [{ titulo, html: fragmentoDe(el) }]); }
 
 const nombreArchivo = (titulo) => archivoSeguro(`${titulo}${opNombre() ? ` - ${opNombre().replace(' · ', ' - ')}` : ''}`) || 'reporte';
 
@@ -75,14 +88,15 @@ export async function descargarHTML(el, titulo) {
 }
 
 /** Guarda el HTML en SharePoint, crea un enlace de solo lectura y permite enviarlo por correo. */
-export async function compartir(el, titulo) {
+export async function compartir(el, titulo) { return compartirBlob(() => htmlDe(el, titulo), titulo); }
+export async function compartirBlob(generar, titulo) {
   if (state.user?.rol === 'transportista') { toast('Descargue el HTML y compártalo como archivo.', true); return; }
   toast('Generando el enlace para compartir…');
   let url, urlSp;
   try {
     const d = new Date(); const p = (n) => String(n).padStart(2, '0');
     const ruta = `Compartidos/${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())} ${nombreArchivo(titulo)}.html`;
-    await G.subirArchivo(ruta, await htmlDe(el, titulo), 'text/html');
+    await G.subirArchivo(ruta, await generar(), 'text/html');
     // El enlace abre el reporte dentro de la app (SharePoint no muestra páginas HTML; sólo las descarga)
     url = `${G.appUrl()}#/ver?f=${encodeURIComponent(ruta)}`;
     try { urlSp = await G.crearEnlace(ruta); } catch { urlSp = null; }
@@ -132,7 +146,7 @@ function decorar(b) {
   b.title = b.title || `Descargar en ${tipo === 'xls' ? 'Excel' : 'PDF'}`;
   // Junto a cada PDF: HTML y enlace para compartir (de la sección donde está el botón)
   if (tipo === 'pdf' && !b.closest('dialog, td, .fx-sin-html') && !b.parentElement.querySelector('[data-fx]')) {
-    const scope = () => b.closest('.card') || document.getElementById('view');
+    const scope = () => { const c = b.closest('.card'); return c && c.querySelector('table, canvas, .kpi, .fichas, .vlista') ? c : document.getElementById('view'); };
     const h = document.createElement('button');
     h.type = 'button'; h.className = `btn fx fx-html${b.classList.contains('sm') ? ' sm' : ''}`; h.dataset.fx = 'html';
     h.innerHTML = `${ICO.html}HTML`; h.title = 'Descargar como página HTML';
@@ -168,4 +182,31 @@ export async function vVer(view) {
   const blob = () => new Blob([texto], { type: 'text/html;charset=utf-8' });
   view.querySelector('#v-desc').onclick = () => descargarBlob(blob(), `${nombre}.html`);
   view.querySelector('#v-nueva').onclick = () => { const u = URL.createObjectURL(blob()); window.open(u, '_blank', 'noopener'); setTimeout(() => URL.revokeObjectURL(u), 60000); };
+}
+
+/**
+ * Selector de pestañas para exportar o compartir varias a la vez.
+ * rutas: [{ k, t }], actual: clave de la pantalla abierta, capturar(keys) → [{ titulo, html }]
+ */
+export function elegirPantallas({ rutas, actual, capturar, accion = 'compartir' }) {
+  const dlg = modal({
+    title: accion === 'compartir' ? 'Compartir reporte' : 'Descargar reporte HTML', wide: true,
+    submitText: accion === 'compartir' ? 'Crear enlace' : 'Descargar HTML',
+    body: `<p class="muted" style="margin-top:0">Elija las pestañas que se incluirán. Se genera un solo reporte con un índice para pasar de una a otra${opNombre() ? `, con los datos de <strong>${esc(opNombre())}</strong>` : ''}.</p>
+      <div class="btns" style="margin-bottom:10px"><button type="button" class="btn sm" data-todas>Seleccionar todas</button><button type="button" class="btn sm" data-ninguna>Quitar todas</button></div>
+      <div class="pant-sel">${rutas.map((r) => `<label class="pant"><input type="checkbox" name="r:${r.k}" ${r.k === actual ? 'checked' : ''}>
+        <span class="ico" style="--c:${r.c || '#2563eb'}">${r.ico || ''}</span><span>${esc(r.t)}</span></label>`).join('')}</div>`,
+    onSubmit: async (f) => {
+      const keys = rutas.map((r) => r.k).filter((k) => f[`r:${k}`]);
+      if (!keys.length) throw new Error('Seleccione al menos una pestaña');
+      const titulo = keys.length === 1 ? rutas.find((r) => r.k === keys[0]).t : 'Reporte de la operación';
+      const generar = async () => documento(titulo, await capturar(keys));
+      if (accion === 'compartir') setTimeout(() => compartirBlob(generar, titulo), 0);
+      else {
+        try { const blob = await generar(); descargarBlob(blob, `${nombreArchivo(titulo)}.html`); toast('Reporte HTML generado'); } catch (e) { toast(e.message, true); }
+      }
+    },
+  });
+  dlg.querySelector('[data-todas]').onclick = () => dlg.querySelectorAll('.pant input').forEach((x) => { x.checked = true; });
+  dlg.querySelector('[data-ninguna]').onclick = () => dlg.querySelectorAll('.pant input').forEach((x) => { x.checked = false; });
 }

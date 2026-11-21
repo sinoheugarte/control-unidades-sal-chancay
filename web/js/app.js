@@ -1,6 +1,6 @@
 import { state, api, esc, toast, $, $$, modal, destruirGraficos, esAdmin, activarFechaHora24, activarOndas, activarTablas, activarEquilibrio } from './core.js?v=__V__';
 import { mostrarIntro } from './intro.js?v=__V__';
-import { activarExportes, ICO as FX, descargarHTML, compartir, vVer } from './compartir.js?v=__V__';
+import { activarExportes, ICO as FX, descargarHTML, vVer, fragmentoDe, elegirPantallas } from './compartir.js?v=__V__';
 import { vTablero, vViajes, vRegistro } from './views-operacion.js?v=__V__';
 import { vReportes, vTransportistas, vUnidades, vResumenes, vPlanificacion, vReporteTransportista } from './views-control.js?v=__V__';
 import { vOperaciones, vImportar, vUsuarios } from './views-admin.js?v=__V__';
@@ -184,8 +184,14 @@ function shell(root, ruta) {
   });
   $('#menu').addEventListener('click', () => $('#side').classList.toggle('open'));
   const tituloPag = () => $('#titulo')?.textContent.trim() || 'Reporte';
-  $('#b-html').addEventListener('click', () => descargarHTML($('#view'), tituloPag()));
-  $('#b-link')?.addEventListener('click', () => compartir($('#view'), tituloPag()));
+  const selector = (accion) => {
+    const actual = (location.hash.replace(/^#\/?/, '').split('?')[0]) || 'tablero';
+    elegirPantallas({ accion, actual: RUTAS[actual]?.nav || actual, capturar: capturarPantallas,
+      rutas: NAV.flatMap(([, it]) => it).filter((k) => !NO_COMPARTIR.includes(k) && (!RUTAS[k].admin || esAdmin()))
+        .map((k) => ({ k, t: RUTAS[k].t, c: COLOR[k], ico: ICON[k] })) });
+  };
+  $('#b-html').addEventListener('click', () => (esTransp() ? descargarHTML($('#view'), tituloPag()) : selector('html')));
+  $('#b-link')?.addEventListener('click', () => selector('compartir'));
   $('#side').addEventListener('click', (e) => { if (e.target.closest('a')) $('#side').classList.remove('open'); });
   $('#salir').addEventListener('click', () => { B.cerrarSesion(); state.user = null; shellDe = null; location.hash = '#/login'; });
   $('#tema').addEventListener('click', () => {
@@ -202,6 +208,37 @@ function shell(root, ruta) {
         <p class="muted small">Usted sólo ve los viajes y unidades de su empresa.</p>`
         : `<p class="muted small">Los datos se guardan en SharePoint: <a href="${esc(await G.urlCarpeta())}" target="_blank" rel="noopener">abrir carpeta</a>.</p>`}`,
   }));
+}
+
+/* Pestañas que no se comparten (formularios y administración) */
+const NO_COMPARTIR = ['registro', 'operaciones', 'importar', 'usuarios'];
+/** Recorre las pestañas elegidas (en la misma pantalla, sin animaciones) y devuelve su contenido listo para el reporte. */
+async function capturarPantallas(keys) {
+  const view = $('#view');
+  const velo = document.createElement('div');
+  velo.className = 'velo-captura';
+  velo.innerHTML = '<div class="card"><div class="cargando"><i></i><span>Preparando el reporte…</span><small class="muted" id="velo-paso"></small></div></div>';
+  document.body.appendChild(velo);
+  const animAntes = window.Chart ? Chart.defaults.animation : null;
+  if (window.Chart) Chart.defaults.animation = false;
+  const id = ++renderId;
+  const secciones = [];
+  try {
+    for (const [i, k] of keys.entries()) {
+      velo.querySelector('#velo-paso').textContent = `${i + 1} de ${keys.length}: ${RUTAS[k].t}`;
+      destruirGraficos();
+      view.classList.remove('sale', 'entra', 'atras');
+      view.innerHTML = '';
+      try { await RUTAS[k].v(view, { rerender: () => {} }); } catch (e) { view.innerHTML = `<div class="alert bad">${esc(e.message)}</div>`; }
+      await espera(450);
+      secciones.push({ titulo: RUTAS[k].t, html: fragmentoDe(view) });
+    }
+  } finally {
+    if (window.Chart) Chart.defaults.animation = animAntes;
+    velo.remove();
+    if (id === renderId) { rutaAnterior = null; render(); }
+  }
+  return secciones;
 }
 
 let renderId = 0;

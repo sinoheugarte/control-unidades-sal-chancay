@@ -499,3 +499,13 @@ table.cortes tbody tr:hover td.rep:not(.vacio) { background: color-mix(in srgb, 
 .rt-linea.mini { height: 10px; border-radius: 99px; margin: 0 0 10px; }
 @media (max-width: 1400px) { .plan4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 860px) { .plan4 { grid-template-columns: 1fr; } }
+
+/* Selector de pestañas para compartir / exportar */
+.pant-sel { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); }
+.pant { display: flex; align-items: center; gap: 10px; padding: 9px 11px; border-radius: 12px; background: var(--surface-2); color: var(--text); font-size: 13px; font-weight: 600; cursor: pointer; box-shadow: inset 0 0 0 1px var(--border); transition: box-shadow .15s ease, background-color .15s ease; }
+.pant:has(input:checked) { background: var(--primary-soft); box-shadow: inset 0 0 0 1.5px var(--primary); }
+.pant .ico { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; color: #fff; flex: none; background: linear-gradient(145deg, var(--c), color-mix(in srgb, var(--c) 70%, #000)); }
+.pant .ico svg { width: 16px; height: 16px; }
+.velo-captura { position: fixed; inset: 0; z-index: 900; display: grid; place-items: center; background: color-mix(in srgb, var(--bg) 78%, transparent); backdrop-filter: blur(8px); }
+.velo-captura .card { min-width: 300px; }
+.velo-captura .cargando { padding: 28px 10px; }
