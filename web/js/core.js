@@ -193,6 +193,38 @@ export function colores() {
 }
 
 const charts = new Set();
+/* Blindaje de Chart.js: si una animación queda sin función de cálculo ("this._fn is not a function",
+   pasa al redimensionar/actualizar un gráfico mientras anima), el error detenía el motor de animación
+   compartido y TODOS los gráficos quedaban en blanco. Ahora esa animación salta a su valor final y el
+   motor sigue funcionando aunque un gráfico falle. */
+(function blindarChart() {
+  const C = window.Chart;
+  if (!C || C.__blindado) return;
+  C.__blindado = true;
+  const A = C.Animation?.prototype;
+  if (A?.tick) {
+    const tick = A.tick;
+    A.tick = function (t) {
+      if (typeof this._fn !== 'function') this._fn = (de, a, k) => (typeof de === 'number' && typeof a === 'number' ? de + (a - de) * k : a);
+      try { return tick.call(this, t); } catch (err) {
+        console.error('[gráficos] animación corregida', this._prop, err);
+        try { this._target[this._prop] = this._to; this._active = false; this._notify?.(true); } catch { /* */ }
+      }
+    };
+  }
+  const M = C.animator;
+  if (M?._update) {
+    const upd = M._update;
+    M._update = function (t) {
+      try { return upd.call(this, t); } catch (err) {
+        console.error('[gráficos] el motor de animación se recuperó de un error', err);
+        // el error dejaba el motor "ocupado" para siempre: se libera y se vuelve a programar
+        this._request = null;
+        try { this._refresh(); } catch { /* */ }
+      }
+    };
+  }
+})();
 export function chart(canvas, config) {
   if (!canvas) return null;
   if (!window.Chart) { console.error('[gráficos] Chart.js no está cargado: no se puede dibujar', canvas.id); return null; }
@@ -245,7 +277,12 @@ export function destruirGraficos(todos = false) {
 /** Fuerza el redibujado de los gráficos (tras animaciones de entrada o al girar el teléfono). */
 export function redibujarGraficos() {
   destruirGraficos();
-  charts.forEach((c) => { try { c.resize(); c.update('none'); } catch { /* */ } });
+  charts.forEach((c) => {
+    try {
+      if (window.Chart?.animator?.running?.(c)) return; // animando: se dibuja solo; redimensionar ahora provoca el fallo
+      c.resize(); c.update('none');
+    } catch (err) { console.error('[gráficos] al redibujar', c.canvas?.id, err); }
+  });
 }
 // Al volver a la pestaña o a la app (o al recuperar el foco) se redibujan: el navegador pudo haber borrado los lienzos
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { redibujarGraficos(); setTimeout(redibujarGraficos, 400); } });
