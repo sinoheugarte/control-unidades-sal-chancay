@@ -50,6 +50,7 @@ const NAV = [
 ];
 const NAV_PORTAL = [['Mi empresa', ['portal', 'portal-unidades']]];
 const esTransp = () => state.user?.rol === 'transportista';
+const esInvitado = () => state.user?.rol === 'invitado';
 ICON.portal = ICON.viajes;
 ICON.ver = ICON.reportes;
 const COLOR = {
@@ -127,7 +128,7 @@ function setOp(id) {
 async function iniciar() {
   state.user = await B.iniciarSesion();
   state.catalogos = await api('/catalogos');
-  if (state.user.rol === 'transportista') { state.ops = []; state.opId = null; return; }
+  if (['transportista', 'invitado'].includes(state.user.rol)) { state.ops = []; state.opId = null; return; }
   await cargarOps();
   B.setOpActual(state.opId);
 }
@@ -156,10 +157,10 @@ function shell(root, ruta) {
   const clave = `${state.user?.email}|${state.user?.rol}`;
   if (shellDe === clave && $('#view', root)) { actualizarShell(ruta); pintarSelector(); return; }
   shellDe = clave;
-  root.innerHTML = `<div class="layout">
+  root.innerHTML = `<div class="layout${esInvitado() ? ' solo' : ''}">
     <aside class="side" id="side">
       <div class="brand"><div class="brand-logo">${ICON.viajes}</div><div>Control de Unidades<small>Despacho · Acopio · Embarque</small></div></div>
-      <nav class="nav">${(esTransp() ? NAV_PORTAL : NAV).map(([sec, items]) => `<div class="sep">${sec}</div>${items.filter((k) => !RUTAS[k].admin || esAdmin())
+      <nav class="nav">${(esTransp() ? NAV_PORTAL : esInvitado() ? [] : NAV).map(([sec, items]) => `<div class="sep">${sec}</div>${items.filter((k) => !RUTAS[k].admin || esAdmin())
         .map((k) => `<a href="#/${k}" data-k="${k}" style="--c:${COLOR[k] || '#3b82f6'}">${icoNav(k)}<span>${RUTAS[k].t}</span></a>`).join('')}`).join('')}</nav>
     </aside>
     <div class="main">
@@ -167,9 +168,9 @@ function shell(root, ruta) {
         <button class="btn sm menu-btn" id="menu" aria-label="Abrir menú">☰</button>
         <h1 id="titulo"></h1>
         <div class="grow"></div>
-        ${esTransp() ? '' : '<label style="min-width:220px" class="no-print"><span class="hidden">Operación</span><select id="op-sel" aria-label="Operación activa"></select></label>'}
-        <button class="btn sm fx" id="b-html" data-fx="html" title="Descargar esta pantalla como página HTML">${FX.html}<span class="who">HTML</span></button>
-        ${esTransp() ? '' : `<button class="btn sm fx" id="b-link" data-fx="link" title="Crear un enlace de esta pantalla para compartir por correo">${FX.link}<span class="who">Compartir</span></button>`}
+        ${esTransp() || esInvitado() ? '' : '<label style="min-width:220px" class="no-print"><span class="hidden">Operación</span><select id="op-sel" aria-label="Operación activa"></select></label>'}
+        ${esInvitado() ? '' : `<button class="btn sm fx" id="b-html" data-fx="html" title="Descargar esta pantalla como página HTML">${FX.html}<span class="who">HTML</span></button>`}
+        ${esTransp() || esInvitado() ? '' : `<button class="btn sm fx" id="b-link" data-fx="link" title="Crear un enlace de esta pantalla para compartir por correo">${FX.link}<span class="who">Compartir</span></button>`}
         <button class="btn sm" id="tema" title="Cambiar tema claro/oscuro">Tema</button>
         <button class="btn sm" id="perfil" title="Mi cuenta: cambiar contraseña"><span class="who">${esc(state.user.nombre)} · </span>${esc(state.user.rol)}</button>
         <button class="btn sm" id="salir">Salir</button>
@@ -190,7 +191,7 @@ function shell(root, ruta) {
       rutas: NAV.flatMap(([, it]) => it).filter((k) => !NO_COMPARTIR.includes(k) && (!RUTAS[k].admin || esAdmin()))
         .map((k) => ({ k, t: RUTAS[k].t, c: COLOR[k], ico: ICON[k] })) });
   };
-  $('#b-html').addEventListener('click', () => (esTransp() ? descargarHTML($('#view'), tituloPag()) : selector('html')));
+  $('#b-html')?.addEventListener('click', () => (esTransp() ? descargarHTML($('#view'), tituloPag()) : selector('html')));
   $('#b-link')?.addEventListener('click', () => selector('compartir'));
   $('#side').addEventListener('click', (e) => { if (e.target.closest('a')) $('#side').classList.remove('open'); });
   $('#salir').addEventListener('click', () => { B.cerrarSesion(); state.user = null; shellDe = null; location.hash = '#/login'; });
@@ -263,7 +264,14 @@ async function render() {
   }
   const qOp = Number(new URLSearchParams(location.hash.split('?')[1] || '').get('op'));
   if (qOp && !esTransp() && qOp !== state.opId && state.ops.some((o) => o.id === qOp)) setOp(qOp);
-  const permitida = (k) => RUTAS[k] && (esTransp() ? RUTAS[k].portal : !RUTAS[k].portal && (!RUTAS[k].admin || esAdmin()));
+  const permitida = (k) => RUTAS[k] && (esInvitado() ? k === 'ver' : esTransp() ? RUTAS[k].portal : !RUTAS[k].portal && (!RUTAS[k].admin || esAdmin()));
+  if (esInvitado() && !permitida(ruta)) {
+    shell(root, 'ver');
+    $('#view').innerHTML = `<div class="card empty"><h2>Acceso sólo a reportes compartidos</h2>
+      <p>Su cuenta (${esc(state.user.email)}) no está registrada como usuario de Control de Unidades. Puede ver los reportes que le compartan abriendo el enlace que recibió por correo.</p>
+      <p class="muted small">Para usar la aplicación completa, pida a un administrador que lo registre en <em>Usuarios</em>.</p></div>`;
+    return;
+  }
   const r = permitida(ruta) ? ruta : esTransp() ? 'portal' : 'tablero';
   const nueva = !$('#view');
   shell(root, r);

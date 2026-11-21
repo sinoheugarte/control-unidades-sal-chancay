@@ -98,14 +98,16 @@ export async function compartirBlob(generar, titulo) {
     const ruta = `Compartidos/${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())} ${nombreArchivo(titulo)}.html`;
     await G.subirArchivo(ruta, await generar(), 'text/html');
     // El enlace abre el reporte dentro de la app (SharePoint no muestra páginas HTML; sólo las descarga)
-    url = `${G.appUrl()}#/ver?f=${encodeURIComponent(ruta)}`;
     try { urlSp = await G.crearEnlace(ruta); } catch { urlSp = null; }
+    // Con el enlace de SharePoint del archivo, el invitado lo abre aunque no tenga acceso a los datos de la app
+    url = urlSp && /^https?:/.test(urlSp) ? `${G.appUrl()}#/ver?s=${G.tokenCompartido(urlSp)}` : `${G.appUrl()}#/ver?f=${encodeURIComponent(ruta)}`;
   } catch (e) { toast(`No se pudo crear el enlace: ${e.message}`, true); return; }
   const asunto = `${titulo}${opNombre() ? ` · ${opNombre()}` : ''}`;
   const dlg = modal({
     title: 'Compartir reporte', submitText: 'Enviar por correo', wide: true,
     body: `<p style="margin-top:0">Se guardó <strong>${esc(titulo)}</strong> en SharePoint (<em>Control Unidades Sal/Compartidos</em>).
-      El enlace abre el reporte en la aplicación, en <strong>solo lectura</strong>; quien lo reciba ingresa con su cuenta de Microsoft 365 de la organización.
+      El enlace abre el reporte en la aplicación, en <strong>solo lectura</strong>. Quien lo reciba ingresa con su cuenta de Microsoft 365 de la organización;
+      si no es usuario de la app, <strong>sólo verá las pestañas de este reporte</strong>.
       ${urlSp ? `<br><span class="muted small">Archivo en SharePoint (para descargarlo): <a href="${esc(urlSp)}" target="_blank" rel="noopener">abrir</a></span>` : ''}</p>
       <div class="btns" style="flex-wrap:nowrap"><input id="fx-url" readonly value="${esc(url)}" style="flex:1"><button type="button" class="btn" id="fx-copiar">Copiar enlace</button>
       <a class="btn" href="${esc(url)}" target="_blank" rel="noopener">Abrir</a></div>
@@ -168,10 +170,13 @@ export function activarExportes(root = document.body) {
 
 /** Pantalla "Reporte compartido": muestra dentro de la app el HTML guardado en SharePoint. */
 export async function vVer(view) {
-  const f = new URLSearchParams(location.hash.split('?')[1] || '').get('f');
-  if (!f || !/^Compartidos\/[^/]+\.html$/.test(f)) { view.innerHTML = '<div class="alert bad">Enlace de reporte no válido.</div>'; return; }
-  const { texto, webUrl } = await G.leerTexto(f);
-  const nombre = f.split('/').pop().replace(/^\d{8}-\d{6}\s*/, '').replace(/\.html$/, '');
+  const qs = new URLSearchParams(location.hash.split('?')[1] || '');
+  const f = qs.get('f'), sh = qs.get('s');
+  let texto, webUrl, archivo;
+  if (sh && /^u![\w-]+$/.test(sh)) ({ texto, webUrl, nombre: archivo } = await G.leerCompartido(sh));
+  else if (f && /^Compartidos\/[^/]+\.html$/.test(f) && state.user?.rol !== 'invitado') { ({ texto, webUrl } = await G.leerTexto(f)); archivo = f.split('/').pop(); }
+  else { view.innerHTML = '<div class="alert bad">Enlace de reporte no válido.</div>'; return; }
+  const nombre = String(archivo || 'Reporte').replace(/^\d{8}-\d{6}\s*/, '').replace(/\.html$/, '');
   view.innerHTML = `<div class="card" style="padding:0;overflow:hidden">
     <div class="card-h" style="padding:12px 16px;margin:0;border-bottom:1px solid var(--border)">
       <div><h2>${esc(nombre)}</h2><div class="muted small">Reporte compartido · solo lectura</div></div>

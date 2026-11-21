@@ -107,6 +107,8 @@ export async function iniciarSesion() {
   try { perfil = (await G.leerJSON(`${portalDir(u.email)}/perfil.json`)).data; } catch { perfil = null; }
   let I;
   try { I = await leer(INDICE, true); } catch (e) {
+    // Sin acceso a los datos: si abre un reporte compartido, entra como invitado (sólo ve ese reporte)
+    if (!perfil && /^#\/?ver\b/.test(location.hash)) { yo = { id: u.email, usuario: u.email, nombre: u.nombre, email: u.email, rol: 'invitado' }; return yo; }
     if (!perfil) throw err(e.status || 403, 'Su cuenta no tiene acceso a Control de Unidades. Contacte al administrador.');
   }
   if (perfil && (!I || (I.usuarios || []).some((x) => x.email === u.email && x.rol === 'transportista'))) {
@@ -116,11 +118,12 @@ export async function iniciarSesion() {
   }
   const reg = (I.usuarios || []).find((x) => x.email === u.email);
   // Mientras no haya usuarios configurados, todos son administradores (arranque).
-  const rol = !I.usuarios?.length ? 'admin' : reg ? (reg.activo === false ? null : reg.rol) : (I.rol_por_defecto || 'lector');
+  // Quien no está registrado como usuario es invitado: sólo puede ver los reportes que le compartan.
+  const rol = !I.usuarios?.length ? 'admin' : reg ? (reg.activo === false ? null : reg.rol) : 'invitado';
   if (!rol) throw err(403, 'Su usuario está desactivado en Control de Unidades. Contacte al administrador.');
   if (rol === 'transportista') throw err(403, 'Su acceso de transportista aún no está listo. Pida al administrador que use "Republicar portal".');
   yo = { id: u.email, usuario: u.email, nombre: reg?.nombre || u.nombre, email: u.email, rol };
-  if (rol !== 'lector') await migrarNombres();
+  if (!['lector', 'invitado'].includes(rol)) await migrarNombres();
   return yo;
 }
 export const usuarioActual = () => yo;
@@ -1171,6 +1174,7 @@ ruta('GET', '/operaciones/:id/cortes', async ({ id }) => {
 export async function request(path, { method = 'GET', body, form } = {}) {
   const p = path.split('?')[0];
   if (yo?.rol === 'transportista' && !/^\/(me|catalogos|portal)(\/|$)/.test(p)) throw err(403, 'No tiene permisos para esta acción');
+  if (yo?.rol === 'invitado' && !/^\/(me|catalogos)$/.test(p)) throw err(403, 'Su acceso es sólo para ver los reportes que le compartan');
   for (const r of rutas) {
     if (r.m !== method) continue;
     const m = p.match(r.re);

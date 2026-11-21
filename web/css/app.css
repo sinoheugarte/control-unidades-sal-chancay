@@ -509,3 +509,7 @@ table.cortes tbody tr:hover td.rep:not(.vacio) { background: color-mix(in srgb, 
 .velo-captura { position: fixed; inset: 0; z-index: 900; display: grid; place-items: center; background: color-mix(in srgb, var(--bg) 78%, transparent); backdrop-filter: blur(8px); }
 .velo-captura .card { min-width: 300px; }
 .velo-captura .cargando { padding: 28px 10px; }
+
+/* Invitado (sólo reportes compartidos): sin menú lateral */
+.layout.solo { grid-template-columns: 1fr; }
+.layout.solo .side, .layout.solo .menu-btn { display: none !important; }

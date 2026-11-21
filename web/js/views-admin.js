@@ -320,9 +320,8 @@ export async function vUsuarios(view, ctx) {
       <p class="muted small" style="margin:4px 0 0">Ingresan con su cuenta de Microsoft 365. <strong>Admin</strong>: todo · <strong>Operador</strong>: registra e importa · <strong>Lector</strong>: sólo consulta.
       ${usuarios.length ? '' : '<br><strong>Aún no hay usuarios registrados: por ahora todos los que ingresan son administradores.</strong>'}</p></div>
       <button class="btn primary" id="b-new">+ Agregar usuario</button></div>
-    <form id="f-def" class="btns" style="margin-bottom:12px"><label style="display:flex;gap:8px;align-items:center">Rol para usuarios no registrados
-      <select name="rol_por_defecto"><option value="lector" ${def !== 'operador' ? 'selected' : ''}>lector</option><option value="operador" ${def === 'operador' ? 'selected' : ''}>operador</option></select></label>
-      <button class="btn sm">Guardar</button></form>
+    <div class="alert" style="margin-bottom:12px">Las personas de la organización que <strong>no están registradas aquí</strong> entran como <strong>invitados</strong>:
+      sólo pueden ver los reportes que les compartan por enlace (las pestañas elegidas al compartir), sin acceso al resto de la aplicación.</div>
     ${tabla(cols(false), internos, { empty: 'Sin usuarios internos registrados' })}</div>
 
     <div class="card"><div class="card-h"><div><h2>Usuarios transportistas (portal)</h2>
@@ -351,10 +350,6 @@ export async function vUsuarios(view, ctx) {
   };
   const resultado = (r) => { if (r?.aviso) toast(r.aviso, true); else toast('Usuario guardado'); };
 
-  $('#f-def').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    try { await api('/usuarios-config', { method: 'PUT', body: { rol_por_defecto: e.target.rol_por_defecto.value } }); toast('Guardado'); } catch (err) { toast(err.message, true); }
-  });
   $('#b-new').onclick = () => modal({ title: 'Agregar usuario', body: formUsuario({}, false), onOpen: alAbrir,
     onSubmit: async (d) => { resultado(await api('/usuarios', { method: 'POST', body: d })); ctx.rerender(); } });
   $('#b-new-t').onclick = () => registrarTransportistaModal(ctx.rerender);

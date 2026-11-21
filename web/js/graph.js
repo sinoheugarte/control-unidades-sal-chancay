@@ -169,6 +169,20 @@ export async function leerJSON(nombre) {
   return { data, etag: meta.eTag };
 }
 
+/** Lee un archivo compartido con enlace de SharePoint (token "u!…" de la API /shares). */
+export async function leerCompartido(token) {
+  const r = await g(`shares/${token}/driveItem`, { raw: true });
+  if (r.status === 404) throw Object.assign(new Error('El reporte compartido ya no existe o el enlace fue retirado'), { status: 404 });
+  if (!r.ok) throw Object.assign(new Error(`No tiene acceso a este reporte (${r.status}). Pida a quien lo compartió que se lo vuelva a enviar.`), { status: r.status });
+  const meta = await r.json();
+  const url = meta['@microsoft.graph.downloadUrl'];
+  const d = url ? await fetch(url) : await g(`shares/${token}/driveItem/content`, { raw: true });
+  if (!d.ok) throw new Error(`No se pudo descargar el reporte (${d.status})`);
+  return { texto: await d.text(), webUrl: meta.webUrl, nombre: meta.name };
+}
+/** Token de la API /shares para un enlace de SharePoint. */
+export const tokenCompartido = (url) => `u!${btoa(unescape(encodeURIComponent(url))).replace(/=+$/, '').replace(/\//g, '_').replace(/\+/g, '-')}`;
+
 /** Lee un archivo de texto (p. ej. un reporte HTML compartido). */
 export async function leerTexto(nombre) {
   const ruta = await rutaItem(nombre);
