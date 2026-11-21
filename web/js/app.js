@@ -41,8 +41,8 @@ const RUTAS = {
   'portal-unidades': { t: 'Mis unidades', v: vPortalUnidades, portal: true },
 };
 const NAV = [
-  ['Operación', ['tablero', 'registro', 'viajes', 'reportes']],
-  ['Control', ['transportistas', 'unidades', 'resumenes', 'planificacion']],
+  ['Operación', ['tablero', 'reportes', 'resumenes', 'viajes', 'registro']],
+  ['Control', ['planificacion', 'transportistas', 'unidades']],
   ['Administración', ['resumen-anual', 'operaciones', 'importar', 'usuarios']],
 ];
 const NAV_PORTAL = [['Mi empresa', ['portal', 'portal-unidades']]];
