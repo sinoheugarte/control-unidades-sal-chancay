@@ -2,7 +2,7 @@
 import { COLS_DETALLE, COLS_TRANSP, COLS_UNIDADES, COLS_RESUMEN_T, FILAS_CORTE, logoBase64 } from './excel.js?v=__V__';
 
 const AZUL = [31, 78, 121];
-const nf = new Intl.NumberFormat('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const nf = new Intl.NumberFormat('es-PE', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 const n3 = (v) => (v === null || v === undefined || v === '' ? '' : Number(v).toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 }));
 const n2 = (v) => (v === null || v === undefined || v === '' ? '' : nf.format(v));
 const fecha = (s) => { if (!s) return ''; const [y, m, d] = String(s).slice(0, 10).split('-'); return `${d}/${m}/${y}`; };

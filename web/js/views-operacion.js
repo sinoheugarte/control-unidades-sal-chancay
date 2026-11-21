@@ -24,7 +24,7 @@ export async function vTablero(view) {
         ${op.ultimo_correo ? `<div class="small" style="margin-top:4px">Último correo: ${fechaHora(op.ultimo_correo.en)} · ${op.ultimo_correo.ok ? `enviado a ${esc(op.ultimo_correo.para.join(', '))}` : `no enviado (${esc(op.ultimo_correo.error || '')})`}</div>` : ''}</div>` : ''}
     </div>
     <div class="kpis">
-      ${kpi('TN programadas', num(t.tn_programadas, 0), `${num(d.preacopio.acopio.viajes_total, 0)} viajes estimados`)}
+      ${kpi('TN programadas', num(t.tn_programadas), `${num(d.preacopio.acopio.viajes_total, 0)} viajes estimados`)}
       ${kpi('TN despachadas', num(t.tn_despacho), `${pct(t.pct_despacho)} · restan ${num(Math.max(0, t.tn_rest_despacho))}`, t.pct_despacho)}
       ${kpi('TN acopiadas (puerto)', num(t.tn_acopio), `${pct(t.pct_acopio)} · restan ${num(Math.max(0, t.tn_rest_acopio))}`, t.pct_acopio)}
       ${kpi('En tránsito', num(t.tn_transito), `${t.viajes_pendientes} viajes por descargar`)}
@@ -32,7 +32,7 @@ export async function vTablero(view) {
       ${kpi('Unidades activas', num(t.unidades_activas, 0), `${d.unidades_en_lista} en lista · mín. requerido ${d.preacopio.unidades_necesarias}`)}
       ${kpi('Prom. TN / unidad', num(t.peso_prom_unidad), `Dif. puerto − planta: ${num(t.diferencia_acopio_despacho)} TN`)}
       ${kpi('Atención en puerto', minutos(t.tiempo_prom_min), 'tiempo promedio (h:mm)')}
-      ${kpi('TN embarcadas', num(t.tn_embarque), e.tn_programadas ? `${pct((t.tn_embarque || 0) / e.tn_programadas)} de ${num(e.tn_programadas, 0)}` : '', e.tn_programadas ? (t.tn_embarque || 0) / e.tn_programadas : undefined)}
+      ${kpi('TN embarcadas', num(t.tn_embarque), e.tn_programadas ? `${pct((t.tn_embarque || 0) / e.tn_programadas)} de ${num(e.tn_programadas)}` : '', e.tn_programadas ? (t.tn_embarque || 0) / e.tn_programadas : undefined)}
     </div>
     <div class="grid g2">
       <div class="card"><div class="card-h"><h3>Avance acumulado por reporte</h3><span class="muted small">TN despacho vs acopio</span></div><div class="chart-box"><canvas id="ch-avance"></canvas></div></div>

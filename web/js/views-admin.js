@@ -34,7 +34,7 @@ export async function vOperaciones(view, ctx) {
         ${edit ? `<button class="btn sm" data-op="${o.id}">Editar</button>` : ''}</div>` },
       { t: 'Cliente', k: 'cliente' }, { t: 'DAM', k: 'dam' },
       { t: 'ETA', f: (o) => fechaHora(o.eta) }, { t: 'Inicio', f: (o) => (o.fecha_inicio ? fechaHoraOpc(o.fecha_inicio) : fecha(o.primer_viaje)) }, { t: 'Último viaje', f: (o) => fecha(o.ultimo_viaje) },
-      { t: 'TN prog.', k: 'tn_programadas', n: 1, d: 0 }, { t: 'Viajes', k: 'n_viajes', n: 1, d: 0 },
+      { t: 'TN prog.', k: 'tn_programadas', n: 1 }, { t: 'Viajes', k: 'n_viajes', n: 1, d: 0 },
       { t: 'Estado', f: (o) => `<span class="pill ${['CERRADA', 'FINALIZADA'].includes(o.estado) ? 'ok' : 'info'}">${esc(o.estado === 'CERRADA' ? 'FINALIZADA' : o.estado || 'EN CURSO')}</span>` },
       { t: 'Modificado', f: (o) => (o.actualizado_en ? `${fechaHora(o.actualizado_en)}<div class="muted small">${esc(o.actualizado_por || '')}</div>` : '—') },
     ], fil, { empty: ops.length ? 'Ninguna operación coincide con la búsqueda' : 'No hay operaciones. Cree una nueva o importe el libro Excel del reporte.' });

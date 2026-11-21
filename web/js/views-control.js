@@ -27,7 +27,7 @@ export async function vReportes(view, ctx) {
     const e = d.embarque;
     body.innerHTML = `
       <div class="kpis" style="margin-bottom:14px">
-        <div class="kpi"><div class="l">TN programadas</div><div class="v">${num(e.tn_programadas, 0)}</div></div>
+        <div class="kpi"><div class="l">TN programadas</div><div class="v">${num(e.tn_programadas)}</div></div>
         <div class="kpi"><div class="l">TN embarcadas</div><div class="v">${num(e.tn_embarcadas)}</div>
           <div class="bar"><i style="width:${Math.min(100, ((e.tn_embarcadas || 0) / (e.tn_programadas || 1)) * 100)}%"></i></div></div>
         <div class="kpi"><div class="l">TN restantes</div><div class="v">${num(e.tn_restantes)}</div></div>
@@ -94,7 +94,7 @@ function pintarCortes(body, cortes, proceso, edit, ctx) {
         <div class="s">${prog ? `${num(Math.min(100, ((u?.tn_total || 0) / prog) * 100), 1)} % de ${num(prog, 0)} TN` : ''}</div>
         ${prog ? `<div class="bar ${u?.tn_total >= prog ? 'ok' : ''}"><i style="width:${Math.min(100, ((u?.tn_total || 0) / prog) * 100)}%"></i></div>` : ''}</div>
       <div class="kpi"><div class="l">Reportes (cortes)</div><div class="v">${cortes.length}</div><div class="s">${u ? `último: ${fechaHora(u.fin)}` : ''}</div></div>
-      <div class="kpi"><div class="l">Ritmo promedio</div><div class="v">${num(tph)}</div><div class="s">TN por hora · ${num(u?.horas_total ? u.viajes_total / u.horas_total : null)} unid./h</div></div>
+      <div class="kpi"><div class="l">Ritmo promedio</div><div class="v">${num(tph)}</div><div class="s">TN por hora · ${num(u?.horas_total ? u.viajes_total / u.horas_total : null, 0)} unid./h</div></div>
       <div class="kpi"><div class="l">TN restantes</div><div class="v">${num(u?.tn_restantes)}</div><div class="s">${num(u?.viajes_est_rest, 0)} viajes estimados</div></div>
       <div class="kpi"><div class="l">Fecha est. término</div><div class="v" style="font-size:19px">${fechaHora(u?.fecha_est_termino)}</div><div class="s">faltan ${horas(u?.horas_est_rest)} h</div></div>
     </div>
@@ -257,12 +257,12 @@ export async function vTransportistas(view, ctx) {
       <p class="muted small" style="margin:4px 0 0">1ª vuelta = unidades solicitadas × TN prom. por unidad · vueltas 2-10 = 1ª vuelta × n · las vueltas en <strong>negrita</strong> fueron ingresadas a mano · TOTAL TN = mayor valor (es el "Total aprox. TN").</p></div></div>
     ${tabla([
       { t: 'Razón social', f: (x) => `<strong>${esc(x.razon_social)}</strong>` },
-      ...NOMBRES_VUELTA.map((nom, i) => ({ t: nom, n: 1, f: (x) => { const v = x.vueltas[i]; return v.tn === null ? '' : v.manual ? `<strong>${num(v.tn, 0)}</strong>` : num(v.tn, 0); } })),
-      { t: 'TOTAL TN', n: 1, f: (x) => `<strong>${num(x.tn_aprox, 0)}</strong>` },
+      ...NOMBRES_VUELTA.map((nom, i) => ({ t: nom, n: 1, f: (x) => { const v = x.vueltas[i]; return v.tn === null ? '' : v.manual ? `<strong>${num(v.tn)}</strong>` : num(v.tn); } })),
+      { t: 'TOTAL TN', n: 1, f: (x) => `<strong>${num(x.tn_aprox)}</strong>` },
       ...(edit ? [{ t: '', f: (x) => `<button class="btn sm" data-part="${x.transportista_id}">Editar</button>` }] : []),
     ], res, {
       empty: 'Ningún transportista asignado a la operación',
-      foot: ['Total', ...NOMBRES_VUELTA.map((_, i) => num(res.reduce((s, x) => s + (x.vueltas[i].tn || 0), 0), 0)), num(tot('tn_aprox'), 0)],
+      foot: ['Total', ...NOMBRES_VUELTA.map((_, i) => num(res.reduce((s, x) => s + (x.vueltas[i].tn || 0), 0))), num(tot('tn_aprox'))],
     })}</div>` : sinOperacion()}
   <div class="card"><div class="card-h"><h2>Maestro de transportistas</h2>${edit ? '<div class="btns"><button class="btn" id="b-hab">Registrar transportistas habituales</button><button class="btn primary" id="b-new">+ Registrar transportista</button></div>' : ''}</div>
     ${tabla([
@@ -494,15 +494,15 @@ export async function vPlanificacion(view, ctx) {
   const edit = puedeEscribir();
   view.innerHTML = `<div class="grid g3">
     <div class="card"><h3>Tiempo estimado de acopio</h3><div class="table-wrap" style="margin-top:10px"><table><tbody>
-      <tr><td>TN total</td><td class="num">${num(p.tn_total, 0)}</td></tr><tr><td>TN por unidad</td><td class="num">${num(p.tn_x_unidad)}</td></tr>
-      <tr><td>Viajes total</td><td class="num">${num(p.acopio.viajes_total, 0)}</td></tr><tr><td>Prom. viajes por hora</td><td class="num">${num(p.viajes_x_hora)}</td></tr>
-      <tr><td>Horas total</td><td class="num">${horas(p.acopio.horas)}</td></tr><tr><td>Días</td><td class="num">${num(p.acopio.dias)}</td></tr>
+      <tr><td>TN total</td><td class="num">${num(p.tn_total)}</td></tr><tr><td>TN por unidad</td><td class="num">${num(p.tn_x_unidad)}</td></tr>
+      <tr><td>Viajes total</td><td class="num">${num(p.acopio.viajes_total, 0)}</td></tr><tr><td>Prom. viajes por hora</td><td class="num">${num(p.viajes_x_hora, 2)}</td></tr>
+      <tr><td>Horas total</td><td class="num">${horas(p.acopio.horas)}</td></tr><tr><td>Días</td><td class="num">${num(p.acopio.dias, 2)}</td></tr>
       <tr><td>Jornadas total</td><td class="num">${num(p.acopio.jornadas_total, 0)}</td></tr>
       <tr><td>Inicio</td><td class="num">${fechaHora(p.acopio.inicio)}</td></tr><tr><td><strong>Término estimado</strong></td><td class="num"><strong>${fechaHora(p.acopio.termino)}</strong></td></tr>
     </tbody></table></div></div>
     <div class="card"><h3>Tiempo estimado de embarque</h3><div class="table-wrap" style="margin-top:10px"><table><tbody>
-      <tr><td>TN total</td><td class="num">${num(p.tn_total, 0)}</td></tr><tr><td>TN por hora</td><td class="num">${num(p.tn_x_hora_embarque, 0)}</td></tr>
-      <tr><td>Horas total</td><td class="num">${horas(p.embarque.horas)}</td></tr><tr><td>Días</td><td class="num">${num(p.embarque.dias)}</td></tr>
+      <tr><td>TN total</td><td class="num">${num(p.tn_total)}</td></tr><tr><td>TN por hora</td><td class="num">${num(p.tn_x_hora_embarque)}</td></tr>
+      <tr><td>Horas total</td><td class="num">${horas(p.embarque.horas)}</td></tr><tr><td>Días</td><td class="num">${num(p.embarque.dias, 2)}</td></tr>
       <tr><td>Jornadas total</td><td class="num">${num(p.embarque.jornadas_total, 0)}</td></tr>
       <tr><td>Inicio</td><td class="num">${fechaHora(p.embarque.inicio)}</td></tr><tr><td><strong>Término estimado</strong></td><td class="num"><strong>${fechaHora(p.embarque.termino)}</strong></td></tr>
     </tbody></table></div></div>

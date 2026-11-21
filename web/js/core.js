@@ -16,7 +16,7 @@ export const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&a
 
 const nf = (d) => new Intl.NumberFormat('es-PE', { minimumFractionDigits: d, maximumFractionDigits: d });
 const NF = [nf(0), nf(1), nf(2), nf(3)];
-export const num = (v, d = 2) => (v === null || v === undefined || v === '' || isNaN(v) ? '—' : NF[d].format(v));
+export const num = (v, d = 3) => (v === null || v === undefined || v === '' || isNaN(v) ? '—' : NF[d].format(v));
 export const pct = (v, d = 1) => (v === null || v === undefined ? '—' : `${num(v * 100, d)} %`);
 export const fecha = (s) => { if (!s) return '—'; const [y, m, d] = String(s).slice(0, 10).split('-'); return `${d}/${m}/${y}`; };
 export const fechaHora = (s) => (s ? `${fecha(s)} ${String(s).slice(11, 16)}` : '—');
@@ -115,7 +115,7 @@ export function tabla(cols, filas, { foot, empty = 'Sin registros', rowAttr } = 
   const cel = (c, r) => {
     if (c.f) return c.f(r);
     const v = r[c.k];
-    return c.n ? num(v, c.d ?? 2) : esc(v ?? '—');
+    return c.n ? num(v, c.d ?? 3) : esc(v ?? '—');
   };
   return `<div class="table-wrap"><table>
     <thead><tr>${cols.map((c) => `<th class="${c.n ? 'num' : ''}">${esc(c.t)}</th>`).join('')}</tr></thead>

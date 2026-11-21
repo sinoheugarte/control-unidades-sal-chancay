@@ -753,7 +753,7 @@ ruta('GET', '/operaciones/:id/exportar/transportista/:tid', async ({ id, tid }) 
 /* ================= FINALIZAR OPERACIÓN ================= */
 const escH = (v) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 function correoHTML(op, res, enlaces, urlApp, mensaje) {
-  const nf2 = (v) => new Intl.NumberFormat('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v || 0);
+  const nf2 = (v) => new Intl.NumberFormat('es-PE', { minimumFractionDigits: 3, maximumFractionDigits: 3 }).format(v || 0);
   const f = (s) => (s ? s.slice(0, 10).split('-').reverse().join('/') : '—');
   const boton = (href, txt, color) => `<a href="${escH(href)}" style="display:inline-block;background:${color};color:#fff;text-decoration:none;font-weight:600;padding:10px 16px;border-radius:6px;margin:4px 6px 4px 0">${txt}</a>`;
   return `<div style="font-family:Segoe UI,Arial,sans-serif;color:#17212f;max-width:640px">

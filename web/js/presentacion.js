@@ -6,7 +6,7 @@ const AZUL = '#1F4E79', AZUL2 = '#2E75B6', NARANJA = '#E07B24', VERDE = '#1D7A4F
 const SERIE = ['#1F5FA8', '#E07B24', '#2A9D8F', '#8E5BB5', '#D1495B', '#6C8A1F', '#B08900', '#4F6D8F'];
 const nf = (d) => new Intl.NumberFormat('es-PE', { minimumFractionDigits: d, maximumFractionDigits: d });
 const n0 = (v) => (v == null ? '—' : nf(0).format(v));
-const n2 = (v) => (v == null ? '—' : nf(2).format(v));
+const n2 = (v) => (v == null ? '—' : nf(3).format(v)); // toneladas: 3 decimales
 const pct = (v) => (v == null ? '—' : `${nf(1).format(v * 100)} %`);
 const fecha = (s) => { if (!s) return '—'; const [y, m, d] = String(s).slice(0, 10).split('-'); return `${d}/${m}/${y}`; };
 const hm = (min) => (min == null ? '—' : `${Math.floor(min / 60)}:${String(min % 60).padStart(2, '0')}`);
@@ -69,7 +69,7 @@ export function construirDiapositivas(d) {
   S.push({ tipo: 'portada', titulo: 'INFORME DE OPERACIÓN', sub: `${op.nave} · ORDEN ${op.orden}`,
     lineas: [op.cliente, `${op.producto || 'SAL A GRANEL'} · ${op.punto_salida || ''} → ${op.punto_llegada || ''}`, `Acopio: ${fecha(d.resumen?.inicio_acopio)} al ${fecha(d.resumen?.fin_acopio)}`, op.dam ? `DAM ${op.dam}` : ''].filter(Boolean) });
   S.push({ tipo: 'kpis', titulo: 'Resumen de la operación', kpis: [
-    ['TN programadas', n0(t.tn_programadas)], ['TN despachadas (Huacho)', n2(t.tn_despacho)], ['TN acopiadas (CSPCP)', n2(t.tn_acopio)],
+    ['TN programadas', n2(t.tn_programadas)], ['TN despachadas (Huacho)', n2(t.tn_despacho)], ['TN acopiadas (CSPCP)', n2(t.tn_acopio)],
     ['TN embarcadas', n2(t.tn_embarque)], ['Draft SGS', n2(t.tn_draft_sgs)], ['Viajes', n0(t.viajes)],
     ['Unidades activas', n0(t.unidades_activas)], ['Prom. TN por unidad', n2(t.peso_prom_unidad)], ['Atención en puerto (prom.)', `${hm(t.tiempo_prom_min)} h`]] });
   if (graf.avance) S.push({ tipo: 'grafico', titulo: 'Avance acumulado por reporte', sub: 'TN despachadas vs. acopiadas frente a lo programado', img: graf.avance });

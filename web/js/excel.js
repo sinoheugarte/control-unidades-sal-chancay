@@ -594,7 +594,7 @@ export function valorCelda(v, k, tipo) {
   if (tipo === 'h') return x / 1440;
   return x;
 }
-const FMT = { f: 'dd/mm/yyyy', dt: 'dd/mm/yyyy hh:mm:ss', h: '[h]:mm:ss', n: '#,##0.00', i: '0', t: '#,##0.000' };
+const FMT = { f: 'dd/mm/yyyy', dt: 'dd/mm/yyyy hh:mm:ss', h: '[h]:mm:ss', n: '#,##0.000', i: '0', t: '#,##0.000' };
 
 const AZUL = 'FF1F4E79';
 const borde = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
