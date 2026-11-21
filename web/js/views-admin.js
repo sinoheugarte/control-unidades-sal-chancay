@@ -314,7 +314,7 @@ export async function vUsuarios(view, ctx) {
     { t: 'Correo', f: (u) => `<strong>${esc(u.email)}</strong>` }, { t: 'Nombre', k: 'nombre' },
     ...(conEmpresa ? [{ t: 'Empresa de transporte', f: (u) => esc(nombreT(u.transportista_id)) }] : [{ t: 'Rol', k: 'rol' }]),
     { t: 'Estado', f: (u) => (u.activo !== false ? '<span class="pill ok">Activo</span>' : '<span class="pill bad">Inactivo</span>') },
-    { t: '', f: (u) => `<button class="btn sm" data-u="${esc(u.email)}">Editar</button>` },
+    { t: '', f: (u) => `<div class="btns" style="flex-wrap:nowrap"><button class="btn sm" data-u="${esc(u.email)}">Editar</button>${u.email !== state.user.email ? `<button class="btn sm danger" data-del-u="${esc(u.email)}">Eliminar</button>` : ''}</div>` },
   ];
   view.innerHTML = `<div class="card"><div class="card-h"><div><h2>Usuarios internos</h2>
       <p class="muted small" style="margin:4px 0 0">Ingresan con su cuenta de Microsoft 365. <strong>Admin</strong>: todo · <strong>Operador</strong>: registra e importa · <strong>Lector</strong>: sólo consulta.
@@ -363,7 +363,15 @@ export async function vUsuarios(view, ctx) {
       r.avisos.forEach((a) => toast(a, true));
     } catch (err) { toast(err.message, true); } finally { e.target.disabled = false; }
   };
-  view.addEventListener('click', (e) => {
+  view.addEventListener('click', async (e) => {
+    const del = e.target.closest('[data-del-u]')?.dataset.delU;
+    if (del) {
+      const u = usuarios.find((x) => x.email === del);
+      const extra = u?.rol === 'transportista' ? ' Perderá el acceso al portal y a su carpeta en SharePoint.' : ' Si vuelve a ingresar, entrará como invitado (sólo reportes compartidos).';
+      if (!(await confirmar(`¿Eliminar el usuario ${del}?${extra}`))) return;
+      try { await api(`/usuarios/${encodeURIComponent(del)}`, { method: 'DELETE' }); toast('Usuario eliminado'); ctx.rerender(); } catch (err) { toast(err.message, true); }
+      return;
+    }
     const email = e.target.closest('[data-u]')?.dataset.u;
     if (!email) return;
     const u = usuarios.find((x) => x.email === email);

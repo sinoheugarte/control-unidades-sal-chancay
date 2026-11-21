@@ -509,8 +509,25 @@ ruta('DELETE', '/transportistas/:tid', async ({ tid }) => {
     const n = D?.viajes.filter((v) => v.transportista_id === Number(tid)).length || 0;
     if (n) throw err(409, `No se puede eliminar: tiene ${n} viajes en ${o.nave} / ${o.orden}`);
   }
-  await mutar(INDICE, (X2) => { X2.transportistas = X2.transportistas.filter((t) => t.id !== Number(tid)); });
-  return { ok: true };
+  // Se quita de las operaciones donde estaba asignado (sin viajes) y su LISTA queda sin empresa
+  for (const o of I.operaciones) {
+    const D = await leer(await opFile(o.id));
+    if (D?.op_transportistas?.some((p) => p.transportista_id === Number(tid)) || D?.unidades?.some((u) => u.transportista_id === Number(tid))) {
+      await mutarOp(o.id, (D2) => {
+        D2.op_transportistas = D2.op_transportistas.filter((p) => p.transportista_id !== Number(tid));
+        D2.unidades.forEach((u) => { if (u.transportista_id === Number(tid)) u.transportista_id = null; });
+      });
+    }
+  }
+  // Sus usuarios del portal pierden el acceso y se eliminan
+  const portal = (I.usuarios || []).filter((u) => u.rol === 'transportista' && u.transportista_id === Number(tid));
+  for (const u of portal) await desactivarPortal(u.email);
+  await mutar(INDICE, (X2) => {
+    X2.transportistas = X2.transportistas.filter((t) => t.id !== Number(tid));
+    X2.usuarios = (X2.usuarios || []).filter((u) => !(u.rol === 'transportista' && u.transportista_id === Number(tid)));
+    if (X2.participacion_predeterminada) delete X2.participacion_predeterminada[Number(tid)];
+  });
+  return { ok: true, usuarios_eliminados: portal.map((u) => u.email) };
 });
 ruta('GET', '/operaciones/:id/transportistas', async ({ id }) => participantes(await datosOp(id), await leer(INDICE)));
 ruta('PUT', '/operaciones/:id/transportistas/:tid', async ({ id, tid }, b) => {
@@ -1001,6 +1018,19 @@ ruta('PUT', '/usuarios/:email', async ({ email }, b) => {
   if (esPortal) return activarPortal(email);
   return { ok: true };
 });
+/** Elimina un usuario (interno o del portal). Un transportista pierde además su acceso a SharePoint. */
+ruta('DELETE', '/usuarios/:email', async ({ email }) => {
+  ADMIN();
+  email = decodeURIComponent(email);
+  if (email === yo.email) throw err(400, 'No puede eliminarse a sí mismo');
+  const I = await leer(INDICE, true);
+  const u = (I.usuarios || []).find((x) => x.email === email);
+  if (!u) throw err(404, 'Usuario no encontrado');
+  if (u.rol === 'admin' && (I.usuarios || []).filter((x) => x.rol === 'admin' && x.activo !== false).length <= 1) throw err(400, 'No se puede eliminar al único administrador');
+  if (u.rol === 'transportista') await desactivarPortal(email);
+  await mutar(INDICE, (X2) => { X2.usuarios = (X2.usuarios || []).filter((x) => x.email !== email); });
+  return { ok: true };
+});
 ruta('PUT', '/usuarios-config', async (p, b) => {
   ADMIN();
   if (!['operador', 'lector'].includes(b.rol_por_defecto)) throw err(400, 'Rol inválido');
@@ -1101,6 +1131,7 @@ async function activarPortal(email) {
 async function desactivarPortal(email) {
   const dir = portalDir(email);
   try { await G.dejarDeCompartir(dir, email); } catch (e) { console.warn('dejarDeCompartir', e.message); }
+  try { await G.dejarDeCompartir(`${dir}/Confirmaciones`, email); } catch (e) { console.warn('dejarDeCompartir Confirmaciones', e.message); }
   try { publicado.delete(`${dir}/perfil.json`); await G.guardarJSON(`${dir}/perfil.json`, { email, activo: false }, null); } catch { /* */ }
 }
 ruta('POST', '/portal/republicar', async () => {

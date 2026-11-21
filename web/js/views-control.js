@@ -298,7 +298,7 @@ export async function vTransportistas(view, ctx) {
     ${tabla([
       { t: 'Nombre comercial', k: 'nombre_comercial' }, { t: 'Razón social', k: 'razon_social' }, { t: 'RUC', k: 'ruc' },
       { t: 'Contacto', k: 'contacto' }, { t: 'Teléfono', k: 'telefono' }, { t: 'Correos', f: (x) => esc(x.emails || '—') },
-      { t: '', f: (x) => (edit ? `<button class="btn sm" data-t="${x.id}">Editar</button>` : '') },
+      { t: '', f: (x) => (edit ? `<div class="btns" style="flex-wrap:nowrap"><button class="btn sm" data-t="${x.id}">Editar</button>${esAdmin() ? `<button class="btn sm danger" data-del-t="${x.id}">Eliminar</button>` : ''}</div>` : '') },
     ], todos, { empty: 'No hay transportistas registrados' })}</div>`;
 
   if ($('#ch-avt')) {
@@ -316,6 +316,12 @@ export async function vTransportistas(view, ctx) {
   $('#b-hab')?.addEventListener('click', () => registrarHabituales(ctx.rerender));
   $('#b-part')?.addEventListener('click', () => partModal(null, todos.filter((t) => !res.some((r) => r.transportista_id === t.id)), ctx.rerender));
   view.addEventListener('click', (e) => {
+    const dt = e.target.closest('[data-del-t]')?.dataset.delT;
+    if (dt) {
+      const x = todos.find((y) => y.id === Number(dt));
+      return confirmar(`¿Eliminar a ${x.nombre_comercial} (${x.razon_social})? Se quitará de las operaciones donde esté asignado sin viajes, sus unidades de la LISTA quedarán sin empresa y sus usuarios del portal se eliminarán. No se puede eliminar si tiene viajes registrados.`)
+        .then(async (ok) => { if (!ok) return; try { const r = await api(`/transportistas/${dt}`, { method: 'DELETE' }); toast(`${x.nombre_comercial} eliminado${r.usuarios_eliminados?.length ? ` · usuarios del portal eliminados: ${r.usuarios_eliminados.join(', ')}` : ''}`); ctx.rerender(); } catch (err) { toast(err.message, true); } });
+    }
     const t = e.target.closest('[data-t]')?.dataset.t;
     if (t) return transpModal(todos.find((x) => x.id === Number(t)), ctx.rerender);
     const p = e.target.closest('[data-part]')?.dataset.part;
