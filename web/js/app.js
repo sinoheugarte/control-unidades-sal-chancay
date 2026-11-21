@@ -79,15 +79,6 @@ function vLogin(root, error = '') {
         Iniciar sesión con Microsoft</button>
       <p class="small" id="login-err" role="alert" style="color:var(--bad);margin:0">${esc(error)}</p>
       ${instalada() ? '' : '<button type="button" class="btn b-instalar" style="justify-content:center">📲 Instalar la app en este dispositivo</button>'}
-      <details class="small"><summary class="muted">Configuración avanzada</summary>
-        <form id="f-cfg" class="form" style="grid-template-columns:1fr;margin-top:10px">
-          <label>Sitio de SharePoint<input name="spSite" value="${esc(cfg.spSite)}"></label>
-          <label>Carpeta en la biblioteca de documentos<input name="carpeta" value="${esc(cfg.carpeta)}"></label>
-          <label>Client ID (Entra ID)<input name="cid" value="${esc(cfg.cid)}"></label>
-          <label>Tenant ID<input name="tid" value="${esc(cfg.tid)}"></label>
-          <p class="muted" style="margin:0">Redirect URI a registrar (SPA): <code>${esc(G.appUrl())}</code></p>
-          <button class="btn">Guardar configuración</button>
-        </form></details>
     </div></div></div>`;
   $('#b-ms').addEventListener('click', async (e) => {
     const btn = e.currentTarget; btn.disabled = true; $('#login-err').textContent = '';
@@ -99,11 +90,28 @@ function vLogin(root, error = '') {
       render();
     } catch (err) { $('#login-err').textContent = err.message; } finally { btn.disabled = false; }
   });
-  $('#f-cfg').addEventListener('submit', (e) => {
-    e.preventDefault();
-    const d = Object.fromEntries(new FormData(e.target));
-    G.setCfg({ spSite: d.spSite.trim(), carpeta: d.carpeta.trim(), cid: d.cid.trim(), tid: d.tid.trim() });
-    toast('Configuración guardada. Inicie sesión.');
+}
+
+/** Configuración avanzada (sitio de SharePoint, carpeta, Client ID y Tenant ID): sólo administradores. */
+function configAvanzada() {
+  if (!esAdmin()) return;
+  const cfg = G.getCfg();
+  modal({
+    title: 'Configuración avanzada',
+    submitText: 'Guardar y volver a ingresar',
+    body: `<div class="alert" style="margin-bottom:12px">Sólo para administradores. Cambiar estos datos desconecta la sesión en este dispositivo y la app leerá los datos desde la nueva ubicación.</div>
+      <div class="form" style="grid-template-columns:1fr">
+        <label>Sitio de SharePoint<input name="spSite" value="${esc(cfg.spSite)}" required></label>
+        <label>Carpeta en la biblioteca de documentos<input name="carpeta" value="${esc(cfg.carpeta)}" required></label>
+        <label>Client ID (Entra ID)<input name="cid" value="${esc(cfg.cid)}" required></label>
+        <label>Tenant ID<input name="tid" value="${esc(cfg.tid)}" required></label>
+        <p class="muted small" style="margin:0">Redirect URI a registrar (SPA): <code>${esc(G.appUrl())}</code></p>
+      </div>`,
+    onSubmit: async (d) => {
+      G.setCfg({ spSite: String(d.spSite).trim(), carpeta: String(d.carpeta).trim(), cid: String(d.cid).trim(), tid: String(d.tid).trim() });
+      toast('Configuración guardada. Inicie sesión nuevamente.');
+      state.user = null; shellDe = null; location.hash = '#/login'; render();
+    },
   });
 }
 
@@ -230,7 +238,9 @@ function shell(root, ruta) {
         Datos en <strong>${esc(G.getCfg().spSite.replace(/^https:\/\//, ''))}</strong> / ${esc(G.getCfg().carpeta)} · Versión ${esc(VERSION_APP)}</p>`}
       ${state.user.transportista ? `<p>Empresa: <strong>${esc(state.user.transportista.razon_social)}</strong> · RUC ${esc(state.user.transportista.ruc)}</p>
         <p class="muted small">Usted sólo ve los viajes y unidades de su empresa.</p>`
-        : `<p class="muted small">Los datos se guardan en SharePoint: <a href="${esc(await G.urlCarpeta())}" target="_blank" rel="noopener">abrir carpeta</a>.</p>`}`,
+        : `<p class="muted small">Los datos se guardan en SharePoint: <a href="${esc(await G.urlCarpeta())}" target="_blank" rel="noopener">abrir carpeta</a>.</p>`}
+      ${esAdmin() ? '<button type="button" class="btn sm" id="b-cfg-av">⚙️ Configuración avanzada</button>' : ''}`,
+    onOpen: (dlg) => dlg.querySelector('#b-cfg-av')?.addEventListener('click', () => { dlg.close(); dlg.remove(); configAvanzada(); }),
   }));
 }
 
