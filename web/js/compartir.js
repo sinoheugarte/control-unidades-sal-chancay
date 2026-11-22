@@ -4,6 +4,7 @@ import { state, esc, toast, modal, descargarBlob } from './core.js?v=__V__';
 import * as G from './graph.js?v=__V__';
 
 const SVG = (inner, vb = '0 0 24 24') => `<svg class="fx-ico" viewBox="${vb}" aria-hidden="true">${inner}</svg>`;
+const ICO_WA = '<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" style="flex:none"><path fill="#fff" d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm5.8 14.1c-.2.7-1.4 1.3-2 1.4-.5.1-1.2.1-1.9-.1-.4-.1-1-.3-1.7-.6-3-1.3-4.9-4.3-5-4.5-.2-.2-1.2-1.6-1.2-3s.8-2.2 1-2.5c.3-.3.6-.4.8-.4h.6c.2 0 .4 0 .6.5l.9 2.1c.1.2.1.4 0 .5l-.3.5-.4.5c-.1.1-.3.3-.1.6.2.3.8 1.3 1.6 2.1 1.1 1 2 1.3 2.3 1.4.3.1.5.1.6-.1l.9-1.1c.2-.3.4-.2.7-.1l2 1c.3.1.5.2.5.3.1.2.1.8-.1 1.4z"/></svg>';
 export const ICO = {
   xls: SVG('<rect x="2" y="2" width="20" height="20" rx="5" fill="#16a34a"/><path d="M8 7l8 10M16 7L8 17" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>'),
   pdf: SVG('<rect x="2" y="2" width="20" height="20" rx="5" fill="#dc2626"/><text x="12" y="15.6" text-anchor="middle" font-size="7.6" font-weight="800" font-family="Inter,Arial,sans-serif" fill="#fff">PDF</text>'),
@@ -122,8 +123,9 @@ export async function compartirBlob(generar, titulo) {
       El enlace abre el reporte en la aplicación, en <strong>solo lectura</strong>. Quien lo reciba ingresa con su cuenta de Microsoft 365 de la organización;
       si no es usuario de la app, <strong>sólo verá las pestañas de este reporte</strong>.
       ${urlSp ? `<br><span class="muted small">Archivo en SharePoint (para descargarlo): <a href="${esc(urlSp)}" target="_blank" rel="noopener">abrir</a></span>` : ''}</p>
-      <div class="btns" style="flex-wrap:nowrap"><input id="fx-url" readonly value="${esc(url)}" style="flex:1"><button type="button" class="btn" id="fx-copiar">Copiar enlace</button>
-      <a class="btn" href="${esc(url)}" target="_blank" rel="noopener">Abrir</a></div>
+      <div class="btns" style="flex-wrap:wrap"><input id="fx-url" readonly value="${esc(url)}" style="flex:1 1 260px;min-width:0"><button type="button" class="btn" id="fx-copiar">Copiar enlace</button>
+      <a class="btn" href="${esc(url)}" target="_blank" rel="noopener">Abrir</a>
+      <a class="btn fx-wa" id="fx-wa" href="#" target="_blank" rel="noopener" title="Enviar el enlace por WhatsApp">${ICO_WA}WhatsApp</a></div>
       <div class="form" style="margin-top:14px">
         <label class="full">Para (correos separados por coma)<input name="para" placeholder="usuario@empresa.com, otro@empresa.com"></label>
         <label class="full">Asunto<input name="asunto" value="${esc(asunto)}" maxlength="250" required></label>
@@ -146,6 +148,18 @@ export async function compartirBlob(generar, titulo) {
       }
     },
   });
+  // WhatsApp: abre la app (celular) o WhatsApp Web/escritorio (PC) con el asunto, el mensaje y el enlace listos
+  const wa = dlg.querySelector('#fx-wa');
+  const textoWa = () => {
+    const tema = dlg.querySelector('[name=asunto]')?.value.trim() || asunto;
+    const msj = dlg.querySelector('[name=mensaje]')?.value.trim() || '';
+    return `*${tema}*${msj ? `\n${msj}` : ''}\n\n${url}`;
+  };
+  const actualizarWa = () => { wa.href = `https://wa.me/?text=${encodeURIComponent(textoWa())}`; };
+  actualizarWa();
+  dlg.addEventListener('input', actualizarWa);
+  // En la app Android, una navegación directa hace que el sistema abra WhatsApp (una ventana nueva no se abriría)
+  wa.addEventListener('click', (e) => { actualizarWa(); if (window.Capacitor?.isNativePlatform?.()) { e.preventDefault(); location.href = wa.href; } });
   dlg.querySelector('#fx-copiar').addEventListener('click', async () => {
     try { await navigator.clipboard.writeText(url); toast('Enlace copiado'); } catch { dlg.querySelector('#fx-url').select(); document.execCommand('copy'); toast('Enlace copiado'); }
   });

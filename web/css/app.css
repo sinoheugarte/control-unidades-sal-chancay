@@ -592,3 +592,7 @@ table.cortes tbody tr:hover td.rep:not(.vacio) { background: color-mix(in srgb, 
 /* Teléfonos: al girar, nada puede ensanchar la página (el visor de Android alejaría el zoom).
    'clip' recorta sin crear un contenedor de desplazamiento (no rompe el menú fijo ni los encabezados). */
 @media (pointer: coarse) { html, body { overflow-x: clip; } }
+
+/* Botón WhatsApp en "Compartir reporte" */
+.btn.fx-wa { background: #25d366; color: #fff; border-color: transparent; box-shadow: 0 4px 12px -6px rgba(37, 211, 102, .7); white-space: nowrap; }
+.btn.fx-wa:hover { background: #1ebe5b; }
