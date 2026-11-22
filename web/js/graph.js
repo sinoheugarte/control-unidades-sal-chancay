@@ -312,11 +312,12 @@ export async function asegurarPermisoCorreo() {
 }
 
 /** Envía un correo desde la cuenta del usuario conectado (Outlook / Microsoft 365). */
-export async function enviarCorreo({ para, cc = [], asunto, html }) {
+export async function enviarCorreo({ para, cc = [], asunto, html, adjuntos = [] }) {
   const dir = (l) => l.map((address) => ({ emailAddress: { address } }));
   const r = await g('me/sendMail', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, raw: true,
-    body: JSON.stringify({ message: { subject: asunto, body: { contentType: 'HTML', content: html }, toRecipients: dir(para), ccRecipients: dir(cc) }, saveToSentItems: true }),
+    body: JSON.stringify({ message: { subject: asunto, body: { contentType: 'HTML', content: html }, toRecipients: dir(para), ccRecipients: dir(cc),
+      ...(adjuntos.length ? { attachments: adjuntos.map((x) => ({ '@odata.type': '#microsoft.graph.fileAttachment', name: x.nombre, contentType: x.tipo, contentBytes: x.base64 })) } : {}) }, saveToSentItems: true }),
   });
   if (!r.ok) { let m = `${r.status}`; try { m = (await r.json()).error?.message || m; } catch { /* */ } throw new Error(`No se pudo enviar el correo: ${m}`); }
 }

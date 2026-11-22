@@ -596,3 +596,10 @@ table.cortes tbody tr:hover td.rep:not(.vacio) { background: color-mix(in srgb, 
 /* Botón WhatsApp en "Compartir reporte" */
 .btn.fx-wa { background: #25d366; color: #fff; border-color: transparent; box-shadow: 0 4px 12px -6px rgba(37, 211, 102, .7); white-space: nowrap; }
 .btn.fx-wa:hover { background: #1ebe5b; }
+/* Check "Invitado (sin cuenta Microsoft)" en Compartir reporte */
+.fx-inv { display: flex; align-items: flex-start; gap: 12px; margin: 0 0 14px; padding: 12px 14px; border-radius: 12px; cursor: pointer;
+  background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--border); transition: box-shadow .15s ease, background-color .15s ease; }
+.fx-inv:has(input:checked) { background: color-mix(in srgb, #25d366 12%, var(--surface)); box-shadow: inset 0 0 0 1.5px #25d366; }
+.fx-inv input { width: 20px; height: 20px; margin: 2px 0 0; accent-color: #16a34a; flex: none; }
+.fx-inv span { display: grid; gap: 2px; }
+.fx-inv small { color: var(--muted); font-size: 12.5px; }

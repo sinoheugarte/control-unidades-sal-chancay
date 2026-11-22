@@ -1,6 +1,7 @@
 // Exportación a HTML y enlaces para compartir (SharePoint) de cualquier pantalla o sección.
 // También decora los botones de exportación con íconos representativos (Excel, PDF, HTML, enlace).
-import { state, esc, toast, modal, descargarBlob } from './core.js?v=__V__';
+import { state, esc, toast, modal, descargarBlob, esNativa } from './core.js?v=__V__';
+const aBase64 = (blob) => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1]); r.onerror = rej; r.readAsDataURL(blob); });
 import * as G from './graph.js?v=__V__';
 
 const SVG = (inner, vb = '0 0 24 24') => `<svg class="fx-ico" viewBox="${vb}" aria-hidden="true">${inner}</svg>`;
@@ -101,31 +102,36 @@ export async function descargarHTML(el, titulo) {
   try { descargarBlob(await htmlDe(el, titulo), `${nombreArchivo(titulo)}.html`); toast('Reporte HTML generado'); } catch (e) { toast(e.message, true); }
 }
 
-/** Guarda el HTML en SharePoint, crea un enlace de solo lectura y permite enviarlo por correo. */
+/** Comparte un reporte de dos formas:
+    - Enlace (usuarios de la organización): se guarda en SharePoint y se abre en la app con la cuenta Microsoft.
+    - Archivo (invitados sin cuenta Microsoft): se envía el HTML del reporte, que se abre en cualquier navegador. */
 export async function compartir(el, titulo) { return compartirBlob(() => htmlDe(el, titulo), titulo); }
 export async function compartirBlob(generar, titulo) {
-  if (state.user?.rol === 'transportista') { toast('Descargue el HTML y compártalo como archivo.', true); return; }
-  toast('Generando el enlace para compartir…');
-  let url, urlSp;
-  try {
-    const d = new Date(); const p = (n) => String(n).padStart(2, '0');
-    const ruta = `Compartidos/${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())} ${nombreArchivo(titulo)}.html`;
-    await G.subirArchivo(ruta, await generar(), 'text/html');
-    // El enlace abre el reporte dentro de la app (SharePoint no muestra páginas HTML; sólo las descarga)
-    try { urlSp = await G.crearEnlace(ruta); } catch { urlSp = null; }
-    // Con el enlace de SharePoint del archivo, el invitado lo abre aunque no tenga acceso a los datos de la app
-    url = urlSp && /^https?:/.test(urlSp) ? `${G.appUrl()}#/ver?s=${G.tokenCompartido(urlSp)}` : `${G.appUrl()}#/ver?f=${encodeURIComponent(ruta)}`;
-  } catch (e) { toast(`No se pudo crear el enlace: ${e.message}`, true); return; }
+  const soloArchivo = state.user?.rol === 'transportista';
+  let blob;
+  try { blob = await generar(); } catch (e) { toast(`No se pudo generar el reporte: ${e.message}`, true); return; }
+  const nombre = `${nombreArchivo(titulo)}.html`;
+  const kb = Math.max(1, Math.round(blob.size / 1024));
+  const tam = kb > 1024 ? `${(kb / 1024).toFixed(1)} MB` : `${kb} KB`;
   const asunto = `${titulo}${opNombre() ? ` · ${opNombre()}` : ''}`;
+  let url = null, urlSp = null, enlaceListo = null;
   const dlg = modal({
     title: 'Compartir reporte', submitText: 'Enviar por correo', wide: true,
-    body: `<p style="margin-top:0">Se guardó <strong>${esc(titulo)}</strong> en SharePoint (<em>Control Unidades Sal/Compartidos</em>).
-      El enlace abre el reporte en la aplicación, en <strong>solo lectura</strong>. Quien lo reciba ingresa con su cuenta de Microsoft 365 de la organización;
-      si no es usuario de la app, <strong>sólo verá las pestañas de este reporte</strong>.
-      ${urlSp ? `<br><span class="muted small">Archivo en SharePoint (para descargarlo): <a href="${esc(urlSp)}" target="_blank" rel="noopener">abrir</a></span>` : ''}</p>
-      <div class="btns" style="flex-wrap:wrap"><input id="fx-url" readonly value="${esc(url)}" style="flex:1 1 260px;min-width:0"><button type="button" class="btn" id="fx-copiar">Copiar enlace</button>
-      <a class="btn" href="${esc(url)}" target="_blank" rel="noopener">Abrir</a>
-      <a class="btn fx-wa" id="fx-wa" href="#" target="_blank" rel="noopener" title="Enviar el enlace por WhatsApp">${ICO_WA}WhatsApp</a></div>
+    body: `<label class="fx-inv"><input type="checkbox" name="invitado" ${soloArchivo ? 'checked disabled' : ''}>
+        <span><strong>Invitado (sin cuenta Microsoft)</strong><small>Se envía el reporte como archivo: se abre en cualquier celular o PC sin iniciar sesión.</small></span></label>
+      <div data-modo="enlace">
+        <p style="margin-top:0">El <strong>enlace</strong> abre <strong>${esc(titulo)}</strong> en la aplicación, en <strong>solo lectura</strong>. Quien lo reciba ingresa con su cuenta de Microsoft 365 de la organización;
+          si no es usuario de la app, <strong>sólo verá las pestañas de este reporte</strong>. <span class="muted small" id="fx-sp"></span></p>
+        <div class="btns" style="flex-wrap:wrap"><input id="fx-url" readonly value="Generando el enlace…" style="flex:1 1 260px;min-width:0"><button type="button" class="btn" id="fx-copiar" disabled>Copiar enlace</button>
+          <a class="btn" id="fx-abrir" href="#" target="_blank" rel="noopener" aria-disabled="true">Abrir</a>
+          <a class="btn fx-wa" id="fx-wa" href="#" target="_blank" rel="noopener" title="Enviar el enlace por WhatsApp">${ICO_WA}WhatsApp</a></div>
+      </div>
+      <div data-modo="archivo" hidden>
+        <p style="margin-top:0">Se enviará el <strong>archivo</strong> <em>${esc(nombre)}</em> (${tam}). Se abre en cualquier navegador <strong>sin iniciar sesión</strong>, con sus pestañas.
+          <span class="muted small">Es una copia del momento: no se actualiza. Compártalo sólo con quien deba verlo (el archivo se puede reenviar).</span></p>
+        <div class="btns" style="flex-wrap:wrap"><button type="button" class="btn fx-wa" id="fx-wa-arch">${ICO_WA}Enviar por WhatsApp</button>
+          <button type="button" class="btn" id="fx-desc">Descargar archivo</button></div>
+      </div>
       <div class="form" style="margin-top:14px">
         <label class="full">Para (correos separados por coma)<input name="para" placeholder="usuario@empresa.com, otro@empresa.com"></label>
         <label class="full">Asunto<input name="asunto" value="${esc(asunto)}" maxlength="250" required></label>
@@ -135,31 +141,76 @@ export async function compartirBlob(generar, titulo) {
       const para = String(f.para || '').split(/[,;\s]+/).map((x) => x.trim()).filter((x) => x.includes('@'));
       if (!para.length) throw new Error('Ingrese al menos un correo');
       const tema = String(f.asunto || '').trim() || asunto;
+      const archivo = modoArchivo();
+      if (!archivo) { await enlaceListo; if (!url) throw new Error('El enlace no está disponible: active "Invitado" para enviar el archivo.'); }
+      const pie = `<p style="color:#5b6b80;font-size:12px">${esc(tema)} · Control de Unidades · ${esc(state.user?.nombre || '')}</p>`;
       const cuerpo = `<div style="font-family:Segoe UI,Arial,sans-serif;color:#17212f"><p>${esc(f.mensaje || '').replace(/\n/g, '<br>')}</p>
-        <p><a href="${esc(url)}" style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;font-weight:600;padding:10px 16px;border-radius:8px">Ver reporte</a></p>
-        <p style="color:#5b6b80;font-size:12px">${esc(tema)} · Control de Unidades · ${esc(state.user?.nombre || '')}</p></div>`;
+        ${archivo ? `<p>Se adjunta el reporte <strong>${esc(nombre)}</strong>: ábralo con su navegador (Chrome, Edge, Safari…). No requiere iniciar sesión.</p>`
+          : `<p><a href="${esc(url)}" style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;font-weight:600;padding:10px 16px;border-radius:8px">Ver reporte</a></p>`}${pie}</div>`;
       try {
+        if (archivo && blob.size > 2.8 * 1024 * 1024) throw new Error(`el archivo pesa ${tam} (máximo 2.8 MB por correo); envíelo por WhatsApp o descárguelo`);
         await G.asegurarPermisoCorreo();
-        await G.enviarCorreo({ para, asunto: tema, html: cuerpo });
-        toast(`Enlace enviado a ${para.join(', ')}`);
+        await G.enviarCorreo({ para, asunto: tema, html: cuerpo, adjuntos: archivo ? [{ nombre, tipo: 'text/html', base64: await aBase64(blob) }] : [] });
+        toast(archivo ? `Reporte enviado como archivo a ${para.join(', ')}` : `Enlace enviado a ${para.join(', ')}`);
       } catch (e) {
-        location.href = `mailto:${para.join(',')}?subject=${encodeURIComponent(tema)}&body=${encodeURIComponent(`${f.mensaje || ''}\n\n${url}`)}`;
+        if (archivo) descargarBlob(blob, nombre);
+        location.href = `mailto:${para.join(',')}?subject=${encodeURIComponent(tema)}&body=${encodeURIComponent(`${f.mensaje || ''}\n\n${archivo ? `(Adjunte el archivo descargado: ${nombre})` : url}`)}`;
         toast(`Se abrió su programa de correo (${e.message})`, true);
       }
     },
   });
-  // WhatsApp: abre la app (celular) o WhatsApp Web/escritorio (PC) con el asunto, el mensaje y el enlace listos
-  const wa = dlg.querySelector('#fx-wa');
-  const textoWa = () => {
-    const tema = dlg.querySelector('[name=asunto]')?.value.trim() || asunto;
-    const msj = dlg.querySelector('[name=mensaje]')?.value.trim() || '';
-    return `*${tema}*${msj ? `\n${msj}` : ''}\n\n${url}`;
+  const chk = dlg.querySelector('[name=invitado]');
+  const modoArchivo = () => chk.checked;
+  const pintarModo = () => {
+    dlg.querySelector('[data-modo=enlace]').hidden = modoArchivo();
+    dlg.querySelector('[data-modo=archivo]').hidden = !modoArchivo();
+    const msj = dlg.querySelector('[name=mensaje]');
+    if (/^Comparto el reporte /.test(msj.value)) msj.value = `Comparto el reporte "${asunto}"${modoArchivo() ? ' (archivo adjunto; se abre sin iniciar sesión)' : ''}.`;
   };
-  const actualizarWa = () => { wa.href = `https://wa.me/?text=${encodeURIComponent(textoWa())}`; };
-  actualizarWa();
+  chk.addEventListener('change', pintarModo); pintarModo();
+  const tema = () => dlg.querySelector('[name=asunto]')?.value.trim() || asunto;
+  const mensaje = () => dlg.querySelector('[name=mensaje]')?.value.trim() || '';
+
+  // ----- Enlace (usuarios con cuenta Microsoft): se genera en segundo plano; no hace falta si sólo se envía el archivo
+  const wa = dlg.querySelector('#fx-wa');
+  const actualizarWa = () => { wa.href = url ? `https://wa.me/?text=${encodeURIComponent(`*${tema()}*${mensaje() ? `\n${mensaje()}` : ''}\n\n${url}`)}` : '#'; };
   dlg.addEventListener('input', actualizarWa);
-  // En la app Android, una navegación directa hace que el sistema abra WhatsApp (una ventana nueva no se abriría)
-  wa.addEventListener('click', (e) => { actualizarWa(); if (window.Capacitor?.isNativePlatform?.()) { e.preventDefault(); location.href = wa.href; } });
+  wa.addEventListener('click', (e) => { if (!url) { e.preventDefault(); return; } actualizarWa(); if (window.Capacitor?.isNativePlatform?.()) { e.preventDefault(); location.href = wa.href; } });
+  if (!soloArchivo) {
+    enlaceListo = (async () => {
+      try {
+        const d = new Date(); const p = (n) => String(n).padStart(2, '0');
+        const ruta = `Compartidos/${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())} ${nombre}`;
+        await G.subirArchivo(ruta, blob, 'text/html');
+        // El enlace abre el reporte dentro de la app (SharePoint no muestra páginas HTML; sólo las descarga)
+        try { urlSp = await G.crearEnlace(ruta); } catch { urlSp = null; }
+        url = urlSp && /^https?:/.test(urlSp) ? `${G.appUrl()}#/ver?s=${G.tokenCompartido(urlSp)}` : `${G.appUrl()}#/ver?f=${encodeURIComponent(ruta)}`;
+        dlg.querySelector('#fx-url').value = url;
+        dlg.querySelector('#fx-copiar').disabled = false;
+        const ab = dlg.querySelector('#fx-abrir'); ab.href = url; ab.removeAttribute('aria-disabled');
+        if (urlSp) dlg.querySelector('#fx-sp').innerHTML = `Guardado en SharePoint (<em>Control Unidades Sal/Compartidos</em>): <a href="${esc(urlSp)}" target="_blank" rel="noopener">abrir archivo</a>.`;
+        actualizarWa();
+      } catch (e) {
+        dlg.querySelector('#fx-url').value = `No se pudo crear el enlace (${e.message}). Active "Invitado" para enviar el archivo.`;
+      }
+    })();
+  }
+
+  // ----- Archivo (invitados): menú Compartir del sistema con el archivo adjunto (WhatsApp, Telegram, Gmail…)
+  dlg.querySelector('#fx-desc').addEventListener('click', () => descargarBlob(blob, nombre));
+  dlg.querySelector('#fx-wa-arch').addEventListener('click', async () => {
+    const texto = `*${tema()}*${mensaje() ? `\n${mensaje()}` : ''}`;
+    if (esNativa()) { descargarBlob(blob, nombre); return; } // app Android: abre el menú Compartir con el archivo
+    const file = new File([blob], nombre, { type: 'text/html' });
+    try {
+      if (navigator.canShare?.({ files: [file] })) { await navigator.share({ files: [file], title: tema(), text: texto }); return; }
+    } catch (e) { if (e?.name === 'AbortError') return; }
+    // Sin "Compartir" con archivos (p. ej. algunos navegadores de PC): se descarga y se abre WhatsApp para adjuntarlo
+    descargarBlob(blob, nombre);
+    window.open(`https://wa.me/?text=${encodeURIComponent(`${texto}\n\n(Adjunto el archivo del reporte: ${nombre})`)}`, '_blank', 'noopener');
+    toast('Se descargó el archivo: adjúntelo en el chat de WhatsApp (📎 › Documento).');
+  });
+
   dlg.querySelector('#fx-copiar').addEventListener('click', async () => {
     try { await navigator.clipboard.writeText(url); toast('Enlace copiado'); } catch { dlg.querySelector('#fx-url').select(); document.execCommand('copy'); toast('Enlace copiado'); }
   });
