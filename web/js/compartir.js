@@ -94,6 +94,9 @@ export function fragmentoDe(el) {
   });
   // Fuera: formularios de edición (p. ej. parámetros), controles, barras de filtros, filas ocultas por el filtro
   copia.querySelectorAll('form').forEach((f) => { const c = f.closest('.card'); (c && c !== copia ? c : f).remove(); });
+  // Títulos que son botones dentro de cabeceras de tabla (p. ej. "1er REPORTE", que abre sus viajes): se conservan como texto
+  copia.querySelectorAll('th button, th .btn').forEach((b) => { const s = document.createElement('span'); s.className = 'th-txt'; s.textContent = b.textContent.trim(); b.replaceWith(s); });
+  copia.querySelectorAll('.tabs').forEach((x) => x.remove()); // la barra de sub-pestañas: cada una va como pestaña del reporte
   copia.querySelectorAll('button, .btn, .tbar, tr.tfil, .no-print, input[type=file], dialog, [data-fx]').forEach((x) => x.remove());
   copia.querySelectorAll('tr[hidden]').forEach((x) => x.remove());
   // Controles: sólo se muestran los filtros que están aplicados
@@ -125,7 +128,7 @@ html,body{overflow-x:auto}body{padding:0;min-width:0}.rep{max-width:none;margin:
 .content>*,.card,.kpi,.ficha{opacity:1!important;transform:none!important;filter:none!important}
 .table-wrap{max-height:82vh!important;overflow:auto!important}
 .filtro-act{display:inline-flex;gap:4px;padding:3px 9px;border-radius:99px;background:var(--primary-soft);color:var(--primary);font-size:12px;font-weight:650;margin-right:6px}
-.chart-box img{display:block}.g-par{display:block;width:100%;height:100%}
+.chart-box img{display:block}.th-txt{font-weight:800;letter-spacing:.02em}.g-par{display:block;width:100%;height:100%}
 :root[data-theme=dark] .g-cla,:root:not([data-theme=dark]) .g-osc{display:none!important}
 .rep-tema{margin-left:auto;flex:none;font:inherit;font-size:13px;font-weight:650;color:#fff;cursor:pointer;border:0;padding:8px 14px;border-radius:99px;background:rgba(255,255,255,.18);box-shadow:inset 0 0 0 1px rgba(255,255,255,.35)}
 .rep-tema:hover{background:rgba(255,255,255,.28)}
