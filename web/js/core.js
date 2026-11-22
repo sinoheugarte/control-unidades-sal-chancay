@@ -308,13 +308,27 @@ export function prepararImpresion() {
   temaAntesImpresion = r.getAttribute('data-theme');
   r.setAttribute('data-theme', 'light');
   graficosConTema();
+  // Cada gráfico se imprime como imagen ya dibujada: si no, Chart.js se redimensiona al cambiar el ancho
+  // de la hoja y queda cortado o encimado sobre otras tarjetas
+  document.querySelectorAll('#view canvas').forEach((cv) => {
+    try {
+      const img = document.createElement('img');
+      img.className = 'img-impresion'; img.alt = '';
+      img.src = cv.toDataURL('image/png');
+      cv.classList.add('impreso');
+      cv.after(img);
+    } catch { /* */ }
+  });
 }
 export function terminarImpresion() {
   if (temaAntesImpresion === undefined) return;
   const r = document.documentElement;
   if (temaAntesImpresion == null) r.removeAttribute('data-theme'); else r.setAttribute('data-theme', temaAntesImpresion);
   temaAntesImpresion = undefined;
+  document.querySelectorAll('.img-impresion').forEach((x) => x.remove());
+  document.querySelectorAll('canvas.impreso').forEach((cv) => cv.classList.remove('impreso'));
   graficosConTema();
+  setTimeout(redibujarGraficos, 100);
 }
 window.addEventListener('beforeprint', prepararImpresion);
 window.addEventListener('afterprint', terminarImpresion);

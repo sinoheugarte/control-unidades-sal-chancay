@@ -363,6 +363,17 @@ dialog .df { padding: 12px 18px; border-top: 1px solid var(--border); display: f
   .side, .top, .btn, .no-print, .tbar, tr.tfil, .menu-velo, .aviso-version, #toast { display: none !important; }
   .content.entra > *, .content.sale { animation: none !important; opacity: 1 !important; transform: none !important; filter: none !important; }
   .content { padding: 0 !important; }
+  /* Gráficos como imagen y tarjetas una debajo de otra, sin partirse entre páginas */
+  canvas.impreso { display: none !important; }
+  .img-impresion { display: block !important; width: 100%; height: auto; max-height: 340px; object-fit: contain; }
+  .chart-box { height: auto !important; }
+  .grid.g2, .grid.g3, .grid.g4, .grid.g57, .grid.g12, .grid.g21, .plan4 { display: block !important; }
+  .grid > *, .plan4 > * { margin-bottom: 12px; }
+  .table-wrap, .vlista, [style*="max-height"], [style*="overflow"] { max-height: none !important; overflow: visible !important; }
+  .card { break-inside: auto; }
+  .chart-box, .img-impresion, .kpi, .ficha, tr, .card-h { break-inside: avoid; page-break-inside: avoid; }
+  .card-h { break-after: avoid; }
+  .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
   .layout { display: block; }
   .card, .kpi { box-shadow: none; border: 1px solid #ccc; }
   .table-wrap { max-height: none; overflow: visible; box-shadow: none; }
@@ -592,6 +603,7 @@ table.cortes tbody tr:hover td.rep:not(.vacio) { background: color-mix(in srgb, 
 .main, .content, .card, .content > *, .g12 > *, .g2 > *, .g21 > *, .g3 > *, .g4 > *, .g57 > *, .plan4 > *, .grid > * { min-width: 0; }
 .chart-box { min-width: 0; }
 .chart-box canvas { max-width: 100% !important; }
+.img-impresion { display: none; }
 /* Teléfonos: al girar, nada puede ensanchar la página (el visor de Android alejaría el zoom).
    'clip' recorta sin crear un contenedor de desplazamiento (no rompe el menú fijo ni los encabezados). */
 @media (pointer: coarse) { html, body { overflow-x: clip; } }
