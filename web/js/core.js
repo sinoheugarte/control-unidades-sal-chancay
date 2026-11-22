@@ -284,6 +284,55 @@ export function redibujarGraficos() {
     } catch (err) { console.error('[gráficos] al redibujar', c.canvas?.id, err); }
   });
 }
+/* ---------- Impresión: siempre en tema claro ----------
+   El navegador no imprime los fondos: con el tema oscuro el texto (casi blanco) salía invisible y la hoja
+   quedaba en blanco. Al imprimir se pasa a tema claro (también los gráficos) y luego se vuelve al tema elegido. */
+let temaAntesImpresion;
+function graficosConTema() {
+  const c = colores();
+  if (window.Chart) { Chart.defaults.color = c.texto; Chart.defaults.borderColor = c.grid; }
+  charts.forEach((ch) => {
+    try {
+      const op = ch.config?.options || ch.options;
+      op.scales = op.scales || {};
+      Object.keys(ch.scales || {}).forEach((id) => { op.scales[id] = op.scales[id] || {}; });
+      Object.values(op.scales).forEach((sc) => { if (!sc) return; sc.grid = { ...(sc.grid || {}), color: c.grid }; sc.ticks = { ...(sc.ticks || {}), color: c.texto }; sc.border = { ...(sc.border || {}), color: c.grid }; });
+      op.plugins = op.plugins || {}; op.plugins.legend = op.plugins.legend || {}; op.plugins.legend.labels = { ...(op.plugins.legend.labels || {}), color: c.texto };
+      ch.options = op; ch.update('none'); ch.draw();
+    } catch { /* */ }
+  });
+}
+export function prepararImpresion() {
+  if (temaAntesImpresion !== undefined) return;
+  const r = document.documentElement;
+  temaAntesImpresion = r.getAttribute('data-theme');
+  r.setAttribute('data-theme', 'light');
+  graficosConTema();
+}
+export function terminarImpresion() {
+  if (temaAntesImpresion === undefined) return;
+  const r = document.documentElement;
+  if (temaAntesImpresion == null) r.removeAttribute('data-theme'); else r.setAttribute('data-theme', temaAntesImpresion);
+  temaAntesImpresion = undefined;
+  graficosConTema();
+}
+window.addEventListener('beforeprint', prepararImpresion);
+window.addEventListener('afterprint', terminarImpresion);
+/** Imprime la pantalla. En la app Android usa el servicio de impresión del sistema (el visor no tiene window.print). */
+export function imprimir() {
+  const nativo = window.AndroidImpresion;
+  if (nativo?.imprimir) {
+    prepararImpresion();
+    setTimeout(() => {
+      try { nativo.imprimir(document.title || 'Control de Unidades'); } catch (e) { terminarImpresion(); toast(`No se pudo abrir la impresión: ${e.message}`, true); return; }
+      // al volver del diálogo de impresión de Android se restaura el tema
+      const volver = () => { if (document.hidden) return; setTimeout(terminarImpresion, 400); document.removeEventListener('visibilitychange', volver); window.removeEventListener('focus', volver); };
+      setTimeout(() => { document.addEventListener('visibilitychange', volver); window.addEventListener('focus', volver); }, 1500);
+    }, 120);
+    return;
+  }
+  window.print();
+}
 // Al volver a la pestaña o a la app (o al recuperar el foco) se redibujan: el navegador pudo haber borrado los lienzos
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { redibujarGraficos(); setTimeout(redibujarGraficos, 400); } });
 window.addEventListener('pageshow', () => setTimeout(redibujarGraficos, 100));

@@ -359,7 +359,10 @@ dialog .df { padding: 12px 18px; border-top: 1px solid var(--border); display: f
 }
 
 @media print {
-  .side, .top, .btn, .no-print, .tbar, tr.tfil { display: none !important; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .side, .top, .btn, .no-print, .tbar, tr.tfil, .menu-velo, .aviso-version, #toast { display: none !important; }
+  .content.entra > *, .content.sale { animation: none !important; opacity: 1 !important; transform: none !important; filter: none !important; }
+  .content { padding: 0 !important; }
   .layout { display: block; }
   .card, .kpi { box-shadow: none; border: 1px solid #ccc; }
   .table-wrap { max-height: none; overflow: visible; box-shadow: none; }

@@ -1,7 +1,6 @@
 import {
   state, api, esc, num, pct, fecha, fechaHora, minutos, toInputDT, ahoraInput, hoyInput, normPlaca,
-  statusPill, rangoPill, toast, $, modal, confirmar, tabla, sinOperacion, puedeEscribir, esAdmin, chart, colores, descargar, fichas, jornadaPill,
-} from './core.js?v=__V__';
+  statusPill, rangoPill, toast, $, modal, confirmar, tabla, sinOperacion, puedeEscribir, esAdmin, chart, colores, descargar, fichas, jornadaPill, imprimir } from './core.js?v=__V__';
 import { turnoDe } from './calc.js?v=__V__';
 
 /* =================== TABLERO =================== */
@@ -52,7 +51,7 @@ export async function vTablero(view) {
         ], d.ultimos, { empty: 'Aún no hay viajes registrados' })}</div>
     </div>`;
 
-  $('#b-print').onclick = () => print();
+  $('#b-print').onclick = () => imprimir();
   $('#b-fin')?.addEventListener('click', async () => { const { abrirFinalizar } = await import('./finalizar.js?v=__V__'); abrirFinalizar(op, () => { window.dispatchEvent(new CustomEvent('app:ops', { detail: { id: op.id } })); }); });
   $('#b-informe')?.addEventListener('click', async (e) => {
     const b = e.currentTarget; b.disabled = true; toast('Preparando el análisis de la operación…');
