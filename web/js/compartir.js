@@ -114,6 +114,37 @@ export function fragmentoDe(el) {
   return copia.classList.contains('content') ? copia.innerHTML : copia.outerHTML;
 }
 
+/* Tablas del archivo compartido: búsqueda, filtros por columna y orden por encabezado (sin la app) */
+const SCRIPT_TABLAS = String.raw`(function(){
+function num(t){var s=t.replace(/[^0-9,.\-]/g,'');if(!/\d/.test(s))return null;var n=parseFloat(s.replace(/,/g,''));return isNaN(n)?null:n}
+function fecha(t){var m=t.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2}))?/);return m?(+m[3])*1e8+(+m[2])*1e6+(+m[1])*1e4+(m[4]?(+m[4])*100+(+m[5]):0):null}
+var esNum=/^[\s\d.,\-%]+$/;
+document.querySelectorAll('.table-wrap > table').forEach(function(t){
+ if(t.classList.contains('cortes')||t.classList.contains('matriz')||t.classList.contains('info'))return;
+ var tb=t.tBodies[0],head=t.tHead&&t.tHead.rows[0];if(!tb||!head)return;
+ var filas=[].slice.call(tb.rows);if(filas.length<4)return;
+ var ncol=head.cells.length,fv=[];
+ var bar=document.createElement('div');bar.className='rf-bar';
+ bar.innerHTML='<input type="search" placeholder="Buscar en la tabla…"><button type="button">Filtros por columna</button><span class="rf-n"></span>';
+ t.parentNode.parentNode.insertBefore(bar,t.parentNode);
+ var q=bar.querySelector('input'),btn=bar.querySelector('button'),cnt=bar.querySelector('.rf-n');
+ var fr=document.createElement('tr');fr.className='rf-fil';fr.hidden=true;
+ for(var i=0;i<ncol;i++){var th=document.createElement('th'),inp=document.createElement('input');inp.placeholder='Filtrar';inp.setAttribute('data-c',i);th.appendChild(inp);fr.appendChild(th);fv.push('')}
+ t.tHead.appendChild(fr);
+ function txt(r,i){var c=r.cells[i];return c?c.textContent.trim():''}
+ function aplicar(){var s=q.value.trim().toLowerCase(),v=0;filas.forEach(function(r){var ok=!s||r.textContent.toLowerCase().indexOf(s)>=0;for(var i=0;ok&&i<ncol;i++){if(fv[i]&&txt(r,i).toLowerCase().indexOf(fv[i])<0)ok=false}r.style.display=ok?'':'none';if(ok)v++});cnt.textContent=v+' de '+filas.length+' filas'}
+ q.addEventListener('input',aplicar);
+ fr.addEventListener('input',function(e){var c=e.target.getAttribute('data-c');if(c==null)return;fv[c]=e.target.value.trim().toLowerCase();aplicar()});
+ btn.addEventListener('click',function(){fr.hidden=!fr.hidden;btn.className=fr.hidden?'':'on';if(fr.hidden){for(var i=0;i<ncol;i++)fv[i]='';fr.querySelectorAll('input').forEach(function(x){x.value=''});aplicar()}});
+ [].forEach.call(head.cells,function(th,i){var dir=0;th.style.cursor='pointer';th.title='Ordenar';th.addEventListener('click',function(){dir=dir===1?-1:1;[].forEach.call(head.cells,function(o){o.removeAttribute('data-ord')});th.setAttribute('data-ord',dir>0?'▲':'▼');
+  filas.sort(function(a,b){var x=txt(a,i),y=txt(b,i),fx=fecha(x),fy=fecha(y);if(fx!=null&&fy!=null)return(fx-fy)*dir;var nx=num(x),ny=num(y);if(nx!=null&&ny!=null&&esNum.test(x)&&esNum.test(y))return(nx-ny)*dir;return x.localeCompare(y,'es',{numeric:true})*dir});
+  filas.forEach(function(r){tb.appendChild(r)})})});
+ aplicar();
+});
+// Dentro del visor de la app: toma el tema de la app y quita el botón propio
+window.addEventListener('message',function(e){var d=e.data||{};if(d.tema)document.documentElement.setAttribute('data-theme',d.tema);if(d.enApp){var b=document.querySelector('.rep-tema');if(b)b.remove()}});
+})();`;
+
 /** Documento HTML autónomo con una o varias secciones (pestañas de la app), con índice para saltar entre ellas. */
 export async function documento(titulo, secciones) {
   // Pestaña con sub-pestañas: barra de sub-pestañas como en la app (cambia con enlaces internos, sin scripts)
@@ -135,6 +166,18 @@ html,body{overflow-x:auto}body{padding:0;min-width:0}.rep{max-width:none;margin:
 .filtro-act{display:inline-flex;gap:4px;padding:3px 9px;border-radius:99px;background:var(--primary-soft);color:var(--primary);font-size:12px;font-weight:650;margin-right:6px}
 .chart-box img{display:block}.th-txt{font-weight:800;letter-spacing:.02em}.g-par{display:block;width:100%;height:100%}
 :root[data-theme=dark] .g-cla,:root:not([data-theme=dark]) .g-osc{display:none!important}
+.rf-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 8px}
+.rf-bar input{flex:1 1 200px;min-width:0;padding:7px 11px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text);font:inherit;font-size:13px}
+.rf-bar button{font:inherit;font-size:12.5px;font-weight:650;padding:7px 12px;border-radius:10px;border:1px solid var(--border);background:var(--surface-2);color:var(--text);cursor:pointer}
+.rf-bar button.on{background:var(--primary-soft);color:var(--primary);border-color:var(--primary)}
+.rf-n{color:var(--muted);font-size:12px;margin-left:auto}
+.rf-fil input{width:100%;min-width:64px;padding:4px 7px;font:inherit;font-size:12px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text)}
+th[data-ord]::after{content:' ' attr(data-ord);font-size:10px;color:var(--primary)}
+/* Tarjetas: el contenido no se sale y en pantallas angostas se reacomodan */
+.kpi,.ficha{min-width:0}.kpi *,.ficha *{overflow-wrap:anywhere;min-width:0}
+@media(max-width:760px){.fichas.eq>.ficha{flex-basis:calc(50% - 4px)!important}.kpis>.kpi{flex-basis:calc(50% - 6px)!important;min-width:0!important}
+.grid.g2,.grid.g3,.grid.g4,.grid.g57,.grid.g12,.grid.g21,.plan4{grid-template-columns:minmax(0,1fr)!important}.rep{padding:12px}}
+@media print{.rf-bar,.rf-fil{display:none!important}}
 .rep-tema{margin-left:auto;flex:none;font:inherit;font-size:13px;font-weight:650;color:#fff;cursor:pointer;border:0;padding:8px 14px;border-radius:99px;background:rgba(255,255,255,.18);box-shadow:inset 0 0 0 1px rgba(255,255,255,.35)}
 .rep-tema:hover{background:rgba(255,255,255,.28)}
 @media print{.rep-tema{display:none}}.rep-h{display:flex;align-items:center;gap:14px;margin-bottom:16px;padding:16px 18px;border-radius:16px;background:var(--grad);color:#fff;box-shadow:var(--shadow-lg)}
@@ -167,7 +210,8 @@ ${secciones.length > 1 ? `<div class="rep-cuerpo">
   <nav class="rep-lat" aria-label="Pestañas compartidas"><div class="sep">Pestañas compartidas</div>${secciones.map((x, i) => `<a href="#s${i + 1}" style="--c:${x.c || '#2563eb'}"><span class="ico">${x.ico || ''}</span><span>${esc(x.titulo)}</span></a>`).join('')}</nav>
   <div class="rep-tabs">${secciones.map((x, i) => `<section id="s${i + 1}" class="rep-sec" style="--c:${x.c || '#2563eb'}"><h2 class="rep-st"><span class="ico">${x.ico || ''}</span>${esc(x.titulo)}</h2>${contenido(x, i)}</section>`).join('')}</div>
 </div>` : secciones.map((x, i) => `<section id="s${i + 1}" class="rep-sec">${contenido(x, i)}</section>`).join('')}
-<div class="rep-f">Control de Unidades · Despacho · Acopio · Embarque — reporte de solo lectura</div></div></body></html>`;
+<div class="rep-f">Control de Unidades · Despacho · Acopio · Embarque — reporte de solo lectura</div></div>
+<script>${SCRIPT_TABLAS}</script></body></html>`;
   return new Blob([html], { type: 'text/html;charset=utf-8' });
 }
 
@@ -339,12 +383,13 @@ export async function vVer(view) {
       <div><h2>${esc(nombre)}</h2><div class="muted small">Reporte compartido · solo lectura</div></div>
       <div class="btns"><button class="btn sm fx" id="v-desc" data-fx="html">${ICO.html}Descargar HTML</button>
       <button class="btn sm" id="v-nueva">Abrir en otra pestaña</button>${webUrl && state.user?.rol !== 'invitado' ? `<a class="btn sm" href="${esc(webUrl)}" target="_blank" rel="noopener">SharePoint</a>` : ''}</div></div>
-    <iframe id="v-frame" title="${esc(nombre)}" sandbox="allow-same-origin allow-popups" style="display:block;width:100%;height:calc(100vh - 150px);border:0;background:var(--bg)"></iframe></div>`;
+    <iframe id="v-frame" title="${esc(nombre)}" sandbox="allow-scripts allow-popups" style="display:block;width:100%;height:calc(100vh - 150px);border:0;background:var(--bg)"></iframe></div>`;
   const blob = () => new Blob([texto], { type: 'text/html;charset=utf-8' });
   // Como documento propio (blob) para que el menú lateral del reporte cambie de pestaña dentro del visor
   const u = URL.createObjectURL(blob());
   const fr = view.querySelector('#v-frame');
-  fr.addEventListener('load', () => { try { const d = fr.contentDocument; d.documentElement.setAttribute('data-theme', document.documentElement.getAttribute('data-theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')); d.querySelector('.rep-tema')?.remove(); } catch { /* */ } });
+  // El reporte corre aislado (sin acceso a la sesión de la app); el tema se le envía por mensaje
+  fr.addEventListener('load', () => { try { fr.contentWindow.postMessage({ enApp: true, tema: document.documentElement.getAttribute('data-theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') }, '*'); } catch { /* */ } });
   fr.src = u;
   window.addEventListener('hashchange', () => URL.revokeObjectURL(u), { once: true });
   view.querySelector('#v-desc').onclick = () => descargarBlob(blob(), `${nombre}.html`);

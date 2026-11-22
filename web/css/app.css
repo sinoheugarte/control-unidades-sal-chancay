@@ -618,3 +618,7 @@ table.cortes tbody tr:hover td.rep:not(.vacio) { background: color-mix(in srgb, 
 .fx-inv input { width: 20px; height: 20px; margin: 2px 0 0; accent-color: #16a34a; flex: none; }
 .fx-inv span { display: grid; gap: 2px; }
 .fx-inv small { color: var(--muted); font-size: 12.5px; }
+
+/* El contenido de indicadores y fichas no se sale de su tarjeta */
+.kpi, .ficha { min-width: 0; }
+.kpi .l, .kpi small, .ficha .l, .ficha small, .ficha .v { overflow-wrap: anywhere; }
