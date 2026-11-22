@@ -126,20 +126,22 @@ export async function compartirBlob(generar, titulo) {
       <a class="btn" href="${esc(url)}" target="_blank" rel="noopener">Abrir</a></div>
       <div class="form" style="margin-top:14px">
         <label class="full">Para (correos separados por coma)<input name="para" placeholder="usuario@empresa.com, otro@empresa.com"></label>
+        <label class="full">Asunto<input name="asunto" value="${esc(asunto)}" maxlength="250" required></label>
         <label class="full">Mensaje (opcional)<textarea name="mensaje" rows="3">Comparto el reporte "${esc(asunto)}".</textarea></label>
       </div>`,
     onSubmit: async (f) => {
       const para = String(f.para || '').split(/[,;\s]+/).map((x) => x.trim()).filter((x) => x.includes('@'));
       if (!para.length) throw new Error('Ingrese al menos un correo');
+      const tema = String(f.asunto || '').trim() || asunto;
       const cuerpo = `<div style="font-family:Segoe UI,Arial,sans-serif;color:#17212f"><p>${esc(f.mensaje || '').replace(/\n/g, '<br>')}</p>
         <p><a href="${esc(url)}" style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;font-weight:600;padding:10px 16px;border-radius:8px">Ver reporte</a></p>
-        <p style="color:#5b6b80;font-size:12px">${esc(asunto)} · Control de Unidades · ${esc(state.user?.nombre || '')}</p></div>`;
+        <p style="color:#5b6b80;font-size:12px">${esc(tema)} · Control de Unidades · ${esc(state.user?.nombre || '')}</p></div>`;
       try {
         await G.asegurarPermisoCorreo();
-        await G.enviarCorreo({ para, asunto, html: cuerpo });
+        await G.enviarCorreo({ para, asunto: tema, html: cuerpo });
         toast(`Enlace enviado a ${para.join(', ')}`);
       } catch (e) {
-        location.href = `mailto:${para.join(',')}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(`${f.mensaje || ''}\n\n${url}`)}`;
+        location.href = `mailto:${para.join(',')}?subject=${encodeURIComponent(tema)}&body=${encodeURIComponent(`${f.mensaje || ''}\n\n${url}`)}`;
         toast(`Se abrió su programa de correo (${e.message})`, true);
       }
     },
