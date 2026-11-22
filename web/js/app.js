@@ -273,12 +273,15 @@ async function capturarPantallas(keys) {
       const subs = [...view.querySelectorAll('.tabs [role=tab]')].map((b) => b.textContent.trim());
       if (subs.length > 1) {
         const activa = Math.max(0, [...view.querySelectorAll('.tabs [role=tab]')].findIndex((b) => b.classList.contains('active')));
+        const partes = [];
         for (const [j, nombreSub] of subs.entries()) {
           velo.querySelector('#velo-paso').textContent = `${i + 1} de ${keys.length}: ${RUTAS[k].t} · ${nombreSub}`;
           view.querySelectorAll('.tabs [role=tab]')[j]?.click(); // fija la sub-pestaña (la vista se vuelve a pintar aquí)
           await pintar();
-          secciones.push({ titulo: `${RUTAS[k].t} · ${nombreSub}`, html: fragmentoDe(view), ico: ICON[k], c: COLOR[k] });
+          partes.push({ titulo: nombreSub, html: fragmentoDe(view) });
         }
+        // una sola pestaña en el menú; dentro, su barra de sub-pestañas como en la app
+        secciones.push({ titulo: RUTAS[k].t, subs: partes, html: '', ico: ICON[k], c: COLOR[k] });
         view.querySelectorAll('.tabs [role=tab]')[activa]?.click(); // deja la sub-pestaña que estaba abierta
       } else secciones.push({ titulo: RUTAS[k].t, html: fragmentoDe(view), ico: ICON[k], c: COLOR[k] });
     }

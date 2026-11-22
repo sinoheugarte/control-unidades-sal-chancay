@@ -116,6 +116,11 @@ export function fragmentoDe(el) {
 
 /** Documento HTML autónomo con una o varias secciones (pestañas de la app), con índice para saltar entre ellas. */
 export async function documento(titulo, secciones) {
+  // Pestaña con sub-pestañas: barra de sub-pestañas como en la app (cambia con enlaces internos, sin scripts)
+  const contenido = (x, i) => (x.subs?.length
+    ? `<div class="rep-subs"><div class="tabs rep-tabbar" role="tablist">${x.subs.map((s, j) => `<a role="tab" href="#s${i + 1}-${j + 1}">${esc(s.titulo)}</a>`).join('')}</div>
+      ${x.subs.map((s, j) => `<div id="s${i + 1}-${j + 1}" class="rep-sub"><div class="content">${s.html}</div></div>`).join('')}</div>`
+    : `<div class="content">${x.html}</div>`);
   const tema = document.documentElement.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
   const css = await cssTexto();
   const empresa = 'PACIFICO DESPACHOS S.A.C.';
@@ -144,18 +149,24 @@ html,body{overflow-x:auto}body{padding:0;min-width:0}.rep{max-width:none;margin:
 .rep-lat a:hover{background:var(--side-active);color:#fff}
 .rep-lat .ico,.rep-st .ico{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;flex:none;color:#fff;background:linear-gradient(145deg,var(--c),color-mix(in srgb,var(--c) 75%,#000));box-shadow:0 4px 10px -3px color-mix(in srgb,var(--c) 70%,transparent)}
 .rep-lat .ico svg,.rep-st .ico svg{width:17px;height:17px}
-.rep-tabs .rep-sec{display:none}.rep-tabs .rep-sec:target{display:block}
-.rep-tabs:not(:has(.rep-sec:target)) .rep-sec:first-of-type{display:block}
+.rep-tabs .rep-sec{display:none}.rep-tabs .rep-sec:target,.rep-tabs .rep-sec:has(:target){display:block}
+.rep-tabs:not(:has(:target)) .rep-sec:first-of-type{display:block}
+/* Sub-pestañas dentro de una pestaña, como en la app */
+.rep-tabbar a{font-weight:650;color:var(--muted);padding:6px 14px;border-radius:9px;text-decoration:none}
+.rep-tabbar a:hover{color:var(--text)}
+.rep-sub{display:none}.rep-sub:target{display:block}.rep-subs:not(:has(.rep-sub:target)) .rep-tabbar+.rep-sub{display:block}
+.rep-subs:not(:has(.rep-sub:target)) .rep-tabbar a:first-child{color:var(--text);background:var(--surface);box-shadow:0 1px 3px rgba(15,27,45,.15),0 0 0 .5px rgba(15,27,45,.06)}
 @media(max-width:900px){.rep-cuerpo{grid-template-columns:1fr}.rep-lat{position:static;grid-template-columns:repeat(auto-fill,minmax(170px,1fr))}}
-@media print{.rep-lat{display:none}.rep-cuerpo{display:block}.rep-tabs .rep-sec{display:block!important}}
-${secciones.length > 1 ? secciones.map((x, i) => `.rep-cuerpo:has(#s${i + 1}:target) .rep-lat a[href="#s${i + 1}"]${i === 0 ? `,.rep-cuerpo:not(:has(.rep-sec:target)) .rep-lat a[href="#s1"]` : ''}{background:var(--side-active);color:#fff;box-shadow:inset 3px 0 0 var(--c)}`).join('\n') : ''}</style></head>
+@media print{.rep-lat,.rep-tabbar{display:none}.rep-cuerpo{display:block}.rep-tabs .rep-sec,.rep-sub{display:block!important}}
+${secciones.length > 1 ? secciones.map((x, i) => `.rep-cuerpo:has(#s${i + 1}:target) .rep-lat a[href="#s${i + 1}"],.rep-cuerpo:has(#s${i + 1} :target) .rep-lat a[href="#s${i + 1}"]${i === 0 ? `,.rep-cuerpo:not(:has(:target)) .rep-lat a[href="#s1"]` : ''}{background:var(--side-active);color:#fff;box-shadow:inset 3px 0 0 var(--c)}`).join('\n') : ''}
+${secciones.map((x, i) => (x.subs || []).map((s, j) => `.rep-sec:has(#s${i + 1}-${j + 1}:target) .rep-tabbar a[href="#s${i + 1}-${j + 1}"]{color:var(--text);background:var(--surface);box-shadow:0 1px 3px rgba(15,27,45,.15),0 0 0 .5px rgba(15,27,45,.06)}`).join('\n')).join('\n')}</style></head>
 <body><div class="rep"><div class="rep-h"><div><h1>${esc(titulo)}</h1><small>${esc(empresa)}${opNombre() ? ` · ${esc(opNombre())}` : ''} · Generado ${ahora()}</small></div>
 <button type="button" class="rep-tema" onclick="var r=document.documentElement,t=r.getAttribute('data-theme')==='dark'?'light':'dark';r.setAttribute('data-theme',t);this.textContent=t==='dark'?'☀️ Tema claro':'🌙 Tema oscuro';try{localStorage.setItem('tema-reporte',t)}catch(e){}">${tema === 'dark' ? '☀️ Tema claro' : '🌙 Tema oscuro'}</button></div>
 <script>try{var t=localStorage.getItem('tema-reporte');if(t){document.documentElement.setAttribute('data-theme',t);var b=document.querySelector('.rep-tema');if(b)b.textContent=t==='dark'?'☀️ Tema claro':'🌙 Tema oscuro'}}catch(e){}</script>
 ${secciones.length > 1 ? `<div class="rep-cuerpo">
   <nav class="rep-lat" aria-label="Pestañas compartidas"><div class="sep">Pestañas compartidas</div>${secciones.map((x, i) => `<a href="#s${i + 1}" style="--c:${x.c || '#2563eb'}"><span class="ico">${x.ico || ''}</span><span>${esc(x.titulo)}</span></a>`).join('')}</nav>
-  <div class="rep-tabs">${secciones.map((x, i) => `<section id="s${i + 1}" class="rep-sec" style="--c:${x.c || '#2563eb'}"><h2 class="rep-st"><span class="ico">${x.ico || ''}</span>${esc(x.titulo)}</h2><div class="content">${x.html}</div></section>`).join('')}</div>
-</div>` : secciones.map((x) => `<section class="rep-sec"><div class="content">${x.html}</div></section>`).join('')}
+  <div class="rep-tabs">${secciones.map((x, i) => `<section id="s${i + 1}" class="rep-sec" style="--c:${x.c || '#2563eb'}"><h2 class="rep-st"><span class="ico">${x.ico || ''}</span>${esc(x.titulo)}</h2>${contenido(x, i)}</section>`).join('')}</div>
+</div>` : secciones.map((x, i) => `<section id="s${i + 1}" class="rep-sec">${contenido(x, i)}</section>`).join('')}
 <div class="rep-f">Control de Unidades · Despacho · Acopio · Embarque — reporte de solo lectura</div></div></body></html>`;
   return new Blob([html], { type: 'text/html;charset=utf-8' });
 }
