@@ -1,6 +1,6 @@
 // Exportación a HTML y enlaces para compartir (SharePoint) de cualquier pantalla o sección.
 // También decora los botones de exportación con íconos representativos (Excel, PDF, HTML, enlace).
-import { state, esc, toast, modal, descargarBlob, esNativa } from './core.js?v=__V__';
+import { state, esc, toast, modal, descargarBlob, esNativa, colores } from './core.js?v=__V__';
 const aBase64 = (blob) => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1]); r.onerror = rej; r.readAsDataURL(blob); });
 import * as G from './graph.js?v=__V__';
 
@@ -25,15 +25,72 @@ const archivoSeguro = (s) => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').
 
 /** Genera un HTML autónomo (estilos incluidos, gráficos como imágenes) del elemento indicado. */
 /** HTML limpio (sin controles, gráficos como imágenes) de un elemento de la pantalla. */
+/** Dibuja cada gráfico con los colores del tema oscuro y del claro y devuelve ambas imágenes.
+    Se hace en un solo paso (sin pintar la pantalla entre medio), así no se nota el cambio de tema. */
+function graficosEnDosTemas(canvases) {
+  const raiz = document.documentElement, antes = raiz.getAttribute('data-theme');
+  const res = canvases.map(() => ({}));
+  const C = window.Chart, defC = C?.defaults.color, defB = C?.defaults.borderColor;
+  const respaldo = new Map(); // gráfico → [[escala, grid, ticks, border]] originales
+  try {
+    for (const tema of ['dark', 'light']) {
+      raiz.setAttribute('data-theme', tema);
+      const c = colores();
+      if (C) { C.defaults.color = c.texto; C.defaults.borderColor = c.grid; }
+      canvases.forEach((cv, i) => {
+        const ch = C?.getChart?.(cv);
+        if (ch) {
+          // cuadrícula, ejes y leyendas con los colores del tema (algunos gráficos los fijan al crearse)
+          try {
+            const op = ch.config?.options || ch.options;
+            op.scales = op.scales || {};
+            Object.keys(ch.scales || {}).forEach((id) => { op.scales[id] = op.scales[id] || {}; });
+            Object.values(op.scales).forEach((sc) => {
+              if (!sc) return;
+              (respaldo.get(ch) || respaldo.set(ch, []).get(ch)).push([sc, sc.grid?.color, sc.ticks?.color, sc.border?.color]);
+              sc.grid = { ...(sc.grid || {}), color: c.grid }; sc.ticks = { ...(sc.ticks || {}), color: c.texto }; sc.border = { ...(sc.border || {}), color: c.grid };
+            });
+            op.plugins = op.plugins || {}; op.plugins.legend = op.plugins.legend || {}; op.plugins.legend.labels = { ...(op.plugins.legend.labels || {}), color: c.texto };
+            ch.options = op; // reasignar limpia la caché de opciones resueltas de Chart.js
+            ch.update('none');
+            ch.draw(); // dibuja ya (si no, Chart.js puede dejarlo para el próximo cuadro)
+          } catch (e) { console.warn('[compartir] gráfico en tema', tema, e); }
+        }
+        try { res[i][tema] = cv.toDataURL('image/png'); } catch { /* */ }
+      });
+    }
+  } finally {
+    if (antes == null) raiz.removeAttribute('data-theme'); else raiz.setAttribute('data-theme', antes);
+    if (C) { C.defaults.color = defC; C.defaults.borderColor = defB; }
+    respaldo.forEach((lista, ch) => {
+      // vuelve a los colores originales (el primer respaldo de cada escala es el original)
+      const vistas = new Set();
+      lista.forEach(([sc, g, t, b]) => { if (vistas.has(sc)) return; vistas.add(sc); sc.grid.color = g; sc.ticks.color = t; sc.border.color = b; });
+      const op = ch.config?.options || ch.options;
+      if (op.plugins?.legend?.labels) op.plugins.legend.labels.color = undefined;
+      try { ch.options = op; } catch { /* */ }
+    });
+    canvases.forEach((cv) => { try { const ch = C?.getChart?.(cv); ch?.update('none'); ch?.draw(); } catch { /* */ } });
+  }
+  return res;
+}
+
 export function fragmentoDe(el) {
   const copia = el.cloneNode(true);
-  // Gráficos → imágenes
+  // Gráficos → imágenes (una por tema: el archivo compartido permite cambiar entre claro y oscuro)
   const orig = [...el.querySelectorAll('canvas')];
+  const imgs = graficosEnDosTemas(orig);
   [...copia.querySelectorAll('canvas')].forEach((c, i) => {
-    const img = document.createElement('img');
-    try { img.src = orig[i].toDataURL('image/png'); } catch { /* */ }
-    img.style.cssText = 'width:100%;height:100%;object-fit:contain';
-    c.replaceWith(img);
+    const par = document.createElement('span');
+    par.className = 'g-par';
+    for (const tema of ['dark', 'light']) {
+      const img = document.createElement('img');
+      img.className = tema === 'dark' ? 'g-osc' : 'g-cla';
+      if (imgs[i]?.[tema]) img.src = imgs[i][tema];
+      img.style.cssText = 'width:100%;height:100%;object-fit:contain';
+      par.appendChild(img);
+    }
+    c.replaceWith(par);
   });
   // Fuera: formularios de edición (p. ej. parámetros), controles, barras de filtros, filas ocultas por el filtro
   copia.querySelectorAll('form').forEach((f) => { const c = f.closest('.card'); (c && c !== copia ? c : f).remove(); });
@@ -68,7 +125,11 @@ html,body{overflow-x:auto}body{padding:0;min-width:0}.rep{max-width:none;margin:
 .content>*,.card,.kpi,.ficha{opacity:1!important;transform:none!important;filter:none!important}
 .table-wrap{max-height:82vh!important;overflow:auto!important}
 .filtro-act{display:inline-flex;gap:4px;padding:3px 9px;border-radius:99px;background:var(--primary-soft);color:var(--primary);font-size:12px;font-weight:650;margin-right:6px}
-.chart-box img{display:block}.rep-h{display:flex;align-items:center;gap:14px;margin-bottom:16px;padding:16px 18px;border-radius:16px;background:var(--grad);color:#fff;box-shadow:var(--shadow-lg)}
+.chart-box img{display:block}.g-par{display:block;width:100%;height:100%}
+:root[data-theme=dark] .g-cla,:root:not([data-theme=dark]) .g-osc{display:none!important}
+.rep-tema{margin-left:auto;flex:none;font:inherit;font-size:13px;font-weight:650;color:#fff;cursor:pointer;border:0;padding:8px 14px;border-radius:99px;background:rgba(255,255,255,.18);box-shadow:inset 0 0 0 1px rgba(255,255,255,.35)}
+.rep-tema:hover{background:rgba(255,255,255,.28)}
+@media print{.rep-tema{display:none}}.rep-h{display:flex;align-items:center;gap:14px;margin-bottom:16px;padding:16px 18px;border-radius:16px;background:var(--grad);color:#fff;box-shadow:var(--shadow-lg)}
 .rep-h h1{font-size:20px}.rep-h small{display:block;opacity:.85;font-weight:500}.rep-f{margin-top:18px;color:var(--muted);font-size:12px;text-align:center}
 .content{padding:0}.content>*,.dbar::before,.bar>i{animation:none!important}
 .rep-sec{margin-bottom:26px}.rep-st{font-size:17px;margin:4px 0 12px;padding-left:10px;border-left:4px solid var(--c,var(--primary));display:flex;align-items:center;gap:10px}
@@ -85,7 +146,9 @@ html,body{overflow-x:auto}body{padding:0;min-width:0}.rep{max-width:none;margin:
 @media(max-width:900px){.rep-cuerpo{grid-template-columns:1fr}.rep-lat{position:static;grid-template-columns:repeat(auto-fill,minmax(170px,1fr))}}
 @media print{.rep-lat{display:none}.rep-cuerpo{display:block}.rep-tabs .rep-sec{display:block!important}}
 ${secciones.length > 1 ? secciones.map((x, i) => `.rep-cuerpo:has(#s${i + 1}:target) .rep-lat a[href="#s${i + 1}"]${i === 0 ? `,.rep-cuerpo:not(:has(.rep-sec:target)) .rep-lat a[href="#s1"]` : ''}{background:var(--side-active);color:#fff;box-shadow:inset 3px 0 0 var(--c)}`).join('\n') : ''}</style></head>
-<body><div class="rep"><div class="rep-h"><div><h1>${esc(titulo)}</h1><small>${esc(empresa)}${opNombre() ? ` · ${esc(opNombre())}` : ''} · Generado ${ahora()}</small></div></div>
+<body><div class="rep"><div class="rep-h"><div><h1>${esc(titulo)}</h1><small>${esc(empresa)}${opNombre() ? ` · ${esc(opNombre())}` : ''} · Generado ${ahora()}</small></div>
+<button type="button" class="rep-tema" onclick="var r=document.documentElement,t=r.getAttribute('data-theme')==='dark'?'light':'dark';r.setAttribute('data-theme',t);this.textContent=t==='dark'?'☀️ Tema claro':'🌙 Tema oscuro';try{localStorage.setItem('tema-reporte',t)}catch(e){}">${tema === 'dark' ? '☀️ Tema claro' : '🌙 Tema oscuro'}</button></div>
+<script>try{var t=localStorage.getItem('tema-reporte');if(t){document.documentElement.setAttribute('data-theme',t);var b=document.querySelector('.rep-tema');if(b)b.textContent=t==='dark'?'☀️ Tema claro':'🌙 Tema oscuro'}}catch(e){}</script>
 ${secciones.length > 1 ? `<div class="rep-cuerpo">
   <nav class="rep-lat" aria-label="Pestañas compartidas"><div class="sep">Pestañas compartidas</div>${secciones.map((x, i) => `<a href="#s${i + 1}" style="--c:${x.c || '#2563eb'}"><span class="ico">${x.ico || ''}</span><span>${esc(x.titulo)}</span></a>`).join('')}</nav>
   <div class="rep-tabs">${secciones.map((x, i) => `<section id="s${i + 1}" class="rep-sec" style="--c:${x.c || '#2563eb'}"><h2 class="rep-st"><span class="ico">${x.ico || ''}</span>${esc(x.titulo)}</h2><div class="content">${x.html}</div></section>`).join('')}</div>
@@ -266,7 +329,9 @@ export async function vVer(view) {
   const blob = () => new Blob([texto], { type: 'text/html;charset=utf-8' });
   // Como documento propio (blob) para que el menú lateral del reporte cambie de pestaña dentro del visor
   const u = URL.createObjectURL(blob());
-  view.querySelector('#v-frame').src = u;
+  const fr = view.querySelector('#v-frame');
+  fr.addEventListener('load', () => { try { const d = fr.contentDocument; d.documentElement.setAttribute('data-theme', document.documentElement.getAttribute('data-theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')); d.querySelector('.rep-tema')?.remove(); } catch { /* */ } });
+  fr.src = u;
   window.addEventListener('hashchange', () => URL.revokeObjectURL(u), { once: true });
   view.querySelector('#v-desc').onclick = () => descargarBlob(blob(), `${nombre}.html`);
   view.querySelector('#v-nueva').onclick = () => { const u = URL.createObjectURL(blob()); window.open(u, '_blank', 'noopener'); setTimeout(() => URL.revokeObjectURL(u), 60000); };

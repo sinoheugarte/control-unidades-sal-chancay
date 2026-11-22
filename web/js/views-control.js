@@ -7,6 +7,9 @@ import { formularioLista, enviarLista, registrarTransportistaModal, registrarHab
 
 /* =================== REPORTES POR TURNO =================== */
 let tabRep = 'despacho';
+/** Sub-pestañas de Reporte de avance (para incluirlas todas al exportar o compartir). */
+export const SUBTABS_REPORTES = [['despacho', 'Proceso de despacho'], ['acopio', 'Proceso de acopio'], ['embarque', 'Proceso de embarque']];
+export const tabReporte = (t) => { if (t) tabRep = t; return tabRep; };
 export async function vReportes(view, ctx) {
   if (!state.opId) { view.innerHTML = sinOperacion(); return; }
   const d = await api(`/operaciones/${state.opId}/reportes`);

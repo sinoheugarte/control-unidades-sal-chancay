@@ -2,7 +2,7 @@ import { state, api, esc, toast, $, $$, modal, destruirGraficos, redibujarGrafic
 import { mostrarIntro } from './intro.js?v=__V__';
 import { activarExportes, ICO as FX, descargarHTML, vVer, fragmentoDe, elegirPantallas } from './compartir.js?v=__V__';
 import { vTablero, vViajes, vRegistro } from './views-operacion.js?v=__V__';
-import { vReportes, vTransportistas, vUnidades, vResumenes, vPlanificacion, vReporteTransportista } from './views-control.js?v=__V__';
+import { vReportes, vTransportistas, vUnidades, vResumenes, vPlanificacion, vReporteTransportista, SUBTABS_REPORTES, tabReporte } from './views-control.js?v=__V__';
 import { vOperaciones, vImportar, vUsuarios } from './views-admin.js?v=__V__';
 import * as G from './graph.js?v=__V__';
 import { vPortal, vPortalUnidades } from './views-portal.js?v=__V__';
@@ -263,9 +263,16 @@ async function capturarPantallas(keys) {
       view.innerHTML = ''; destruirGraficos();
       view.classList.remove('sale', 'entra', 'atras');
       view.innerHTML = '';
-      try { await RUTAS[k].v(view, { rerender: () => {} }); } catch (e) { view.innerHTML = `<div class="alert bad">${esc(e.message)}</div>`; }
-      await espera(450);
-      secciones.push({ titulo: RUTAS[k].t, html: fragmentoDe(view), ico: ICON[k], c: COLOR[k] });
+      // Reporte de avance: se incluyen sus tres sub-pestañas (despacho, acopio y embarque)
+      const subs = k === 'reportes' ? SUBTABS_REPORTES : [[null, null]];
+      const tabAntes = k === 'reportes' ? tabReporte() : null;
+      for (const [sub, nombreSub] of subs) {
+        if (sub) { tabReporte(sub); destruirGraficos(true); view.innerHTML = ''; }
+        try { await RUTAS[k].v(view, { rerender: () => {} }); } catch (e) { view.innerHTML = `<div class="alert bad">${esc(e.message)}</div>`; }
+        await espera(450);
+        secciones.push({ titulo: sub ? `${RUTAS[k].t} · ${nombreSub}` : RUTAS[k].t, html: fragmentoDe(view), ico: ICON[k], c: COLOR[k] });
+      }
+      if (tabAntes) tabReporte(tabAntes);
     }
   } finally {
     if (window.Chart) Chart.defaults.animation = animAntes;
