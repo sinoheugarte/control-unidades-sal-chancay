@@ -622,3 +622,9 @@ table.cortes tbody tr:hover td.rep:not(.vacio) { background: color-mix(in srgb, 
 /* El contenido de indicadores y fichas no se sale de su tarjeta */
 .kpi, .ficha { min-width: 0; }
 .kpi .l, .kpi small, .ficha .l, .ficha small, .ficha .v { overflow-wrap: anywhere; }
+
+/* Fecha + hora: la fecha completa (dd/mm/aaaa) siempre se ve; el campo ocupa el ancho de dos columnas del formulario */
+.form label:has(.dt24) { grid-column: span 2; }
+@media (max-width: 520px) { .form label:has(.dt24) { grid-column: 1 / -1; } }
+.dt24 .dt24-d { flex: 1 1 150px; min-width: 140px; }
+.dt24 .dt24-h { flex: 0 0 84px; }
