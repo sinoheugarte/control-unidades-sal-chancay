@@ -480,13 +480,15 @@ function preacopio(op) {
   ]).map((x) => ({ ...x, etapa: nombreEtapa(x.etapa) }));
   const rtMin = roundTrip.reduce((s, x) => s + (Number(x.min) || 0), 0);
   const unidMin = Math.ceil((rtMin / 60) * vph);
-  const ini = toMs(p.inicio_acopio), iniE = toMs(p.inicio_embarque);
+  // Inicio de acopio: si no se fijó en Planificación, se toma la fecha y hora de inicio de la operación
+  const inicioAcopio = p.inicio_acopio || op.fecha_inicio || null;
+  const ini = toMs(inicioAcopio), iniE = toMs(p.inicio_embarque);
   return {
     tn_total: tn, tn_x_unidad: tnUnidad, viajes_x_hora: vph, jornadas_x_dia: jxd, tn_x_hora_embarque: tph,
     acopio: {
       viajes_total: viajesTotal, horas: hrsAcopio, dias: r3(hrsAcopio / 24),
       jornadas_total: Math.ceil(r3((hrsAcopio / 24) * jxd)),
-      inicio: p.inicio_acopio || null, termino: ini !== null ? fmtDT(ini + hrsAcopio * 3600000) : null,
+      inicio: inicioAcopio, desde_operacion: !p.inicio_acopio && !!op.fecha_inicio, termino: ini !== null ? fmtDT(ini + hrsAcopio * 3600000) : null,
     },
     embarque: {
       horas: hrsEmb, dias: r3(hrsEmb / 24), jornadas_total: Math.ceil(r3((hrsEmb / 24) * jxd)),

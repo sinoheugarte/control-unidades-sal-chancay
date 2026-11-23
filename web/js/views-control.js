@@ -677,7 +677,7 @@ export async function vPlanificacion(view, ctx) {
       <label>Jornadas por día<input name="jornadas_x_dia" type="number" min="1" value="${p.jornadas_x_dia}"></label>
       <label>TN por hora (embarque)<input name="tn_x_hora_embarque" type="number" value="${p.tn_x_hora_embarque}"></label>
       <label>Unidades (round trip de viajes)<input name="unidades_viajes" type="number" min="0" step="1" value="${p.unidades_viajes ?? ''}" placeholder="${d.unidades_en_lista} (en lista)"></label>
-      <label>Inicio acopio<input name="inicio_acopio" type="datetime-local" value="${toInputDT(p.acopio.inicio)}"></label>
+      <label>Inicio acopio<input name="inicio_acopio" type="datetime-local" value="${toInputDT(p.acopio.inicio)}">${p.acopio.desde_operacion ? '<small class="muted">Tomado de la fecha de inicio de la operación</small>' : ''}</label>
       <label>Inicio embarque<input name="inicio_embarque" type="datetime-local" value="${toInputDT(p.embarque.inicio)}"></label>
       <div class="full"><h3 style="margin:6px 0">Round trip (minutos por etapa)</h3></div>
       ${p.round_trip.map((x, i) => `<label>${esc(x.etapa)}<input name="rt_${i}" type="number" min="0" value="${x.min}"></label>`).join('')}
