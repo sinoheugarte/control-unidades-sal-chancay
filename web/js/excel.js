@@ -112,7 +112,7 @@ export function resolverTransportista(T, D, nombre, placa) {
 }
 export function asegurarParticipacion(D, tid) {
   if (!tid || D.op_transportistas.some((p) => p.transportista_id === tid)) return;
-  D.op_transportistas.push({ transportista_id: tid, unidades_solicitadas: 0, tn_prom_unidad: 33, tn_asignadas: null, vueltas_manual: {}, reporte_confirmado: 0, observacion: null });
+  D.op_transportistas.push({ transportista_id: tid, unidades_solicitadas: 0, tn_prom_unidad: null, tn_prom_manual: false, tn_asignadas: null, vueltas_manual: {}, reporte_confirmado: 0, observacion: null });
 }
 const nuevoId = (D) => { D.seq = (D.seq || 0) + 1; return D.seq; };
 const ahora = () => C.fmtDT(Date.now() - new Date().getTimezoneOffset() * 60000, true);
@@ -486,7 +486,7 @@ export function importarLibro(wb, T, usuario) {
       const t = upT(ruc, rs || nc, nc);
       // Las vueltas (P:AD) no se copian: la app las calcula hasta completar las TN programadas.
       const vueltas_manual = {};
-      D.op_transportistas.push({ transportista_id: t.id, unidades_solicitadas: toNum(cv(trs, `E${r}`)) || 0, tn_prom_unidad: toNum(cv(trs, `G${r}`)) || 33,
+      D.op_transportistas.push({ transportista_id: t.id, unidades_solicitadas: toNum(cv(trs, `E${r}`)) || 0, tn_prom_unidad: null, tn_prom_manual: false, // sigue la TN por unidad de la planificación
         tn_asignadas: null, vueltas_manual, reporte_confirmado: cv(trs, `N${r}`) ? 1 : 0, observacion: null });
       const hoja = sh(nc) || wb.worksheets.find((w) => normH(cv(w, 'K10')) === normH(nc));
       if (hoja) {

@@ -246,6 +246,7 @@ export async function vTransportistas(view, ctx) {
     state.opId ? api(`/operaciones/${state.opId}/tablero`) : Promise.resolve(null),
   ]);
   const res = tab?.transportistas || [];
+  tnPlanActual = tab?.preacopio?.tn_x_unidad || 36;
   const tot = (k) => res.reduce((s, x) => s + (Number(x[k]) || 0), 0);
   const part = res.filter((x) => x.viajes_realizados > 0 || x.unidades_solicitadas > 0);
   const conf = part.filter((x) => x.reporte_confirmado).length;
@@ -363,15 +364,19 @@ function transpModal(t, done) {
   });
 }
 
+let tnPlanActual = 36; // TN por unidad de la planificación de la operación abierta
+const tnUnidadPlan = () => tnPlanActual;
 function partModal(p, disponibles, done) {
-  const nuevo = !p; p = p || { unidades_solicitadas: 0, tn_prom_unidad: 33 };
+  const nuevo = !p; p = p || { unidades_solicitadas: 0 };
+  const tnPlan = tnUnidadPlan();
   const dlg = modal({
     title: nuevo ? 'Agregar transportista a la operación' : `Participación de ${p.nombre_comercial}`,
     wide: true,
     body: `<div class="form">
       ${nuevo ? `<label class="full">Transportista *<select name="tid" required>${disponibles.map((t) => `<option value="${t.id}">${esc(t.nombre_comercial)} — ${esc(t.razon_social)}</option>`).join('')}</select></label>` : ''}
       <label>Unidades solicitadas<input name="unidades_solicitadas" type="number" min="0" value="${p.unidades_solicitadas ?? 0}"></label>
-      <label>TN prom. por unidad<input name="tn_prom_unidad" type="number" step="0.1" min="1" value="${p.tn_prom_unidad ?? 33}"></label>
+      <label>TN prom. por unidad<input name="tn_prom_unidad" type="number" step="0.1" min="1" value="${p.tn_prom_manual ? p.tn_prom_unidad : ''}" placeholder="${tnPlan} (de la planificación)">
+        <small class="muted">En blanco: usa la TN por unidad de Planificación (${tnPlan}).</small></label>
       <label class="check"><input type="checkbox" name="reporte_confirmado" ${p.reporte_confirmado ? 'checked' : ''}> Reporte confirmado</label>
       ${p.reporte_confirmado && p.confirmado_en ? `<p class="full muted small" style="margin:-6px 0 0">Confirmado ${p.confirmado_origen === 'portal' ? 'por el transportista desde su portal' : 'manualmente'}${p.confirmado_por ? ` (${esc(p.confirmado_por)})` : ''} el ${fechaHora(p.confirmado_en)}${p.confirmado_obs ? ` · Obs.: ${esc(p.confirmado_obs)}` : ''}.</p>` : ''}
       <label class="check full"><input type="checkbox" name="predeterminado" checked> Usar estas unidades solicitadas y TN prom. como predeterminado al crear una operación nueva</label>

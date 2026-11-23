@@ -294,6 +294,7 @@ async function capturarPantallas(keys) {
 }
 
 let renderId = 0;
+let vistaCtl = null;
 let rutaAnterior = null;
 const espera = (ms) => new Promise((r) => setTimeout(r, ms));
 async function render() {
@@ -342,6 +343,11 @@ async function render() {
   }
   view.classList.remove('sale', 'entra', 'atras');
   const cargando = setTimeout(() => { if (id === renderId) view.innerHTML = '<div class="cargando"><i></i><span>Cargando…</span></div>'; }, cambia ? 0 : 250);
+  // Los "escuchadores" que cada pantalla pone sobre #view se descartan al volver a pintar
+  // (antes se acumulaban: tras entrar dos veces, un clic abría dos ventanas o eliminaba dos veces)
+  vistaCtl?.abort(); vistaCtl = new AbortController();
+  const senal = vistaCtl.signal;
+  view.addEventListener = (tipo, fn, op) => EventTarget.prototype.addEventListener.call(view, tipo, fn, typeof op === 'object' ? { ...op, signal: senal } : { capture: !!op, signal: senal });
   try {
     await RUTAS[r].v(view, { rerender: () => id === renderId && render() });
     destruirGraficos(); // libera los de la pantalla anterior (ya fuera del documento)

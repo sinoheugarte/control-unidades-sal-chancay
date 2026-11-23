@@ -138,6 +138,8 @@ async function datosOp(id) {
   if (!D?.operacion) throw err(404, 'Operación no encontrada');
   // La fila "Total" de la hoja LISTA del Excel se importaba como unidad (tracto numérico, sin conductor)
   if (D.unidades?.some(esFilaTotal)) D.unidades = D.unidades.filter((u) => !esFilaTotal(u));
+  // Antes la TN prom. por unidad se guardaba fija en 33 por defecto: sin marca de "escrita a mano" sigue a la planificación
+  (D.op_transportistas || []).forEach((p) => { if (p.tn_prom_manual === undefined) p.tn_prom_manual = false; });
   return D;
 }
 const esFilaTotal = (u) => /^\d+$/.test(String(u.tracto || '')) && !u.dni && !u.ap_paterno && !u.nombre1;
@@ -169,9 +171,13 @@ async function cargar(id) {
   const embarque = C.tablaEmbarque(op, D.reportes, D.etapas);
   return { D, I, op, viajes, embarque };
 }
+/** TN por unidad de la operación (Planificación → Parámetros de planificación). */
+const tnUnidadOp = (op) => { let p = {}; try { p = typeof op?.params === 'string' ? JSON.parse(op.params || '{}') : (op?.params || {}); } catch { /* */ } return Number(p.tn_x_unidad) || 36; };
+/** TN prom. por unidad del transportista: la escrita a mano o, si no, la TN por unidad de la planificación. */
+const tnPromDe = (p, op) => (p.tn_prom_manual && Number(p.tn_prom_unidad) > 0 ? Number(p.tn_prom_unidad) : tnUnidadOp(op));
 const participantes = (D, I) => D.op_transportistas.map((p) => {
   const t = I.transportistas.find((x) => x.id === p.transportista_id) || {};
-  return { ...p, operacion_id: D.operacion.id, ruc: t.ruc, razon_social: t.razon_social, nombre_comercial: t.nombre_comercial, contacto: t.contacto, telefono: t.telefono, emails: t.emails };
+  return { ...p, tn_prom_unidad: tnPromDe(p, D.operacion), tn_prom_manual: !!p.tn_prom_manual, operacion_id: D.operacion.id, ruc: t.ruc, razon_social: t.razon_social, nombre_comercial: t.nombre_comercial, contacto: t.contacto, telefono: t.telefono, emails: t.emails };
 }); // mismo orden que la hoja TRANSPORTISTAS del Excel (orden de registro)
 const unidadesDe = (D, I) => D.unidades.map((u) => ({ ...u, transportista_nombre: nombreT(I.transportistas, u.transportista_id) }))
   .sort((a, b) => String(a.transportista_nombre).localeCompare(String(b.transportista_nombre)) || String(a.ap_paterno).localeCompare(String(b.ap_paterno)));
@@ -325,7 +331,7 @@ ruta('POST', '/operaciones', async (p, b) => {
   const D = opVacia();
   for (const [tid, p] of Object.entries(I.participacion_predeterminada || {})) {
     if (!I.transportistas.some((t) => t.id === Number(tid)) || !(p.unidades_solicitadas > 0)) continue;
-    D.op_transportistas.push({ transportista_id: Number(tid), unidades_solicitadas: p.unidades_solicitadas, tn_prom_unidad: p.tn_prom_unidad || 33,
+    D.op_transportistas.push({ transportista_id: Number(tid), unidades_solicitadas: p.unidades_solicitadas, tn_prom_unidad: p.tn_prom_unidad || null, tn_prom_manual: p.tn_prom_unidad > 0,
       tn_asignadas: null, vueltas_manual: {}, reporte_confirmado: 0, observacion: null });
   }
   return crearOperacion(o, D);
@@ -538,8 +544,10 @@ ruta('PUT', '/operaciones/:id/transportistas/:tid', async ({ id, tid }, b) => {
     for (let i = 1; i <= C.N_VUELTAS; i++) { const v = N(b[`v${i}`]); if (v !== null) vueltas_manual[i] = v; }
     const p = D.op_transportistas.find((x) => x.transportista_id === Number(tid));
     const antes = !!p.reporte_confirmado;
+    // TN prom. en blanco = la TN por unidad de la planificación; un valor escrito queda fijo para esta empresa
+    const tnManual = N(b.tn_prom_unidad);
     Object.assign(p, {
-      unidades_solicitadas: N(b.unidades_solicitadas) || 0, tn_prom_unidad: N(b.tn_prom_unidad) || 33, tn_asignadas: null, vueltas_manual,
+      unidades_solicitadas: N(b.unidades_solicitadas) || 0, tn_prom_unidad: tnManual > 0 ? tnManual : null, tn_prom_manual: tnManual > 0, tn_asignadas: null, vueltas_manual,
       reporte_confirmado: b.reporte_confirmado ? 1 : 0, observacion: S(b.observacion),
     });
     if (p.reporte_confirmado && !antes) Object.assign(p, { confirmado_en: ahora(), confirmado_por: yo.nombre || yo.email, confirmado_origen: 'manual' });
@@ -550,7 +558,7 @@ ruta('PUT', '/operaciones/:id/transportistas/:tid', async ({ id, tid }, b) => {
     await mutar(INDICE, (I) => {
       I.participacion_predeterminada = I.participacion_predeterminada || {};
       const u = N(b.unidades_solicitadas) || 0;
-      if (u > 0) I.participacion_predeterminada[Number(tid)] = { unidades_solicitadas: u, tn_prom_unidad: N(b.tn_prom_unidad) || 33 };
+      if (u > 0) I.participacion_predeterminada[Number(tid)] = { unidades_solicitadas: u, tn_prom_unidad: N(b.tn_prom_unidad) > 0 ? N(b.tn_prom_unidad) : null };
       else delete I.participacion_predeterminada[Number(tid)];
     });
   }
