@@ -346,6 +346,8 @@ function resumenTransportistas(vs, participantes, unidades, tnProgramadas = 0) {
       viajes_pendientes: mios.filter((v) => v.status === STATUS.PENDIENTE).length,
       tn_despacho: r3(mios.reduce((s, v) => s + (v.peso_origen || 0), 0)),
       tn_final: r3(mios.reduce((s, v) => s + (v.redondeo || 0), 0)),
+      // TN realmente descargadas en puerto (sin las unidades en tránsito ni las devueltas)
+      tn_acopio: r3(mios.filter((v) => v.status === STATUS.DESCARGADO).reduce((s, v) => s + (v.peso_destino || 0), 0)),
       vueltas_max: vueltasMax,
       avance: tnAprox ? Math.min(1, mios.reduce((s, v) => s + (v.redondeo || 0), 0) / tnAprox) : null,
       observacion_calc: mios.length === 0 ? 'NO PARTICIPO'

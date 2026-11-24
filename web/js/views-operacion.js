@@ -92,12 +92,14 @@ export async function vTablero(view) {
     },
     options: { plugins: { legend: { position: 'bottom' } }, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } } },
   });
-  const tr = d.transportistas.filter((x) => x.tn_final > 0).sort((a, b) => b.tn_final - a.tn_final);
+  const tr = d.transportistas.filter((x) => x.tn_acopio > 0).sort((a, b) => b.tn_acopio - a.tn_acopio);
+  const totTr = tr.reduce((a, x) => a + (x.tn_acopio || 0), 0);
   chart($('#ch-transp'), {
     type: 'bar',
-    data: { labels: tr.map((x) => x.nombre_comercial), datasets: [{ label: 'TN', data: tr.map((x) => x.tn_final), backgroundColor: c.serie[0], borderRadius: 4 }] },
+    // TN descargadas en puerto por transportista; el % es sobre el total descargado (suma 100 %)
+    data: { labels: tr.map((x) => x.nombre_comercial), datasets: [{ label: 'TN', data: tr.map((x) => x.tn_acopio), backgroundColor: c.serie[0], borderRadius: 4 }] },
     options: {
-      indexAxis: 'y', plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => `${num(ctx.raw)} TN · ${pct(ctx.raw / (t.tn_acopio || 1))}` } } },
+      indexAxis: 'y', plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => `${num(ctx.raw)} TN · ${pct(ctx.raw / (totTr || 1))}` } } },
     },
   });
   chart($('#ch-tiempos'), {
