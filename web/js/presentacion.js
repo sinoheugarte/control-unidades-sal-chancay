@@ -37,7 +37,7 @@ function graficoPNG(config, w = 1600, h = 760) {
 }
 
 /** Arma el contenido de las diapositivas a partir de GET /operaciones/:id/tablero. */
-export function construirDiapositivas(d) {
+export function construirDiapositivas(d, fotos = []) {
   const op = d.operacion, t = d.totales, e = d.embarque;
   const rd = d.reportes_despacho.filter((r) => r.tn_total !== null), ra = d.reportes_acopio.filter((r) => r.tn_total !== null);
   const n = Math.max(rd.length, ra.length);
@@ -92,6 +92,12 @@ export function construirDiapositivas(d) {
         ...e.reportes.map((r) => [`${r.numero}° reporte`, fechaHora(r.inicio), fechaHora(r.fin), n2(r.tn_parcial), n2(r.tn_x_hora)])],
       total: ['TN embarcadas', '', '', n2(e.tn_embarcadas), ''] });
   }
+  // Registro fotográfico: 1 foto por diapositiva (hasta 6) o 2 por diapositiva si son más
+  if (fotos.length) {
+    const porDiapo = fotos.length > 6 ? 2 : 1, grupos = [];
+    for (let k = 0; k < fotos.length; k += porDiapo) grupos.push(fotos.slice(k, k + porDiapo));
+    grupos.forEach((g, k) => S.push({ tipo: 'fotos', titulo: 'Registro fotográfico', sub: grupos.length > 1 ? `${k + 1} de ${grupos.length}` : '', fotos: g }));
+  }
   S.push({ tipo: 'cierre', titulo: 'Operación finalizada', lineas: [`${op.nave} · ORDEN ${op.orden}`, `${n2(t.tn_acopio)} TN acopiadas en ${n0(t.viajes)} viajes`, op.coordinador ? `Coordinador de transporte: ${op.coordinador}` : '', (op.empresa || '').trim()].filter(Boolean) });
   return S;
 }
@@ -135,6 +141,18 @@ function pintarDiapositiva(ctx, s, i, total, op, logo, imgs) {
       texto(ctx, l.toUpperCase(), x + 45, y + 75, { size: 28, color: GRIS, bold: true, max: cw - 70 });
       texto(ctx, v, x + 45, y + 175, { size: 72, bold: true, color: '#17212f', max: cw - 70 });
     });
+  } else if (s.tipo === 'fotos') {
+    // fotos ajustadas a su recuadro (sin recortar), con marco redondeado y su descripción debajo
+    const n = s.fotos.length, gap = 50, y0 = 250, alto = H - y0 - 150, ancho = (W - 160 - gap * (n - 1)) / n;
+    s.fotos.forEach((f, k) => {
+      const im = imgs[f.src]; if (!im) return;
+      const bx = 80 + k * (ancho + gap), hDesc = f.desc ? 60 : 0;
+      const esc = Math.min(ancho / im.width, (alto - hDesc) / im.height), w = im.width * esc, h = im.height * esc;
+      const x = bx + (ancho - w) / 2, y = y0 + (alto - hDesc - h) / 2;
+      ctx.save(); ctx.shadowColor = 'rgba(15,27,45,.28)'; ctx.shadowBlur = 30; ctx.shadowOffsetY = 12; caja(ctx, x - 8, y - 8, w + 16, h + 16, '#fff', 20); ctx.restore();
+      ctx.save(); ctx.beginPath(); ctx.roundRect(x, y, w, h, 14); ctx.clip(); ctx.drawImage(im, x, y, w, h); ctx.restore();
+      if (f.desc) texto(ctx, f.desc, bx + ancho / 2, y + h + 56, { size: 32, color: '#17212f', bold: true, align: 'center', max: ancho });
+    });
   } else if (s.tipo === 'grafico' && imgs[s.img]) {
     const im = imgs[s.img]; const maxW = W - 160, maxH = H - 340; const k = Math.min(maxW / im.width, maxH / im.height);
     ctx.drawImage(im, (W - im.width * k) / 2, 260, im.width * k, im.height * k);
@@ -172,7 +190,10 @@ function pintarDiapositiva(ctx, s, i, total, op, logo, imgs) {
 
 async function prepararImagenes(slides) {
   const imgs = {};
-  for (const s of slides) if (s.img && !imgs[s.img]) imgs[s.img] = await imagen(s.img);
+  for (const s of slides) {
+    if (s.img && !imgs[s.img]) imgs[s.img] = await imagen(s.img);
+    for (const f of s.fotos || []) if (!imgs[f.src]) imgs[f.src] = await imagen(f.src);
+  }
   const lg = await logoBase64();
   return { imgs, logo: lg ? await imagen(lg) : null };
 }
@@ -292,6 +313,15 @@ export async function pptxPresentacion(slides, op) {
         sl.addShape(P.ShapeType.rect, { x, y: y + 0.15, w: 0.07, h: 1.25, fill: { color: hex(k < 3 ? AZUL2 : NARANJA) } });
         sl.addText(l.toUpperCase(), { x: x + 0.25, y: y + 0.15, w: 3.4, h: 0.45, fontSize: 12, bold: true, color: hex(GRIS) });
         sl.addText(v, { x: x + 0.25, y: y + 0.6, w: 3.4, h: 0.8, fontSize: 30, bold: true, color: '17212F' });
+      });
+    } else if (s.tipo === 'fotos') {
+      const n = s.fotos.length, gap = 0.4, y0 = 1.6, alto = 5.2, ancho = (12.33 - gap * (n - 1)) / n;
+      s.fotos.forEach((f, k) => {
+        const bx = 0.5 + k * (ancho + gap), hDesc = f.desc ? 0.45 : 0;
+        const esc = Math.min(ancho / f.w, (alto - hDesc) / f.h), w = f.w * esc, h = f.h * esc;
+        const x = bx + (ancho - w) / 2, y = y0 + (alto - hDesc - h) / 2;
+        sl.addImage({ data: f.src, x, y, w, h, rounding: false });
+        if (f.desc) sl.addText(f.desc, { x: bx, y: y + h + 0.05, w: ancho, h: 0.4, fontSize: 14, bold: true, color: '17212F', align: 'center' });
       });
     } else if (s.tipo === 'grafico') {
       sl.addImage({ data: s.img, x: 0.9, y: 1.6, w: 11.5, h: 11.5 * (760 / 1600) });

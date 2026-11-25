@@ -13,7 +13,7 @@ export async function abrirFinalizar(op, despues) {
   const extra = predeterminados.filter((e) => !usuarios.some((u) => u.email === e));
   const video = formatoVideo();
   const yaFinal = op.estado === 'FINALIZADA';
-  modal({
+  const dlg = modal({
     title: yaFinal ? `Regenerar y reenviar · ${op.nave} · Orden ${op.orden}` : `Finalizar operación · ${op.nave} · Orden ${op.orden}`,
     wide: true,
     submitText: yaFinal ? 'Generar y enviar' : 'Finalizar y enviar',
@@ -30,6 +30,13 @@ export async function abrirFinalizar(op, despues) {
         <label class="full">Mensaje (opcional)<textarea name="mensaje" rows="3" placeholder="Se informa que la operación ha sido finalizada…"></textarea></label>
         <label class="check full"><input type="checkbox" name="guardar" checked> Guardar estos destinatarios como predeterminados</label>
       </div>
+      <h3 style="margin:14px 0 6px">Fotos de la operación <span class="muted small" style="font-weight:500">(opcional)</span></h3>
+      <p class="muted small" style="margin:0 0 8px">Se agregan como diapositivas de <strong>Registro fotográfico</strong> en el PowerPoint, la presentación HTML y el video.</p>
+      <div class="fotos-sel">
+        <label class="btn sm"><input type="file" id="fin-fotos" accept="image/*" multiple hidden>📷 Agregar fotos</label>
+        <span class="muted small" id="fin-fotos-n">Ninguna foto</span>
+      </div>
+      <div class="fotos-lista" id="fin-fotos-lista"></div>
       <h3 style="margin:14px 0 6px">Archivos de la presentación</h3>
       <div class="btns">
         <label class="check"><input type="checkbox" name="pptx" checked> PowerPoint (.pptx)</label>
@@ -42,9 +49,47 @@ export async function abrirFinalizar(op, despues) {
       // Pedir el permiso de correo primero (requiere el clic del usuario para la ventana de Microsoft)
       let avisoCorreo = null;
       if (para.length) { try { await G.asegurarPermisoCorreo(); } catch (e) { avisoCorreo = e.message; } }
-      await ejecutar(op, { para, mensaje: d.mensaje, guardar: d.guardar, pptx: d.pptx, html: d.html, video: d.video && !!video, avisoCorreo }, despues);
+      const lista = fotos.map((f) => ({ ...f, desc: String(d[`foto:${f.id}`] || '').trim() }));
+      await ejecutar(op, { para, mensaje: d.mensaje, guardar: d.guardar, pptx: d.pptx, html: d.html, video: d.video && !!video, avisoCorreo, fotos: lista }, despues);
     },
   });
+  // Fotos: se reducen a 1600 px (JPEG) para que la presentación y el video no pesen de más
+  const fotos = [];
+  const pintar = () => {
+    dlg.querySelector('#fin-fotos-n').textContent = fotos.length ? `${fotos.length} foto${fotos.length > 1 ? 's' : ''}` : 'Ninguna foto';
+    dlg.querySelector('#fin-fotos-lista').innerHTML = fotos.map((f) => `<div class="foto-it"><img src="${f.src}" alt="">
+      <input name="foto:${f.id}" placeholder="Descripción (opcional)" maxlength="80" value="${esc(f.desc || '')}">
+      <button type="button" class="btn sm" data-quitar="${f.id}" title="Quitar">✕</button></div>`).join('');
+  };
+  dlg.querySelector('#fin-fotos').addEventListener('change', async (e) => {
+    const archivos = [...e.target.files].filter((x) => x.type.startsWith('image/'));
+    e.target.value = '';
+    // conserva las descripciones ya escritas antes de volver a pintar la lista
+    fotos.forEach((f) => { const i = dlg.querySelector(`[name="foto:${f.id}"]`); if (i) f.desc = i.value; });
+    for (const a of archivos) {
+      if (fotos.length >= 24) { toast('Máximo 24 fotos', true); break; }
+      try { fotos.push({ id: `${Date.now()}${Math.random().toString(36).slice(2, 6)}`, ...(await reducirFoto(a)) }); } catch { toast(`No se pudo leer ${a.name}`, true); }
+    }
+    pintar();
+  });
+  dlg.querySelector('#fin-fotos-lista').addEventListener('click', (e) => {
+    const id = e.target.closest('[data-quitar]')?.dataset.quitar; if (!id) return;
+    fotos.forEach((f) => { const i = dlg.querySelector(`[name="foto:${f.id}"]`); if (i) f.desc = i.value; });
+    fotos.splice(fotos.findIndex((f) => f.id === id), 1); pintar();
+  });
+}
+
+/** Lee una foto, corrige su tamaño (máx. 1600 px) y la devuelve como JPEG en base64 con sus dimensiones. */
+async function reducirFoto(archivo) {
+  const url = URL.createObjectURL(archivo);
+  try {
+    const im = await new Promise((ok, mal) => { const i = new Image(); i.onload = () => ok(i); i.onerror = mal; i.src = url; });
+    const k = Math.min(1, 1600 / Math.max(im.naturalWidth, im.naturalHeight));
+    const w = Math.round(im.naturalWidth * k), h = Math.round(im.naturalHeight * k);
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h); ctx.drawImage(im, 0, 0, w, h);
+    return { src: c.toDataURL('image/jpeg', 0.85), w, h };
+  } finally { URL.revokeObjectURL(url); }
 }
 
 async function ejecutar(op, o, despues) {
@@ -61,7 +106,7 @@ async function ejecutar(op, o, despues) {
   try {
     paso('Preparando datos y gráficos');
     const d = await api(`/operaciones/${op.id}/tablero`);
-    const slides = construirDiapositivas(d);
+    const slides = construirDiapositivas(d, o.fotos || []);
     const base = `${d.operacion.nave} - ORDEN ${d.operacion.orden} - PRESENTACION`.replace(/[\\/:*?"<>|#%]/g, ' ');
     const archivos = [];
     avance(0.1);
