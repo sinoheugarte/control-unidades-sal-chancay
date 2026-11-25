@@ -644,3 +644,5 @@ table.cortes tbody tr:hover td.rep:not(.vacio) { background: color-mix(in srgb, 
 .dona-ley i { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--muted) 45%, transparent); }
 @media (max-width: 520px) { .dona-ley { grid-template-columns: 1fr; } }
 @media print { .dona-box { height: auto !important; } .dona-centro { position: absolute; } }
+.dona-ley em { grid-column: 2 / span 2; font-style: normal; color: var(--muted); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.dona-ley i { grid-row: span 3; }

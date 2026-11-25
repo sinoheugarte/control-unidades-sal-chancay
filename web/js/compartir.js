@@ -75,14 +75,54 @@ function graficosEnDosTemas(canvases) {
   return res;
 }
 
+/** Zonas interactivas de un gráfico (barras, puntos y sectores) con el texto del recuadro de datos,
+    para mostrarlo al tocar o pasar el mouse sobre la imagen del gráfico en el archivo compartido. */
+function zonasDe(cv) {
+  const ch = window.Chart?.getChart?.(cv);
+  if (!ch) return null;
+  const W = ch.width || cv.clientWidth, H = ch.height || cv.clientHeight;
+  if (!W || !H) return null;
+  const cb = ch.options?.plugins?.tooltip?.callbacks || {};
+  const zonas = [];
+  ch.data.datasets.forEach((ds, di) => {
+    const meta = ch.getDatasetMeta(di);
+    if (meta.hidden || ds.hidden) return;
+    (meta.data || []).forEach((el, i) => {
+      const raw = ds.data?.[i];
+      if (raw == null || (typeof raw === 'number' && !Number.isFinite(raw))) return;
+      const ctx = { chart: ch, raw, parsed: meta._parsed?.[i] ?? raw, dataset: ds, datasetIndex: di, dataIndex: i, label: ch.data.labels?.[i] ?? '',
+        formattedValue: typeof raw === 'number' ? raw.toLocaleString('en-US', { maximumFractionDigits: 3 }) : String(raw?.y ?? raw) };
+      let titulo = String(ctx.label ?? ''), linea;
+      try { const t = cb.title?.([ctx]); if (t != null && String(t) !== '') titulo = Array.isArray(t) ? t.join(' ') : String(t); } catch { /* */ }
+      try { linea = cb.label?.(ctx); } catch { linea = null; }
+      if (linea == null || linea === '') linea = `${ds.label ? `${ds.label}: ` : ''}${ctx.formattedValue}`;
+      const color = Array.isArray(ds.backgroundColor) ? ds.backgroundColor[i] : (ds.borderColor && ds.type !== 'bar' && ch.config.type === 'line' ? ds.borderColor : ds.backgroundColor);
+      const p = el.getProps ? el.getProps(['x', 'y', 'base', 'width', 'height', 'horizontal', 'startAngle', 'endAngle', 'innerRadius', 'outerRadius'], true) : el;
+      const z = { t: titulo, l: Array.isArray(linea) ? linea.join(' · ') : String(linea), c: typeof color === 'string' ? color : '#60a5fa' };
+      if (p.outerRadius != null && p.startAngle != null) Object.assign(z, { k: 'a', x: p.x / W, y: p.y / H, r0: p.innerRadius / W, r1: p.outerRadius / W, a0: p.startAngle, a1: p.endAngle, ar: W / H });
+      else if (p.base != null && p.width != null) {
+        const horiz = ch.options.indexAxis === 'y';
+        const x0 = horiz ? Math.min(p.base, p.x) : p.x - p.width / 2, x1 = horiz ? Math.max(p.base, p.x) : p.x + p.width / 2;
+        const y0 = horiz ? p.y - (p.height || 0) / 2 : Math.min(p.base, p.y), y1 = horiz ? p.y + (p.height || 0) / 2 : Math.max(p.base, p.y);
+        Object.assign(z, { k: 'r', x0: x0 / W, x1: x1 / W, y0: y0 / H, y1: Math.max(y1, y0 + 3) / H });
+      } else if (p.x != null && p.y != null) Object.assign(z, { k: 'p', x: p.x / W, y: p.y / H });
+      else return;
+      zonas.push(z);
+    });
+  });
+  return zonas.length ? zonas : null;
+}
+
 export function fragmentoDe(el) {
   const copia = el.cloneNode(true);
   // Gráficos → imágenes (una por tema: el archivo compartido permite cambiar entre claro y oscuro)
   const orig = [...el.querySelectorAll('canvas')];
   const imgs = graficosEnDosTemas(orig);
+  const zonas = orig.map(zonasDe);
   [...copia.querySelectorAll('canvas')].forEach((c, i) => {
     const par = document.createElement('span');
     par.className = 'g-par';
+    if (zonas[i]) par.setAttribute('data-zonas', JSON.stringify(zonas[i]));
     for (const tema of ['dark', 'light']) {
       const img = document.createElement('img');
       img.className = tema === 'dark' ? 'g-osc' : 'g-cla';
@@ -141,6 +181,25 @@ document.querySelectorAll('.table-wrap > table').forEach(function(t){
   filas.forEach(function(r){tb.appendChild(r)})})});
  aplicar();
 });
+// Gráficos: recuadro con los datos al tocar o pasar el mouse (como en la app)
+var tip=document.createElement('div');tip.className='g-tip';tip.hidden=true;document.body.appendChild(tip);
+function zona(par,ev){var z;try{z=JSON.parse(par.getAttribute('data-zonas'))}catch(e){return null}var r=par.getBoundingClientRect();
+ var img=[].filter.call(par.querySelectorAll('img'),function(x){return x.offsetParent!==null})[0]||par;var b=img.getBoundingClientRect();
+ // la imagen se muestra con object-fit:contain: se calcula el área real del dibujo
+ var nw=img.naturalWidth||b.width,nh=img.naturalHeight||b.height,s=Math.min(b.width/nw,b.height/nh),w=nw*s,h=nh*s,ox=b.left+(b.width-w)/2,oy=b.top+(b.height-h)/2;
+ var px=(ev.clientX-ox)/w,py=(ev.clientY-oy)/h,mejor=null,dmin=1e9;
+ z.forEach(function(q){if(q.k==='r'){if(px>=q.x0-0.004&&px<=q.x1+0.004&&py>=q.y0-0.01&&py<=q.y1+0.01){var d=Math.abs(px-(q.x0+q.x1)/2);if(d<dmin){dmin=d;mejor=q}}}
+  else if(q.k==='p'){var d2=Math.hypot((px-q.x)*w,(py-q.y)*h);if(d2<18&&d2<dmin){dmin=d2;mejor=q}}
+  else if(q.k==='a'){var dx=(px-q.x)*w,dy=(py-q.y)*h,rr=Math.hypot(dx,dy)/w,an=Math.atan2(dy,dx);
+   if(rr>=q.r0&&rr<=q.r1){var a0=q.a0,a1=q.a1;while(an<a0)an+=2*Math.PI;while(an>a0+2*Math.PI)an-=2*Math.PI;if(an<=a1){mejor=q;dmin=0}}}});
+ return mejor}
+function mostrar(par,ev){var q=zona(par,ev);if(!q){tip.hidden=true;return}
+ tip.innerHTML='<b></b><span><i></i></span>';tip.querySelector('b').textContent=q.t;var sp=tip.querySelector('span');sp.appendChild(document.createTextNode(q.l));tip.querySelector('i').style.background=q.c;
+ tip.hidden=false;var x=ev.clientX+14,y=ev.clientY+14,tw=tip.offsetWidth,th=tip.offsetHeight;if(x+tw>innerWidth-8)x=ev.clientX-tw-14;if(y+th>innerHeight-8)y=ev.clientY-th-14;tip.style.left=Math.max(8,x)+'px';tip.style.top=Math.max(8,y)+'px'}
+document.querySelectorAll('.g-par[data-zonas]').forEach(function(par){par.style.cursor='pointer';
+ par.addEventListener('mousemove',function(e){mostrar(par,e)});par.addEventListener('mouseleave',function(){tip.hidden=true});
+ par.addEventListener('click',function(e){mostrar(par,e);e.stopPropagation()})});
+document.addEventListener('click',function(){tip.hidden=true});window.addEventListener('scroll',function(){tip.hidden=true},true);
 // Dentro del visor de la app: toma el tema de la app y quita el botón propio
 window.addEventListener('message',function(e){var d=e.data||{};if(d.tema)document.documentElement.setAttribute('data-theme',d.tema);if(d.enApp){var b=document.querySelector('.rep-tema');if(b)b.remove()}});
 })();`;
@@ -166,6 +225,9 @@ html,body{overflow-x:auto}body{padding:0;min-width:0}.rep{max-width:none;margin:
 .filtro-act{display:inline-flex;gap:4px;padding:3px 9px;border-radius:99px;background:var(--primary-soft);color:var(--primary);font-size:12px;font-weight:650;margin-right:6px}
 .chart-box img{display:block}.th-txt{font-weight:800;letter-spacing:.02em}.g-par{display:block;width:100%;height:100%}
 :root[data-theme=dark] .g-cla,:root:not([data-theme=dark]) .g-osc{display:none!important}
+.g-tip{position:fixed;z-index:50;pointer-events:none;display:grid;gap:4px;padding:9px 11px;border-radius:10px;background:rgba(2,6,16,.92);color:#fff;font-size:12.5px;box-shadow:0 10px 30px -8px rgba(0,0,0,.6);max-width:280px}
+.g-tip b{font-size:13px}.g-tip span{display:flex;align-items:center;gap:7px}.g-tip i{width:11px;height:11px;border-radius:3px;flex:none;border:1px solid rgba(255,255,255,.6)}
+@media print{.g-tip{display:none!important}}
 .rf-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 8px}
 .rf-bar input{flex:1 1 200px;min-width:0;padding:7px 11px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text);font:inherit;font-size:13px}
 .rf-bar button{font:inherit;font-size:12.5px;font-weight:650;padding:7px 12px;border-radius:10px;border:1px solid var(--border);background:var(--surface-2);color:var(--text);cursor:pointer}
