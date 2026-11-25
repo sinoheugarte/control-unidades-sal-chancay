@@ -30,13 +30,7 @@ export async function abrirFinalizar(op, despues) {
         <label class="full">Mensaje (opcional)<textarea name="mensaje" rows="3" placeholder="Se informa que la operación ha sido finalizada…"></textarea></label>
         <label class="check full"><input type="checkbox" name="guardar" checked> Guardar estos destinatarios como predeterminados</label>
       </div>
-      <h3 style="margin:14px 0 6px">Fotos de la operación <span class="muted small" style="font-weight:500">(opcional)</span></h3>
-      <p class="muted small" style="margin:0 0 8px">Se agregan como diapositivas de <strong>Registro fotográfico</strong> en el PowerPoint, la presentación HTML y el video.</p>
-      <div class="fotos-sel">
-        <label class="btn sm"><input type="file" id="fin-fotos" accept="image/*" multiple hidden>📷 Agregar fotos</label>
-        <span class="muted small" id="fin-fotos-n">Ninguna foto</span>
-      </div>
-      <div class="fotos-lista" id="fin-fotos-lista"></div>
+      ${htmlFotos('Se agregan como diapositivas de <strong>Registro fotográfico</strong> en el PowerPoint, la presentación HTML y el video.')}
       <h3 style="margin:14px 0 6px">Archivos de la presentación</h3>
       <div class="btns">
         <label class="check"><input type="checkbox" name="pptx" checked> PowerPoint (.pptx)</label>
@@ -53,7 +47,11 @@ export async function abrirFinalizar(op, despues) {
       await ejecutar(op, { para, mensaje: d.mensaje, guardar: d.guardar, pptx: d.pptx, html: d.html, video: d.video && !!video, avisoCorreo, fotos: lista }, despues);
     },
   });
-  // Fotos: se reducen a 1600 px (JPEG) para que la presentación y el video no pesen de más
+  const fotos = montarFotos(dlg);
+}
+
+/** Selector de fotos dentro de un diálogo (botón #fin-fotos, lista #fin-fotos-lista). Devuelve el arreglo vivo de fotos. */
+export function montarFotos(dlg) {
   const fotos = [];
   const pintar = () => {
     dlg.querySelector('#fin-fotos-n').textContent = fotos.length ? `${fotos.length} foto${fotos.length > 1 ? 's' : ''}` : 'Ninguna foto';
@@ -61,11 +59,11 @@ export async function abrirFinalizar(op, despues) {
       <input name="foto:${f.id}" placeholder="Descripción (opcional)" maxlength="80" value="${esc(f.desc || '')}">
       <button type="button" class="btn sm" data-quitar="${f.id}" title="Quitar">✕</button></div>`).join('');
   };
+  const guardarDesc = () => fotos.forEach((f) => { const i = dlg.querySelector(`[name="foto:${f.id}"]`); if (i) f.desc = i.value; });
   dlg.querySelector('#fin-fotos').addEventListener('change', async (e) => {
     const archivos = [...e.target.files].filter((x) => x.type.startsWith('image/'));
     e.target.value = '';
-    // conserva las descripciones ya escritas antes de volver a pintar la lista
-    fotos.forEach((f) => { const i = dlg.querySelector(`[name="foto:${f.id}"]`); if (i) f.desc = i.value; });
+    guardarDesc();
     for (const a of archivos) {
       if (fotos.length >= 24) { toast('Máximo 24 fotos', true); break; }
       try { fotos.push({ id: `${Date.now()}${Math.random().toString(36).slice(2, 6)}`, ...(await reducirFoto(a)) }); } catch { toast(`No se pudo leer ${a.name}`, true); }
@@ -74,10 +72,16 @@ export async function abrirFinalizar(op, despues) {
   });
   dlg.querySelector('#fin-fotos-lista').addEventListener('click', (e) => {
     const id = e.target.closest('[data-quitar]')?.dataset.quitar; if (!id) return;
-    fotos.forEach((f) => { const i = dlg.querySelector(`[name="foto:${f.id}"]`); if (i) f.desc = i.value; });
-    fotos.splice(fotos.findIndex((f) => f.id === id), 1); pintar();
+    guardarDesc(); fotos.splice(fotos.findIndex((f) => f.id === id), 1); pintar();
   });
+  return fotos;
 }
+/** Bloque HTML del selector de fotos. */
+export const htmlFotos = (detalle) => `<h3 style="margin:14px 0 6px">Fotos de la operación <span class="muted small" style="font-weight:500">(opcional)</span></h3>
+      <p class="muted small" style="margin:0 0 8px">${detalle}</p>
+      <div class="fotos-sel"><label class="btn sm"><input type="file" id="fin-fotos" accept="image/*" multiple hidden>📷 Agregar fotos</label>
+        <span class="muted small" id="fin-fotos-n">Ninguna foto</span></div>
+      <div class="fotos-lista" id="fin-fotos-lista"></div>`;
 
 /** Lee una foto, corrige su tamaño (máx. 1600 px) y la devuelve como JPEG en base64 con sus dimensiones. */
 async function reducirFoto(archivo) {

@@ -110,6 +110,13 @@ export function diapositivas(A) {
   if (A.tt.total) S.push({ id: 'puerto', titulo: 'Atención en puerto', eyebrow: 'TIEMPOS', notas: A.hallazgos[6] || '' });
   S.push({ id: 'balance', titulo: 'Balance y control de pesos', eyebrow: 'TRAZABILIDAD', notas: A.hallazgos[7] || '' });
   S.push({ id: 'hallazgos', titulo: 'Hallazgos y recomendaciones', eyebrow: 'ANÁLISIS', notas: [...A.hallazgos, ...A.recomendaciones].join(' ') });
+  // Registro fotográfico (fotos cargadas al generar el informe): 1 por diapositiva hasta 6, si no 2
+  const F = A.fotos || [];
+  if (F.length) {
+    const por = F.length > 6 ? 2 : 1, n = Math.ceil(F.length / por);
+    for (let k = 0; k < n; k++) S.push({ id: 'fotos', titulo: 'Registro fotográfico', eyebrow: n > 1 ? `EN CAMPO · ${k + 1} DE ${n}` : 'EN CAMPO',
+      fotos: F.slice(k * por, k * por + por), notas: F.slice(k * por, k * por + por).map((f) => f.desc).filter(Boolean).join('. ') });
+  }
   S.push({ id: 'cierre', notas: 'Gracias.' });
   void t;
   return S;
@@ -197,7 +204,23 @@ function pintar(ctx, s, i, total, A, G, logo, p) {
   }
   encabezado(ctx, s, i, total, op, logo, p);
   const X = 110, Y = 320, AW = W - 220;
-  if (s.id === 'cifras') {
+  if (s.id === 'fotos') {
+    // Cada foto entra con un leve acercamiento y se ajusta completa (sin recortes) en su marco
+    const n = s.fotos.length, gap = 60, alto = H - Y - 150, ancho = (AW - gap * (n - 1)) / n;
+    s.fotos.forEach((f, k) => {
+      const im = f.im; if (!im) return;
+      const a = fase(p, 0.1 + k * 0.12, 0.55 + k * 0.12), hDesc = f.desc ? 70 : 0;
+      const esc = Math.min(ancho / im.width, (alto - hDesc) / im.height), w = im.width * esc, h = im.height * esc;
+      const bx = X + k * (ancho + gap), x = bx + (ancho - w) / 2, y = Y + (alto - hDesc - h) / 2 + (1 - a) * 40;
+      ctx.save(); ctx.globalAlpha = a;
+      ctx.shadowColor = 'rgba(0,0,0,.55)'; ctx.shadowBlur = 50; ctx.shadowOffsetY = 20; rr(ctx, x - 10, y - 10, w + 20, h + 20, 26); ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fill();
+      ctx.shadowColor = 'transparent'; rr(ctx, x, y, w, h, 18); ctx.clip();
+      const z = 1.06 - 0.06 * p; // acercamiento suave (efecto Ken Burns)
+      ctx.drawImage(im, x - (w * (z - 1)) / 2, y - (h * (z - 1)) / 2, w * z, h * z);
+      ctx.restore();
+      if (f.desc) txt(ctx, f.desc, bx + ancho / 2, y + h + 62, { size: 34, peso: 700, align: 'center', max: ancho, alpha: fase(p, 0.35 + k * 0.12, 0.7 + k * 0.12) });
+    });
+  } else if (s.id === 'cifras') {
     const it = [['TN programadas', t.tn_programadas, n3, 'meta de la operación', C.azul], ['TN despachadas', t.tn_despacho, n3, 'planta Huacho', C.cian],
       ['TN acopiadas', t.tn_acopio, n3, `${n1((A.cumpl || 0) * 100)} % de la meta`, C.verde], ['TN embarcadas', t.tn_embarque || 0, n3, 'a la nave', C.violeta],
       ['Viajes', t.viajes, n0, `${n0(t.unidades_activas)} unidades`, C.naranja], ['Días de operación', A.dias || 0, n0, `${fecha(A.ini)} – ${fecha(A.fin)}`, C.rosa]];
@@ -283,9 +306,11 @@ function pintar(ctx, s, i, total, A, G, logo, p) {
   }
 }
 
-async function preparar(d) {
+const cargarImg = (src) => new Promise((r) => { const i = new Image(); i.onload = () => r(i); i.onerror = () => r(null); i.src = src; });
+async function preparar(d, fotos = []) {
   try { await document.fonts?.load(`800 40px Inter`); await document.fonts?.ready; } catch { /* */ }
   const A = analizar(d);
+  A.fotos = (await Promise.all(fotos.map(async (f) => ({ ...f, im: await cargarImg(f.src) })))).filter((f) => f.im);
   const S = diapositivas(A);
   const G = graficos(A);
   const lg = await logoBase64();
@@ -300,8 +325,8 @@ async function imagenes(P) {
 }
 
 /* ===================== PDF ===================== */
-export async function pdfInforme(d) {
-  const P = await preparar(d); const ims = await imagenes(P);
+export async function pdfInforme(d, fotos = []) {
+  const P = await preparar(d, fotos); const ims = await imagenes(P);
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: [338.67, 190.5] });
   ims.forEach((im, i) => { if (i) doc.addPage([338.67, 190.5], 'landscape'); doc.addImage(im, 'JPEG', 0, 0, 338.67, 190.5); });
@@ -315,8 +340,8 @@ function cargarScript(src) {
   if (!cargados.has(src)) cargados.set(src, new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error(`No se pudo cargar ${src}`)); document.head.appendChild(s); }));
   return cargados.get(src);
 }
-export async function pptxInforme(d) {
-  const P = await preparar(d); const ims = await imagenes(P);
+export async function pptxInforme(d, fotos = []) {
+  const P = await preparar(d, fotos); const ims = await imagenes(P);
   await cargarScript('vendor/pptxgen.bundle.js');
   const X = new window.PptxGenJS(); X.layout = 'LAYOUT_WIDE';
   X.author = (P.A.op.empresa || '').trim(); X.company = X.author; X.title = `Informe de operación · ${P.A.op.nave} · Orden ${P.A.op.orden}`;
@@ -353,10 +378,10 @@ function pista(ctx, destino, dur) {
   master.gain.exponentialRampToValueAtTime(0.75, t0 + 1.5);
   master.gain.setValueAtTime(0.75, t0 + dur - 2.5); master.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
 }
-export async function videoInforme(d, { segundos = 6, conMusica = true, alProgreso } = {}) {
+export async function videoInforme(d, { segundos = 6, conMusica = true, alProgreso, fotos = [] } = {}) {
   const fmt = formatoVideoAudio();
   if (!fmt) throw new Error('Este navegador no permite grabar video. Use Chrome o Edge actualizados.');
-  const P = await preparar(d);
+  const P = await preparar(d, fotos);
   const c = document.createElement('canvas'); c.width = 1280; c.height = 720; const ctx = c.getContext('2d'); ctx.scale(1280 / W, 720 / H);
   const n = P.S.length, dur = segundos * 1000, trans = 800, total = n * dur;
   const vstream = c.captureStream(30);
@@ -387,4 +412,4 @@ export async function videoInforme(d, { segundos = 6, conMusica = true, alProgre
 }
 
 /** Vista previa (imágenes) para mostrar en pantalla. */
-export async function vistaPrevia(d) { const P = await preparar(d); return imagenes(P); }
+export async function vistaPrevia(d, fotos = []) { const P = await preparar(d, fotos); return imagenes(P); }

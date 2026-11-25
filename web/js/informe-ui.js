@@ -2,6 +2,7 @@
 import { api, esc, toast, modal, descargarBlob } from './core.js?v=__V__';
 import * as G from './graph.js?v=__V__';
 import { pdfInforme, pptxInforme, videoInforme, formatoVideoAudio, vistaPrevia } from './informe.js?v=__V__';
+import { montarFotos, htmlFotos } from './finalizar.js?v=__V__';
 
 const seguro = (s) => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w\- .]+/g, '').replace(/\s+/g, ' ').trim();
 
@@ -15,6 +16,7 @@ export async function abrirInforme(op) {
     body: `<p class="muted" style="margin-top:0">Análisis completo de la operación (cumplimiento, ritmos, jornadas, transportistas, flota, atención en puerto,
       balance de pesos, hallazgos y recomendaciones) en ${prev.length} diapositivas con diseño para presentar al cliente.</p>
       <div class="inf-prev">${prev.map((src, i) => `<img src="${src}" alt="Diapositiva ${i + 1}" loading="lazy">`).join('')}</div>
+      ${htmlFotos('Se agregan como diapositivas de <strong>Registro fotográfico</strong> en el PDF, el PowerPoint (y Canva) y el video animado.')}
       <h3 style="margin:14px 0 8px">Formatos</h3>
       <div class="pant-sel">
         <label class="pant"><input type="checkbox" name="pdf" checked><span class="ico" style="--c:#dc2626">PDF</span><span>PDF del informe</span></label>
@@ -29,13 +31,15 @@ export async function abrirInforme(op) {
       <p class="muted small" style="margin-bottom:0">El video se graba en tiempo real (≈ ${prev.length * 6} segundos): mantenga esta pestaña visible mientras se genera.</p>`,
     onSubmit: async (f) => {
       if (!f.pdf && !f.pptx && !f.canva && !f.video) throw new Error('Elija al menos un formato');
-      setTimeout(() => generar(d, op, base, f), 0);
+      const lista = fotos.map((x) => ({ ...x, desc: String(f[`foto:${x.id}`] || '').trim() }));
+      setTimeout(() => generar(d, op, base, f, lista), 0);
     },
   });
+  const fotos = montarFotos(dlg);
   return dlg;
 }
 
-async function generar(d, op, base, f) {
+async function generar(d, op, base, f, fotos = []) {
   const pasos = [f.pdf && 'pdf', (f.pptx || f.canva) && 'pptx', f.video && 'video'].filter(Boolean);
   const prog = modal({ title: 'Generando el informe', body: `<div class="cargando" style="padding:20px 0"><i></i><span id="inf-paso">Preparando…</span>
     <div class="bar" style="width:min(420px,80vw)"><i id="inf-bar" style="width:0%;animation:none"></i></div></div>` });
@@ -44,11 +48,11 @@ async function generar(d, op, base, f) {
   try {
     for (const [i, k] of pasos.entries()) {
       const fr = i / pasos.length;
-      if (k === 'pdf') { paso('Generando PDF…', fr); res.push({ tipo: 'PDF', nombre: `${base}.pdf`, blob: await pdfInforme(d) }); }
-      if (k === 'pptx') { paso('Generando PowerPoint…', fr); res.push({ tipo: 'PowerPoint', nombre: `${base}.pptx`, blob: await pptxInforme(d) }); }
+      if (k === 'pdf') { paso('Generando PDF…', fr); res.push({ tipo: 'PDF', nombre: `${base}.pdf`, blob: await pdfInforme(d, fotos) }); }
+      if (k === 'pptx') { paso('Generando PowerPoint…', fr); res.push({ tipo: 'PowerPoint', nombre: `${base}.pptx`, blob: await pptxInforme(d, fotos) }); }
       if (k === 'video') {
         paso('Grabando el video (en tiempo real)…', fr);
-        const v = await videoInforme(d, { conMusica: !!f.musica, alProgreso: (p) => paso(`Grabando el video… ${Math.round(p * 100)} %`, fr + p / pasos.length) });
+        const v = await videoInforme(d, { fotos, conMusica: !!f.musica, alProgreso: (p) => paso(`Grabando el video… ${Math.round(p * 100)} %`, fr + p / pasos.length) });
         res.push({ tipo: 'Video', nombre: `${base}.${v.ext}`, blob: v.blob });
       }
     }
