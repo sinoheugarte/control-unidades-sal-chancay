@@ -36,6 +36,16 @@ export async function vTablero(view) {
       ${kpi('TN embarcadas', num(t.tn_embarque), e.tn_programadas ? `${pct((t.tn_embarque || 0) / e.tn_programadas)} de ${num(e.tn_programadas)}` : '', e.tn_programadas ? (t.tn_embarque || 0) / e.tn_programadas : undefined)}
     </div>
     <div class="grid g2">
+      ${['despacho', 'acopio'].map((k) => `<div class="card dona-card"><div class="card-h"><h3>Avance de ${k === 'despacho' ? 'despacho' : 'acopio'}</h3>
+        <span class="muted small">${k === 'despacho' ? 'TN despachadas en planta' : 'TN acopiadas en puerto'} vs. programadas</span></div>
+        <div class="dona"><div class="chart-box dona-box"><canvas id="ch-dona-${k}"></canvas></div>
+          <div class="dona-centro"><b>${pct(Math.min(1, k === 'despacho' ? t.pct_despacho : t.pct_acopio))}</b><span>${k === 'despacho' ? 'despachado' : 'acopiado'}</span></div></div>
+        <div class="dona-ley">
+          <div><i style="--c:var(--${k === 'despacho' ? 'c1' : 'c3'})"></i><span>TN ${k === 'despacho' ? 'despachadas' : 'acopiadas'}</span><b>${num(k === 'despacho' ? t.tn_despacho : t.tn_acopio)}</b><small>${pct(Math.min(1, k === 'despacho' ? t.pct_despacho : t.pct_acopio))}</small></div>
+          <div><i style="--c:var(--surface-3)"></i><span>TN restantes</span><b>${num(Math.max(0, k === 'despacho' ? t.tn_rest_despacho : t.tn_rest_acopio))}</b><small>${pct(Math.max(0, 1 - (k === 'despacho' ? t.pct_despacho : t.pct_acopio)))}</small></div>
+        </div></div>`).join('')}
+    </div>
+    <div class="grid g2">
       <div class="card"><div class="card-h"><h3>Avance acumulado por reporte</h3><span class="muted small">TN despacho vs acopio</span></div><div class="chart-box"><canvas id="ch-avance"></canvas></div></div>
       <div class="card"><div class="card-h"><h3>TN por día y jornada</h3><span class="muted small">despacho en planta</span></div><div class="chart-box"><canvas id="ch-jornada"></canvas></div></div>
       <div class="card"><div class="card-h"><h3>Participación por transportista</h3><span class="muted small">TN entregadas en puerto</span></div><div class="chart-box"><canvas id="ch-transp"></canvas></div></div>
@@ -94,6 +104,19 @@ export async function vTablero(view) {
   });
   const tr = d.transportistas.filter((x) => x.tn_acopio > 0).sort((a, b) => b.tn_acopio - a.tn_acopio);
   const totTr = tr.reduce((a, x) => a + (x.tn_acopio || 0), 0);
+  // Avance de despacho y de acopio (dona con el % al centro y leyenda abajo, como en el Excel)
+  [['despacho', t.tn_despacho, t.tn_rest_despacho, c.serie[0]], ['acopio', t.tn_acopio, t.tn_rest_acopio, c.serie[2]]].forEach(([k, hecho, resta, color]) => {
+    const css = getComputedStyle(document.documentElement);
+    chart($(`#ch-dona-${k}`), {
+      type: 'doughnut',
+      data: { labels: [k === 'despacho' ? 'TN despachadas' : 'TN acopiadas', 'TN restantes'],
+        datasets: [{ data: [Math.max(0, hecho || 0), Math.max(0, resta || 0)], backgroundColor: [color, css.getPropertyValue('--surface-3').trim() || '#1a2b47'],
+          borderWidth: 0, borderRadius: 8, spacing: 3, hoverOffset: 6 }] },
+      options: { cutout: '74%', plugins: { legend: { display: false },
+        tooltip: { callbacks: { label: (x) => ` ${num(x.raw)} TN · ${pct(x.raw / ((hecho || 0) + Math.max(0, resta || 0) || 1))}` } } },
+        animation: { animateRotate: true, duration: 1100, easing: 'easeOutQuart' } },
+    });
+  });
   chart($('#ch-transp'), {
     type: 'bar',
     // TN descargadas en puerto por transportista; el % es sobre el total descargado (suma 100 %)

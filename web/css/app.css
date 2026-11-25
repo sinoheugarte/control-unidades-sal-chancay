@@ -628,3 +628,19 @@ table.cortes tbody tr:hover td.rep:not(.vacio) { background: color-mix(in srgb, 
 @media (max-width: 520px) { .form label:has(.dt24) { grid-column: 1 / -1; } }
 .dt24 .dt24-d { flex: 0 0 auto; width: 150px; min-width: 0; } /* justo para dd/mm/aaaa + ícono */
 .dt24 .dt24-h { flex: 0 0 84px; }
+
+/* Tablero: donas de avance de despacho y acopio */
+.dona { position: relative; display: grid; place-items: center; }
+.dona-box { height: 230px !important; width: 100%; }
+.dona-centro { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; pointer-events: none; }
+.dona-centro b { font-size: 34px; font-weight: 850; letter-spacing: -.03em; line-height: 1; font-variant-numeric: tabular-nums; }
+.dona-centro span { margin-top: 4px; color: var(--muted); font-size: 12px; font-weight: 650; text-transform: uppercase; letter-spacing: .08em; }
+.dona-ley { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+.dona-ley > div { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 2px 8px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--border); min-width: 0; }
+.dona-ley i { width: 12px; height: 12px; border-radius: 4px; background: var(--c); grid-row: span 2; }
+.dona-ley span { color: var(--muted); font-size: 12px; font-weight: 650; overflow-wrap: anywhere; }
+.dona-ley b { grid-column: 2; font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.dona-ley small { grid-column: 3; grid-row: 1 / span 2; color: var(--muted); font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dona-ley i { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--muted) 45%, transparent); }
+@media (max-width: 520px) { .dona-ley { grid-template-columns: 1fr; } }
+@media print { .dona-box { height: auto !important; } .dona-centro { position: absolute; } }
