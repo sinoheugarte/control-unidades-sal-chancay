@@ -210,8 +210,16 @@ export function importarDespachos(D, T, wb, usuario) {
     res.filas++;
     if (!guia || !placa) { res.omitidos++; res.errores.push(`Fila ${r._row}: falta ${!guia ? 'la guía' : 'la placa'}`); continue; }
     const peso = toTn(r.get('Peso TON', 'P.Neto Ent. Ton', 'P.Neto Ton.', 'PESO TN X UNID HUACHO', 'P.Neto Ent.', 'Peso neto', 'PESO'));
-    const salida = combinarFechaHora(r.get('FeActDpExp', 'FinActCarg', 'Fe.SM real', 'DIA DESPACHO', 'FECHA'), r.get('HrADpExp', 'HrAFCg', 'HORA'));
+    let salida = combinarFechaHora(r.get('FeActDpExp', 'FinActCarg', 'Fe.SM real', 'DIA DESPACHO', 'FECHA'), r.get('HrADpExp', 'HrAFCg', 'HORA'));
+    // SAP a veces no registra el fin del despacho (FeActDpExp / FinActCarg vacíos, hora 00:00): se usa el inicio de
+    // carga y, si tampoco está, la fecha de salida de mercancía (Fe.SM real). Así la guía no se pierde.
+    let aviso = null;
+    if (!salida) {
+      salida = combinarFechaHora(r.get('InActCarga'), r.get('HrAICg')) || combinarFechaHora(r.get('Fe.SM real', 'Fecha doc.'), null);
+      if (salida) aviso = `Fila ${r._row} (guía ${guia}): sin fin de despacho en SAP; se usó ${r.get('InActCarga') ? 'el inicio de carga' : 'la fecha de salida de mercancía'} (${salida.slice(0, 16)})`;
+    }
     if (!salida) { res.omitidos++; res.errores.push(`Fila ${r._row} (guía ${guia}): sin fecha de despacho`); continue; }
+    if (aviso) (res.avisos = res.avisos || []).push(aviso);
     const e = porGuia.get(guia);
     const nombreT = str(r.get(...COL_TRANSP_HUACHO));
     if (e) {

@@ -174,7 +174,7 @@ export async function vImportar(view, ctx) {
         : await api(`/operaciones/${state.opId}/importar/${tipo}`, { method: 'POST', form: fd });
       if (tipo === 'libro') { out.innerHTML = resumenImport(tipo, r); refrescar(r.operacion_id, false); f.reset(); return; }
       toast(resumenTexto(tipo, r));
-      const obs = [...(r.transportistas_creados || []).map((x) => `Empresa agregada al maestro: ${x}`), ...(r.errores || []), ...(r.sin_transportista || []).map((x) => `Placa sin transportista identificado: ${x}`), ...(r.sin_viaje || []).map((x) => `Ticket sin viaje: ${x}`)];
+      const obs = [...(r.transportistas_creados || []).map((x) => `Empresa agregada al maestro: ${x}`), ...(r.errores || []), ...(r.avisos || []), ...(r.sin_transportista || []).map((x) => `Placa sin transportista identificado: ${x}`), ...(r.sin_viaje || []).map((x) => `Ticket sin viaje: ${x}`)];
       ultimoResultado = { tipo, html: `<div class="alert ok">${esc(resumenTexto(tipo, r))}</div>${obs.length ? `<details style="margin-top:6px"><summary>${obs.length} observaciones</summary><ul>${obs.slice(0, 300).map((x) => `<li>${esc(x)}</li>`).join('')}</ul></details>` : ''}` };
       ctx.rerender();
     } catch (err) { out.innerHTML = `<div class="alert bad">${esc(err.message)}</div>`; } finally { btn.disabled = false; }
