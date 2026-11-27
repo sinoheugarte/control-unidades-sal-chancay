@@ -11,10 +11,12 @@ export async function vTablero(view) {
   const kpi = (l, v, s = '', barra) => `<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div>${s ? `<div class="s">${s}</div>` : ''}
     ${barra !== undefined ? `<div class="bar ${barra >= 1 ? 'ok' : ''}"><i style="width:${Math.min(100, barra * 100)}%"></i></div>` : ''}</div>`;
   // Viajes de cada avance: realizados (despacho) o descargados (acopio) y restantes frente a los viajes estimados
-  // Viajes restantes según las TN que faltan (TN restantes ÷ TN por unidad): al llegar al 100 % quedan 0
   const tnUnidad = d.preacopio?.tn_x_unidad || 36;
   const viajesHechos = (k) => (k === 'despacho' ? t.viajes : t.viajes_descargados) || 0;
-  const viajesResta = (k) => { const resta = k === 'despacho' ? t.tn_rest_despacho : t.tn_rest_acopio; return resta > 0.0005 ? Math.ceil(resta / tnUnidad - 1e-9) : 0; };
+  // Despacho: TN que faltan despachar ÷ TN por unidad. Acopio: los viajes en tránsito (ya despachados y aún sin
+  // descargar) más los que faltan despachar, porque cada uno de ellos también debe llegar al puerto.
+  const restDespacho = t.tn_rest_despacho > 0.0005 ? Math.ceil(t.tn_rest_despacho / tnUnidad - 1e-9) : 0;
+  const viajesResta = (k) => (k === 'despacho' ? restDespacho : restDespacho + (t.viajes_pendientes || 0));
   view.innerHTML = `
     <div class="card"><div class="card-h"><div><h2>${esc(op.nave)} · Orden ${esc(op.orden)}</h2>
       <div class="muted small">${esc(op.cliente || '')} · ${esc(op.producto || '')} · ${esc(op.punto_salida || '')} → ${esc(op.punto_llegada || '')}
