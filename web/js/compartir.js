@@ -338,7 +338,13 @@ export async function compartirBlob(generar, titulo) {
         toast(archivo ? `Reporte enviado como archivo a ${para.join(', ')}` : `Enlace enviado a ${para.join(', ')}`);
       } catch (e) {
         // App del teléfono con archivo: el menú Compartir del sistema adjunta el archivo; elija Outlook para enviarlo
-        if (archivo && esNativa()) { descargarBlob(blob, nombre); toast('Elija Outlook en el menú para enviar el reporte adjunto.'); return; }
+        if (archivo && esNativa()) {
+          // Outlook con el reporte adjunto y los destinatarios, asunto y mensaje ya escritos
+          let ok = false;
+          try { if (window.AndroidCorreo?.adjuntar) ok = window.AndroidCorreo.adjuntar(await aBase64(blob), nombre, 'text/html', para.join(','), tema, f.mensaje || ''); } catch { ok = false; }
+          if (!ok) { descargarBlob(blob, nombre); toast('Elija Outlook en el menú para enviar el reporte adjunto.'); }
+          return;
+        }
         if (archivo) descargarBlob(blob, nombre);
         G.abrirCorreo(`mailto:${para.join(',')}?subject=${encodeURIComponent(tema)}&body=${encodeURIComponent(`${f.mensaje || ''}\n\n${archivo ? `(Adjunte el archivo descargado: ${nombre})` : url}`)}`);
         toast(`Se abrió su programa de correo (${e.message})`, true);

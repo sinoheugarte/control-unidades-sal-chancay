@@ -1,6 +1,10 @@
 package pe.pacificodespachos.controlsal;
 
 import android.content.ActivityNotFoundException;
+import android.util.Base64;
+import androidx.core.content.FileProvider;
+import java.io.File;
+import java.io.FileOutputStream;
 import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
@@ -45,8 +49,14 @@ public class MainActivity extends BridgeActivity {
         /** para: correos separados por coma. Devuelve true si se abrió alguna app de correo. */
         @JavascriptInterface
         public boolean redactar(String para, String asunto, String mensaje) {
-            String[] dest = (para == null || para.trim().isEmpty()) ? new String[0] : para.split("\\s*[,;]\\s*");
-            Intent i = new Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:"));
+            String[] dest = (para == null || para.trim().isEmpty()) ? new String[0] : para.trim().split("\\s*[,;]\\s*");
+            // Outlook toma los destinatarios, el asunto y el mensaje del propio enlace mailto: (no de los extras);
+            // otras apps usan los extras. Se envían de las dos formas.
+            StringBuilder m = new StringBuilder("mailto:").append(Uri.encode(String.join(",", dest), "@,+"));
+            String sep = "?";
+            if (asunto != null && !asunto.isEmpty()) { m.append(sep).append("subject=").append(Uri.encode(asunto)); sep = "&"; }
+            if (mensaje != null && !mensaje.isEmpty()) { m.append(sep).append("body=").append(Uri.encode(mensaje)); }
+            Intent i = new Intent(Intent.ACTION_SENDTO, Uri.parse(m.toString()));
             i.putExtra(Intent.EXTRA_EMAIL, dest);
             if (asunto != null) i.putExtra(Intent.EXTRA_SUBJECT, asunto);
             if (mensaje != null) i.putExtra(Intent.EXTRA_TEXT, mensaje);
@@ -60,6 +70,37 @@ public class MainActivity extends BridgeActivity {
                 // Outlook no está instalado: el correo predeterminado
                 try { startActivity(Intent.createChooser(i, "Enviar correo").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); return true; }
                 catch (ActivityNotFoundException e2) { return false; }
+            }
+        }
+
+        /** Correo con un archivo adjunto (base64): Outlook con destinatarios, asunto, mensaje y el archivo. */
+        @JavascriptInterface
+        public boolean adjuntar(String base64, String nombre, String tipo, String para, String asunto, String mensaje) {
+            try {
+                File dir = new File(getCacheDir(), "correo");
+                if (!dir.exists()) dir.mkdirs();
+                String seguro = (nombre == null || nombre.isEmpty() ? "reporte.html" : nombre).replaceAll("[\\\\/:*?\"<>|]+", "-");
+                File f = new File(dir, seguro);
+                try (FileOutputStream out = new FileOutputStream(f)) { out.write(Base64.decode(base64, Base64.DEFAULT)); }
+                Uri uri = FileProvider.getUriForFile(MainActivity.this, getPackageName() + ".fileprovider", f);
+                String[] dest = (para == null || para.trim().isEmpty()) ? new String[0] : para.trim().split("\\s*[,;]\\s*");
+                Intent i = new Intent(Intent.ACTION_SEND);
+                i.setType(tipo == null || tipo.isEmpty() ? "application/octet-stream" : tipo);
+                i.putExtra(Intent.EXTRA_STREAM, uri);
+                i.putExtra(Intent.EXTRA_EMAIL, dest);
+                if (asunto != null) i.putExtra(Intent.EXTRA_SUBJECT, asunto);
+                if (mensaje != null) i.putExtra(Intent.EXTRA_TEXT, mensaje);
+                i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+                try {
+                    Intent o = new Intent(i);
+                    o.setPackage(OUTLOOK);
+                    startActivity(o);
+                } catch (ActivityNotFoundException e) {
+                    startActivity(Intent.createChooser(i, "Enviar reporte").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_GRANT_READ_URI_PERMISSION));
+                }
+                return true;
+            } catch (Exception e) {
+                return false;
             }
         }
     }
