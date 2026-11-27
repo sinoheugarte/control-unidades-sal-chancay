@@ -142,14 +142,15 @@ function resultado(op, r, o) {
   const e = r.enlaces || {};
   const link = (u, t) => (u ? `<li><a href="${esc(u)}" target="_blank" rel="noopener">${t}</a></li>` : '');
   const fallo = o.avisoCorreo || r.correo?.error;
-  modal({
+  const dlgR = modal({
     title: 'Operación finalizada',
     body: `<p><strong>${esc(op.nave)} · Orden ${esc(op.orden)}</strong> quedó como <span class="pill ok">FINALIZADA</span>.</p>
       <ul>${link(e.pptx, 'Presentación PowerPoint')}${link(e.html, 'Presentación HTML')}${link(e.video, 'Video')}${link(r.urlApp, 'Enlace a la app (para el correo)')}</ul>
       ${o.para.length ? (fallo
         ? `<div class="alert bad">No se pudo enviar el correo automático: ${esc(fallo)}</div>
            <p class="muted small">Puede enviarlo desde Outlook con los enlaces ya escritos (para habilitar el envío automático, TI debe permitir el permiso <em>Mail.Send</em> a la app en Entra ID).</p>
-           <p><a class="btn primary" href="${esc(r.mailto)}">Abrir correo en Outlook</a></p>`
+           <p><button type="button" class="btn primary" id="b-abrir-correo">Abrir correo en Outlook</button></p>`
         : `<div class="alert ok">Correo enviado a: ${esc(r.correo.para.join(', '))}</div>`) : '<p class="muted">No se seleccionaron destinatarios.</p>'}`,
   });
+  dlgR.querySelector('#b-abrir-correo')?.addEventListener('click', () => G.abrirCorreo(r.mailto));
 }

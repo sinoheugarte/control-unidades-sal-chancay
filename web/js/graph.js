@@ -307,8 +307,36 @@ const scopesDelToken = () => {
 /** Pide (una sola vez) el permiso para enviar correos desde la cuenta del usuario. */
 export async function asegurarPermisoCorreo() {
   if (/\bMail\.Send\b/i.test(scopesDelToken())) return;
+  // Si el permiso ya se otorgó antes (p. ej. en la PC), se obtiene en segundo plano con la sesión actual:
+  // así en el celular no hay que salir de la app hacia la página de Microsoft (eso interrumpía el envío)
+  const t = ls.get(TOKEN_KEY);
+  if (t?.refresh) {
+    try {
+      await canjear({ grant_type: 'refresh_token', refresh_token: t.refresh }, [...SCOPES, 'https://graph.microsoft.com/Mail.Send'].join(' '));
+      if (/\bMail\.Send\b/i.test(scopesDelToken())) return;
+    } catch { /* aún no hay consentimiento: se pide con la ventana de Microsoft */ }
+  }
   await login(['Mail.Send']);
   if (!/\bMail\.Send\b/i.test(scopesDelToken())) throw new Error('Microsoft no otorgó el permiso para enviar correos (Mail.Send).');
+}
+
+/** Abre el correo para enviarlo a mano. En el celular intenta la app de Outlook (con la cuenta configurada en ella);
+    si no está instalada, usa el programa de correo predeterminado. Recibe un enlace mailto:. */
+export function abrirCorreo(mailto) {
+  const celular = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  if (!celular) { location.href = mailto; return; }
+  let u; try { u = new URL(mailto); } catch { location.href = mailto; return; }
+  const para = decodeURIComponent(u.pathname || '').replace(/;/g, ',');
+  const q = new URLSearchParams();
+  if (para) q.set('to', para);
+  if (u.searchParams.get('subject')) q.set('subject', u.searchParams.get('subject'));
+  if (u.searchParams.get('body')) q.set('body', u.searchParams.get('body'));
+  let salio = false;
+  const marcar = () => { if (document.hidden) salio = true; };
+  document.addEventListener('visibilitychange', marcar);
+  location.href = `ms-outlook://compose?${q.toString().replace(/\+/g, '%20')}`;
+  // Si Outlook no se abrió (no está instalado), se usa el correo predeterminado
+  setTimeout(() => { document.removeEventListener('visibilitychange', marcar); if (!salio && !document.hidden) location.href = mailto; }, 1500);
 }
 
 /** Envía un correo desde la cuenta del usuario conectado (Outlook / Microsoft 365). */

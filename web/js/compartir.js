@@ -316,7 +316,8 @@ export async function compartirBlob(generar, titulo) {
           <button type="button" class="btn" id="fx-desc">Descargar archivo</button></div>
       </div>
       <div class="form" style="margin-top:14px">
-        <label class="full">Para (correos separados por coma)<input name="para" placeholder="usuario@empresa.com, otro@empresa.com"></label>
+        <label class="full">Para (correos separados por coma)<input name="para" placeholder="usuario@empresa.com, otro@empresa.com">
+          <small class="muted">Se envía desde su cuenta de Outlook: <strong>${esc(state.user?.email || '')}</strong></small></label>
         <label class="full">Asunto<input name="asunto" value="${esc(asunto)}" maxlength="250" required></label>
         <label class="full">Mensaje (opcional)<textarea name="mensaje" rows="3">Comparto el reporte "${esc(asunto)}".</textarea></label>
       </div>`,
@@ -337,7 +338,7 @@ export async function compartirBlob(generar, titulo) {
         toast(archivo ? `Reporte enviado como archivo a ${para.join(', ')}` : `Enlace enviado a ${para.join(', ')}`);
       } catch (e) {
         if (archivo) descargarBlob(blob, nombre);
-        location.href = `mailto:${para.join(',')}?subject=${encodeURIComponent(tema)}&body=${encodeURIComponent(`${f.mensaje || ''}\n\n${archivo ? `(Adjunte el archivo descargado: ${nombre})` : url}`)}`;
+        G.abrirCorreo(`mailto:${para.join(',')}?subject=${encodeURIComponent(tema)}&body=${encodeURIComponent(`${f.mensaje || ''}\n\n${archivo ? `(Adjunte el archivo descargado: ${nombre})` : url}`)}`);
         toast(`Se abrió su programa de correo (${e.message})`, true);
       }
     },
