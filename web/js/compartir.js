@@ -337,6 +337,8 @@ export async function compartirBlob(generar, titulo) {
         await G.enviarCorreo({ para, asunto: tema, html: cuerpo, adjuntos: archivo ? [{ nombre, tipo: 'text/html', base64: await aBase64(blob) }] : [] });
         toast(archivo ? `Reporte enviado como archivo a ${para.join(', ')}` : `Enlace enviado a ${para.join(', ')}`);
       } catch (e) {
+        // App del teléfono con archivo: el menú Compartir del sistema adjunta el archivo; elija Outlook para enviarlo
+        if (archivo && esNativa()) { descargarBlob(blob, nombre); toast('Elija Outlook en el menú para enviar el reporte adjunto.'); return; }
         if (archivo) descargarBlob(blob, nombre);
         G.abrirCorreo(`mailto:${para.join(',')}?subject=${encodeURIComponent(tema)}&body=${encodeURIComponent(`${f.mensaje || ''}\n\n${archivo ? `(Adjunte el archivo descargado: ${nombre})` : url}`)}`);
         toast(`Se abrió su programa de correo (${e.message})`, true);

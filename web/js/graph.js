@@ -316,27 +316,42 @@ export async function asegurarPermisoCorreo() {
       if (/\bMail\.Send\b/i.test(scopesDelToken())) return;
     } catch { /* aún no hay consentimiento: se pide con la ventana de Microsoft */ }
   }
+  // En el celular (app instalada o navegador) no se abre el inicio de sesión de Microsoft en medio de un envío:
+  // Android puede pasarlo al Portal de empresa (Intune), que muestra "Error de redirección". Se redacta en Outlook.
+  if (modoApp()) throw new Error('el envío automático no está habilitado en este teléfono; se abre Outlook con el correo listo');
   await login(['Mail.Send']);
   if (!/\bMail\.Send\b/i.test(scopesDelToken())) throw new Error('Microsoft no otorgó el permiso para enviar correos (Mail.Send).');
 }
 
-/** Abre el correo para enviarlo a mano. En el celular intenta la app de Outlook (con la cuenta configurada en ella);
-    si no está instalada, usa el programa de correo predeterminado. Recibe un enlace mailto:. */
+/** Abre el correo para enviarlo a mano, con destinatarios, asunto y mensaje. Recibe un enlace mailto:.
+    - App Android (APK): redacción de Outlook mediante Android (o el correo predeterminado si no está instalado).
+    - Navegador en Android: enlace intent de Chrome hacia Outlook, con el correo predeterminado como respaldo.
+    - iPhone: esquema oficial de Outlook para iOS (ms-outlook://compose), con respaldo al correo predeterminado.
+    - PC: el programa de correo predeterminado. */
 export function abrirCorreo(mailto) {
-  const celular = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-  if (!celular) { location.href = mailto; return; }
   let u; try { u = new URL(mailto); } catch { location.href = mailto; return; }
   const para = decodeURIComponent(u.pathname || '').replace(/;/g, ',');
-  const q = new URLSearchParams();
-  if (para) q.set('to', para);
-  if (u.searchParams.get('subject')) q.set('subject', u.searchParams.get('subject'));
-  if (u.searchParams.get('body')) q.set('body', u.searchParams.get('body'));
-  let salio = false;
-  const marcar = () => { if (document.hidden) salio = true; };
-  document.addEventListener('visibilitychange', marcar);
-  location.href = `ms-outlook://compose?${q.toString().replace(/\+/g, '%20')}`;
-  // Si Outlook no se abrió (no está instalado), se usa el correo predeterminado
-  setTimeout(() => { document.removeEventListener('visibilitychange', marcar); if (!salio && !document.hidden) location.href = mailto; }, 1500);
+  const asunto = u.searchParams.get('subject') || '', cuerpo = u.searchParams.get('body') || '';
+  if (window.AndroidCorreo?.redactar) {
+    try { if (window.AndroidCorreo.redactar(para, asunto, cuerpo)) return; } catch { /* */ }
+    location.href = mailto; return;
+  }
+  const ua = navigator.userAgent;
+  if (/Android/i.test(ua)) {
+    const q = mailto.slice('mailto:'.length);
+    location.href = `intent:${q}#Intent;scheme=mailto;package=com.microsoft.office.outlook;S.browser_fallback_url=${encodeURIComponent(mailto)};end`;
+    return;
+  }
+  if (/iPhone|iPad|iPod/i.test(ua)) {
+    const q = new URLSearchParams();
+    if (para) q.set('to', para); if (asunto) q.set('subject', asunto); if (cuerpo) q.set('body', cuerpo);
+    let salio = false; const marcar = () => { if (document.hidden) salio = true; };
+    document.addEventListener('visibilitychange', marcar);
+    location.href = `ms-outlook://compose?${q.toString().replace(/\+/g, '%20')}`;
+    setTimeout(() => { document.removeEventListener('visibilitychange', marcar); if (!salio && !document.hidden) location.href = mailto; }, 1500);
+    return;
+  }
+  location.href = mailto;
 }
 
 /** Envía un correo desde la cuenta del usuario conectado (Outlook / Microsoft 365). */
