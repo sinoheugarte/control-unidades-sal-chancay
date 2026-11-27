@@ -76,6 +76,9 @@ function pintarCortes(body, cortes, proceso, edit, ctx, pend) {
   const hechos = cortes.filter((r) => r.tn_total !== null);
   const u = hechos[hechos.length - 1];
   const prog = state.ops.find((o) => o.id === state.opId)?.tn_programadas || 0;
+  // Meta del avance: lo programado; en acopio, si al último corte ya quedaba sólo lo que está en camino, lo acopiado + lo que falta
+  const meta = proceso === 'acopio' && u?.tn_total != null && u?.tn_restantes != null && u.tn_total + u.tn_restantes > prog ? u.tn_total + u.tn_restantes : prog;
+  const fracMeta = meta ? (u?.tn_total || 0) / meta : 0;
   const tph = u && u.horas_total ? u.tn_total / u.horas_total : null;
   // Columnas de los reportes siguientes (vacías), como en la hoja REPORTES del Excel
   const vacios = Array.from({ length: Math.max(1, 8 - cortes.length) }, (_, i) => cortes.length + i + 1);
@@ -96,8 +99,8 @@ function pintarCortes(body, cortes, proceso, edit, ctx, pend) {
     ${!cortes.length ? `<div class="empty">Aún no hay reportes de ${proceso}. Se crean al importar el ${proceso === 'despacho' ? 'REPORTE HUACHO' : 'REPORTE CSPCP'} indicando la fecha y hora de cierre.</div>` : `
     <div class="kpis" style="margin-bottom:16px">
       <div class="kpi"><div class="l">TN total ${proceso}</div><div class="v">${num(u?.tn_total)}</div>
-        <div class="s">${prog ? `${num(Math.min(100, ((u?.tn_total || 0) / prog) * 100), 1)} % de ${num(prog, 0)} TN` : ''}</div>
-        ${prog ? `<div class="bar ${u?.tn_total >= prog ? 'ok' : ''}"><i style="width:${Math.min(100, ((u?.tn_total || 0) / prog) * 100)}%"></i></div>` : ''}</div>
+        <div class="s">${meta ? `${num(fracMeta >= 1 ? 100 : Math.floor(fracMeta * 1000) / 10, 1)} % de ${num(meta, meta === prog ? 0 : 3)} TN${meta !== prog ? ' (acopiado + en tránsito)' : ''}` : ''}</div>
+        ${meta ? `<div class="bar ${fracMeta >= 1 ? 'ok' : ''}"><i style="width:${Math.min(100, fracMeta * 100)}%"></i></div>` : ''}</div>
       <div class="kpi"><div class="l">Reportes (cortes)</div><div class="v">${cortes.length}</div><div class="s">${u ? `último: ${fechaHora(u.fin)}` : ''}</div></div>
       <div class="kpi"><div class="l">Ritmo promedio</div><div class="v">${num(tph)}</div><div class="s">TN por hora</div></div>
       <div class="kpi"><div class="l">Unidades por hora</div><div class="v">${num(u?.horas_total ? u.viajes_total / u.horas_total : null, 0)}</div><div class="s">promedio de viajes por hora</div></div>

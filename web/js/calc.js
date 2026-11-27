@@ -192,7 +192,19 @@ function tablaReportes(vs, op, reportes, tipo) {
     const a = toMs(r.inicio), b = toMs(r.fin);
     const horas = a !== null && b !== null ? (b - a) / 3600000 : null;
     if (horas !== null) { tnTot = r3(tnTot + tn); viajesTot += viajes; hrsTot += horas; }
-    const rest = horas !== null ? Math.max(0, r3(prog - tnTot)) : null;
+    let rest = horas !== null ? Math.max(0, r3(prog - tnTot)) : null;
+    let viajesRest = rest !== null && tnTot > 0 ? (rest <= 0 ? 0 : roundUp((rest * viajesTot) / tnTot)) : null;
+    // Acopio, cuando al cierre de este reporte el despacho ya cubrió lo programado: lo que falta son los viajes ya
+    // despachados que aún no llegan al puerto (sus TN de planta y su cantidad), no la diferencia con lo programado.
+    if (tipo === 'acopio' && horas !== null && b !== null) {
+      const desp = vs.filter((v) => { const t = toMs(v.despacho_en) ?? toMs(v.fecha_despacho); return t !== null && t <= b && v.status !== STATUS.DEVUELTO; });
+      const tnDesp = desp.reduce((x, v) => x + (v.peso_origen || 0), 0);
+      if (prog && tnDesp >= prog) {
+        const faltan = desp.filter((v) => v.status === STATUS.PENDIENTE || !(v[key] <= r.numero));
+        rest = r3(faltan.reduce((x, v) => x + (v.peso_origen || 0), 0));
+        viajesRest = faltan.length;
+      }
+    }
     const hrsEst = rest !== null && tn > 0 ? (rest <= 0 ? 0 : roundUp((rest * horas) / tn)) : null;
     return {
       ...r,
@@ -205,7 +217,7 @@ function tablaReportes(vs, op, reportes, tipo) {
       viajes_total: horas !== null ? viajesTot : null,
       horas_total: horas !== null ? hrsTot : null,
       tn_restantes: rest,
-      viajes_est_rest: rest !== null && tnTot > 0 ? (rest <= 0 ? 0 : roundUp((rest * viajesTot) / tnTot)) : null,
+      viajes_est_rest: viajesRest,
       horas_est_rest: hrsEst,
       fecha_est_termino: hrsEst !== null && b !== null ? fmtDT(b + hrsEst * 3600000) : null,
     };
