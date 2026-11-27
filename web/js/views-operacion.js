@@ -12,6 +12,9 @@ export async function vTablero(view) {
     ${barra !== undefined ? `<div class="bar ${barra >= 1 ? 'ok' : ''}"><i style="width:${Math.min(100, barra * 100)}%"></i></div>` : ''}</div>`;
   // Viajes de cada avance: realizados (despacho) o descargados (acopio) y restantes frente a los viajes estimados
   const tnUnidad = d.preacopio?.tn_x_unidad || 36;
+  // Avance: no se muestra 100.0 % hasta completar (99.97 % se ve como 99.9 %) y lo restante nunca como 0.0 % si falta algo
+  const pctAv = (x) => pct(x >= 1 ? 1 : Math.floor(Math.max(0, x) * 1000) / 1000);
+  const pctResta = (x) => pct(x >= 1 ? 0 : Math.ceil((1 - Math.max(0, x)) * 1000) / 1000);
   const viajesHechos = (k) => (k === 'despacho' ? t.viajes : t.viajes_descargados) || 0;
   // Despacho: TN que faltan despachar ÷ TN por unidad. Acopio: los viajes en tránsito (ya despachados y aún sin
   // descargar) más los que faltan despachar, porque cada uno de ellos también debe llegar al puerto.
@@ -33,8 +36,8 @@ export async function vTablero(view) {
     </div>
     <div class="kpis">
       ${kpi('TN programadas', num(t.tn_programadas), `${num(d.preacopio.acopio.viajes_total, 0)} viajes estimados`)}
-      ${kpi('TN despachadas', num(t.tn_despacho), `${pct(t.pct_despacho)} · restan ${num(Math.max(0, t.tn_rest_despacho))}`, t.pct_despacho)}
-      ${kpi('TN acopiadas (puerto)', num(t.tn_acopio), `${pct(t.pct_acopio)} · restan ${num(Math.max(0, t.tn_rest_acopio))}`, t.pct_acopio)}
+      ${kpi('TN despachadas', num(t.tn_despacho), `${pctAv(t.pct_despacho)} · restan ${num(Math.max(0, t.tn_rest_despacho))}`, t.pct_despacho)}
+      ${kpi('TN acopiadas (puerto)', num(t.tn_acopio), `${pctAv(t.pct_acopio)} · restan ${num(Math.max(0, t.tn_rest_acopio))}`, t.pct_acopio)}
       ${kpi('En tránsito', num(t.tn_transito), `${t.viajes_pendientes} viajes por descargar`)}
       ${kpi('Viajes', num(t.viajes, 0), `${t.viajes_descargados} descargados · ${t.viajes_devueltos} devueltos`)}
       ${kpi('Unidades activas', num(t.unidades_activas, 0), `${d.unidades_en_lista} en lista · mín. requerido ${d.preacopio.unidades_necesarias}`)}
@@ -44,13 +47,13 @@ export async function vTablero(view) {
     </div>
     <div class="grid g2">
       ${['despacho', 'acopio'].map((k) => `<div class="card dona-card"><div class="card-h"><h3>Avance de ${k === 'despacho' ? 'despacho' : 'acopio'}</h3>
-        <span class="muted small">${k === 'despacho' ? 'TN despachadas en planta' : 'TN acopiadas en puerto'} vs. programadas</span></div>
+        <span class="muted small">${k === 'despacho' ? 'TN despachadas en planta vs. programadas' : (t.meta_acopio > t.tn_programadas ? 'TN acopiadas en puerto vs. despachadas' : 'TN acopiadas en puerto vs. programadas')}</span></div>
         <div class="dona"><div class="chart-box dona-box"><canvas id="ch-dona-${k}"></canvas></div>
-          <div class="dona-centro"><b>${pct(Math.min(1, k === 'despacho' ? t.pct_despacho : t.pct_acopio))}</b><span>${k === 'despacho' ? 'despachado' : 'acopiado'}</span></div></div>
+          <div class="dona-centro"><b>${pctAv(k === 'despacho' ? t.pct_despacho : t.pct_acopio)}</b><span>${k === 'despacho' ? 'despachado' : 'acopiado'}</span></div></div>
         <div class="dona-ley">
-          <div><i style="--c:var(--${k === 'despacho' ? 'c1' : 'c3'})"></i><span>TN ${k === 'despacho' ? 'despachadas' : 'acopiadas'}</span><b>${num(k === 'despacho' ? t.tn_despacho : t.tn_acopio)}</b><small>${pct(Math.min(1, k === 'despacho' ? t.pct_despacho : t.pct_acopio))}</small>
+          <div><i style="--c:var(--${k === 'despacho' ? 'c1' : 'c3'})"></i><span>TN ${k === 'despacho' ? 'despachadas' : 'acopiadas'}</span><b>${num(k === 'despacho' ? t.tn_despacho : t.tn_acopio)}</b><small>${pctAv(k === 'despacho' ? t.pct_despacho : t.pct_acopio)}</small>
             <em>${num(viajesHechos(k), 0)} viajes ${k === 'despacho' ? 'realizados' : 'descargados'}</em></div>
-          <div><i style="--c:var(--surface-3)"></i><span>TN restantes</span><b>${num(Math.max(0, k === 'despacho' ? t.tn_rest_despacho : t.tn_rest_acopio))}</b><small>${pct(Math.max(0, 1 - (k === 'despacho' ? t.pct_despacho : t.pct_acopio)))}</small>
+          <div><i style="--c:var(--surface-3)"></i><span>TN restantes</span><b>${num(Math.max(0, k === 'despacho' ? t.tn_rest_despacho : t.tn_rest_acopio))}</b><small>${pctResta(k === 'despacho' ? t.pct_despacho : t.pct_acopio)}</small>
             <em>${num(viajesResta(k), 0)} viajes restantes</em></div>
         </div></div>`).join('')}
     </div>
