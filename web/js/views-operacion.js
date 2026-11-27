@@ -47,7 +47,7 @@ export async function vTablero(view) {
     </div>
     <div class="grid g2">
       ${['despacho', 'acopio'].map((k) => `<div class="card dona-card"><div class="card-h"><h3>Avance de ${k === 'despacho' ? 'despacho' : 'acopio'}</h3>
-        <span class="muted small">${k === 'despacho' ? 'TN despachadas en planta vs. programadas' : (t.meta_acopio > t.tn_programadas ? 'TN acopiadas en puerto vs. despachadas' : 'TN acopiadas en puerto vs. programadas')}</span></div>
+        <span class="muted small">${k === 'despacho' ? 'TN despachadas en planta vs. programadas' : 'TN acopiadas en puerto vs. pendientes en CSPCP'}</span></div>
         <div class="dona"><div class="chart-box dona-box"><canvas id="ch-dona-${k}"></canvas></div>
           <div class="dona-centro"><b>${pctAv(k === 'despacho' ? t.pct_despacho : t.pct_acopio)}</b><span>${k === 'despacho' ? 'despachado' : 'acopiado'}</span></div></div>
         <div class="dona-ley">

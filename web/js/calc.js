@@ -159,11 +159,12 @@ function totales(vs, op, embarque) {
     tn_devueltas: tnDevueltas,
     tn_total_transportadas: r3(tnAcopio + tnDevueltas),
     pct_despacho: prog ? Math.min(1, tnDespacho / prog) : 0,
-    // El puerto debe recibir todo lo despachado: la meta del acopio es lo programado o, si ya se despachó más, lo despachado
-    pct_acopio: Math.max(prog, tnDespacho) ? Math.min(1, tnAcopio / Math.max(prog, tnDespacho)) : 0,
-    meta_acopio: r3(Math.max(prog, tnDespacho)),
+    // Lo que falta acopiar = las TN de los viajes que aún no figuran en el reporte CSPCP (en tránsito, con su peso de
+    // planta) más lo que aún falta despachar. Al descargar el último camión queda en 0 y el avance llega al 100 %.
+    tn_rest_acopio: r3(tnTransito + Math.max(0, prog - tnDespacho)),
+    pct_acopio: (tnAcopio + tnTransito + Math.max(0, prog - tnDespacho)) ? Math.min(1, tnAcopio / (tnAcopio + tnTransito + Math.max(0, prog - tnDespacho))) : 0,
+    meta_acopio: r3(tnAcopio + tnTransito + Math.max(0, prog - tnDespacho)),
     tn_rest_despacho: r3(prog - tnDespacho),
-    tn_rest_acopio: r3(Math.max(prog, tnDespacho) - tnAcopio),
     peso_prom_unidad: desc.length ? r3(tnAcopio / desc.length) : 0,
     diferencia_acopio_despacho: r3(sum(desc, (v) => v.peso_destino) - sum(desc, (v) => v.peso_origen)),
     tiempo_prom_min: tiempos.length ? Math.round(tiempos.reduce((a, b) => a + b, 0) / tiempos.length) : null,
